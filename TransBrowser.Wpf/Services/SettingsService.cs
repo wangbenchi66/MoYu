@@ -27,7 +27,10 @@ public class SettingsService
                 return JsonSerializer.Deserialize<AppSettings>(json, _jsonOptions) ?? new AppSettings();
             }
         }
-        catch { /* fall through to defaults */ }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            // Settings file unreadable or corrupt — fall back to defaults
+        }
         return new AppSettings();
     }
 
@@ -39,6 +42,9 @@ public class SettingsService
             var json = JsonSerializer.Serialize(settings, _jsonOptions);
             File.WriteAllText(SettingsPath, json);
         }
-        catch { /* best-effort */ }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Best-effort save — ignore if the file cannot be written
+        }
     }
 }

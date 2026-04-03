@@ -66,7 +66,7 @@ public partial class MainWindow : Window
         var src = HwndSource.FromHwnd(helper.Handle);
         src?.AddHook(WndProc);
 
-        // Initialise hotkey service (needs window handle)
+        // Initialize hotkey service (needs window handle)
         _hotkeyService = new GlobalHotkeyService(this);
     }
 
@@ -326,6 +326,7 @@ public partial class MainWindow : Window
         _tabs.RemoveAt(idx);
         TabStrip.Children.Remove(_tabButtons[idx]);
         _tabButtons.RemoveAt(idx);
+        view.Dispose();
 
         if (_tabs.Count == 0)
         {

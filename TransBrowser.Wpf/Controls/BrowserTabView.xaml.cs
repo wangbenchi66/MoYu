@@ -7,10 +7,11 @@ using Microsoft.Web.WebView2.Wpf;
 
 namespace TransBrowser.Wpf.Controls;
 
-public partial class BrowserTabView : UserControl
+public partial class BrowserTabView : UserControl, IDisposable
 {
     public BrowserTab Tab { get; }
     private WebView2? _webView;
+    private bool _disposed;
 
     public event Action<BrowserTabView>? CloseRequested;
     public event Action<string>? TitleChanged;
@@ -73,7 +74,7 @@ public partial class BrowserTabView : UserControl
         }
         catch (Exception ex)
         {
-            ShowError(ex.Message);
+            ShowError($"{ex.GetType().Name}: {ex.Message}\n\n{ex.StackTrace}");
         }
     }
 
@@ -106,8 +107,11 @@ public partial class BrowserTabView : UserControl
         {
             url = input;
         }
-        else if (Uri.TryCreate("https://" + input, UriKind.Absolute, out var candidate) &&
-                 candidate.Host.Contains('.') && !input.Contains(' '))
+        // Treat as a URL if it looks like a hostname (contains a dot and no spaces)
+        // or as a local/intranet address. Otherwise fall back to a web search.
+        else if (!input.Contains(' ') &&
+                 Uri.TryCreate("https://" + input, UriKind.Absolute, out var candidate) &&
+                 candidate.Host.Contains('.'))
         {
             url = "https://" + input;
         }
@@ -139,5 +143,13 @@ public partial class BrowserTabView : UserControl
     private void WebViewHost_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
         // Context menu handled by MainWindow
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _webView?.Dispose();
+        _webView = null;
     }
 }
