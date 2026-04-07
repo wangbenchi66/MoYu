@@ -334,20 +334,20 @@ public partial class SettingsWindow : Window
                 new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
         }
-        catch { }
+        catch { /* Invalid hex string – keep current preview color */ }
     }
 
     private static System.Drawing.Color HexToDrawingColor(string hex)
     {
         try { return System.Drawing.ColorTranslator.FromHtml(hex); }
-        catch { return System.Drawing.Color.White; }
+        catch { return System.Drawing.Color.White; /* Invalid hex – fall back to white */ }
     }
 
     // ── Hyperlinks ───────────────────────────────────────────────────────────
     private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
     {
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
-        catch { }
+        catch { /* Opening browser may fail on some systems – silently ignore */ }
         e.Handled = true;
     }
 }

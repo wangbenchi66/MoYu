@@ -173,7 +173,7 @@ public partial class MainWindow : Window
             var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex);
             return new System.Windows.Media.SolidColorBrush(color);
         }
-        catch { return fallback; }
+        catch { return fallback; /* Invalid hex string – fall back to default theme color */ }
     }
 
     /// <summary>Enables or disables the DWM drop shadow for the main window ("禁用窗体阴影").</summary>
