@@ -57,7 +57,9 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
-        InitializeComponent();
+        // Initialize the dispatcher timer before calling InitializeComponent()
+        // because XAML initialization can raise events (e.g. ValueChanged) that
+        // access the timer. Initializing it first prevents a NullReferenceException.
         _opacitySaveTimer = new System.Windows.Threading.DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(300)
@@ -67,6 +69,8 @@ public partial class MainWindow : Window
             _opacitySaveTimer.Stop();
             SettingsService.Save(_settings);
         };
+
+        InitializeComponent();
         Loaded += MainWindow_Loaded;
         Deactivated += MainWindow_Deactivated;
         Closing += MainWindow_Closing;
