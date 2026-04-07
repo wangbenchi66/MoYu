@@ -57,7 +57,7 @@
         </Grid>
 
         <!-- URL Bar (Row 2) -->
-        <Grid Grid.Row="2" Background="#1E1E2E" Margin="4,2">
+        <Grid x:Name="UrlBarGrid" Grid.Row="2" Background="#1E1E2E" Margin="4,2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
@@ -97,7 +97,7 @@
         <Grid x:Name="WebViewContainer" Grid.Row="3" Background="Transparent"/>
 
         <!-- Status Bar (Row 4) -->
-        <Grid Grid.Row="4" Background="#11111B">
+        <Grid x:Name="StatusBarGrid" Grid.Row="4" Background="#11111B">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="120"/>
