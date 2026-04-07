@@ -106,67 +106,67 @@
                     <Border Background="Transparent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
                     <Border Background="White" Opacity="1.0" CornerRadius="8" Padding="24" Width="760" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,40">
                         <StackPanel Width="720">
-                        <StackPanel HorizontalAlignment="Center" Margin="0,8">
-                            <TextBlock Text="🌐" FontSize="28" HorizontalAlignment="Center"/>
-                            <TextBlock Text="新标签页" FontSize="18" FontWeight="Bold" Foreground="#2B6CB0" HorizontalAlignment="Center" Margin="0,8,0,0"/>
-                        </StackPanel>
+                            <StackPanel HorizontalAlignment="Center" Margin="0,8">
+                                <TextBlock Text="🌐" FontSize="28" HorizontalAlignment="Center"/>
+                                <TextBlock Text="新标签页" FontSize="18" FontWeight="Bold" Foreground="#2B6CB0" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                            </StackPanel>
 
-                        <Grid Margin="0,12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="NewTabSearchBox" Grid.Column="0" Height="40" MinWidth="400" VerticalContentAlignment="Center" Padding="12"
+                            <Grid Margin="0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="NewTabSearchBox" Grid.Column="0" Height="40" MinWidth="400" VerticalContentAlignment="Center" Padding="12"
                                      FontSize="14" Background="#FFFFFF" BorderBrush="#E6EEF9" BorderThickness="1"/>
-                            <Button x:Name="NewTabOpenBtn" Grid.Column="1" Content="打开" Width="96" Height="40" Margin="8,0,0,0" Background="#1E90FF" Foreground="White" BorderThickness="0"/>
-                        </Grid>
+                                <Button x:Name="NewTabOpenBtn" Grid.Column="1" Content="打开" Width="96" Height="40" Margin="8,0,0,0" Background="#1E90FF" Foreground="White" BorderThickness="0"/>
+                            </Grid>
 
-                        <TextBlock Text="内置快捷" FontSize="13" Margin="0,18,0,8" Foreground="#6B7280"/>
-                        <WrapPanel HorizontalAlignment="Left">
-                            <Border Width="220" Height="100" Background="#FBFDFF" CornerRadius="8" Margin="6" Padding="12" BorderBrush="#EEF2F7" BorderThickness="1">
-                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="微信读书" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
-                            <Border Width="220" Height="100" Background="#FBFDFF" CornerRadius="8" Margin="6" Padding="12" BorderBrush="#EEF2F7" BorderThickness="1">
-                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="小红书" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
-                            <Border Width="220" Height="100" Background="#FBFDFF" CornerRadius="8" Margin="6" Padding="12" BorderBrush="#EEF2F7" BorderThickness="1">
-                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="哔哩哔哩" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
-                        </WrapPanel>
+                            <TextBlock Text="内置快捷" FontSize="13" Margin="0,18,0,8" Foreground="#6B7280"/>
+                            <WrapPanel HorizontalAlignment="Left">
+                                <Border Width="220" Height="100" Background="#FBFDFF" CornerRadius="8" Margin="6" Padding="12" BorderBrush="#EEF2F7" BorderThickness="1">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="微信读书" HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Width="220" Height="100" Background="#FBFDFF" CornerRadius="8" Margin="6" Padding="12" BorderBrush="#EEF2F7" BorderThickness="1">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="小红书" HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Width="220" Height="100" Background="#FBFDFF" CornerRadius="8" Margin="6" Padding="12" BorderBrush="#EEF2F7" BorderThickness="1">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="哔哩哔哩" HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </WrapPanel>
 
-                        <TextBlock Text="我的网站" FontSize="13" Margin="0,18,0,8" Foreground="#6B7280"/>
-                        <WrapPanel>
-                            <Border Width="150" Height="80" Background="#FBFDFF" CornerRadius="8" Margin="6" Padding="8" BorderBrush="#EAEFF5" BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock Text="www.baidu.com" Foreground="#6B7280"/>
-                                </StackPanel>
-                            </Border>
-                            <Border Width="150" Height="80" Background="Transparent" CornerRadius="8" Margin="6" Padding="8" BorderBrush="#E6E9EE" BorderThickness="1">
-                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="+" FontSize="24" Foreground="#9CA3AF"/>
-                                </StackPanel>
-                            </Border>
-                        </WrapPanel>
+                            <TextBlock Text="我的网站" FontSize="13" Margin="0,18,0,8" Foreground="#6B7280"/>
+                            <WrapPanel>
+                                <Border Width="150" Height="80" Background="#FBFDFF" CornerRadius="8" Margin="6" Padding="8" BorderBrush="#EAEFF5" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="www.baidu.com" Foreground="#6B7280"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Width="150" Height="80" Background="Transparent" CornerRadius="8" Margin="6" Padding="8" BorderBrush="#E6E9EE" BorderThickness="1">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="+" FontSize="24" Foreground="#9CA3AF"/>
+                                    </StackPanel>
+                                </Border>
+                            </WrapPanel>
 
-                        <TextBlock Text="最近访问" FontSize="13" Margin="0,18,0,8" Foreground="#6B7280"/>
-                        <StackPanel>
-                            <Border Background="#FBFDFF" CornerRadius="8" Padding="10" Margin="0,6" BorderThickness="1" BorderBrush="#EEF2F7">
-                                <TextBlock Text="搜索历史记录（标题或网址）" Foreground="#6B7280"/>
-                            </Border>
-                            <Border Background="#FBFDFF" CornerRadius="8" Padding="10" Margin="0,6" BorderThickness="1" BorderBrush="#EEF2F7">
-                                <StackPanel>
-                                    <TextBlock Text="焦虑的人 - 微信读书" FontWeight="Bold"/>
-                                    <TextBlock Text="https://weread.qq.com/..." Foreground="#6B7280" FontSize="12"/>
-                                </StackPanel>
-                            </Border>
+                            <TextBlock Text="最近访问" FontSize="13" Margin="0,18,0,8" Foreground="#6B7280"/>
+                            <StackPanel>
+                                <Border Background="#FBFDFF" CornerRadius="8" Padding="10" Margin="0,6" BorderThickness="1" BorderBrush="#EEF2F7">
+                                    <TextBlock Text="搜索历史记录（标题或网址）" Foreground="#6B7280"/>
+                                </Border>
+                                <Border Background="#FBFDFF" CornerRadius="8" Padding="10" Margin="0,6" BorderThickness="1" BorderBrush="#EEF2F7">
+                                    <StackPanel>
+                                        <TextBlock Text="焦虑的人 - 微信读书" FontWeight="Bold"/>
+                                        <TextBlock Text="https://weread.qq.com/..." Foreground="#6B7280" FontSize="12"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
                     </Border>
                 </Grid>
             </ScrollViewer>

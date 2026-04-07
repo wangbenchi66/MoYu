@@ -8,11 +8,11 @@ using System.Windows.Interop;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using WpfButton = System.Windows.Controls.Button;
+using WpfClipboard = System.Windows.Clipboard;
+using WpfCursors = System.Windows.Input.Cursors;
 using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 using WpfMouseEventArgs = System.Windows.Input.MouseEventArgs;
-using WpfCursors = System.Windows.Input.Cursors;
 using WpfOrientation = System.Windows.Controls.Orientation;
-using WpfClipboard = System.Windows.Clipboard;
 
 namespace TransBrowser.Wpf;
 
@@ -23,6 +23,8 @@ public class BrowserTab
     public string Url { get; set; } = "";
     public bool IsInitialized { get; set; }
     public WpfButton? TabButton { get; set; }
+    // Holds the id returned by CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync
+    public string? TransparentScriptId { get; set; }
 }
 
 public partial class MainWindow : Window
@@ -49,12 +51,26 @@ public partial class MainWindow : Window
         new(System.Windows.Media.Color.FromRgb(0xF3, 0xF4, 0xF6));
     private static readonly System.Windows.Media.SolidColorBrush BrushStatusBar =
         new(System.Windows.Media.Color.FromRgb(0xF3, 0xF4, 0xF6));
+    private static readonly System.Windows.Media.SolidColorBrush BrushRootBackground =
+        new(System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF));
 
     private const string NewTabUrl = "about:newtab";
     private const int MaxTabTitleLength = 16;
     private const int MaxHistoryItems = 50;
     private const string DefaultMobileUserAgent =
         "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+
+    // Inject only html/body background transparent to avoid breaking page UI components.
+    private const string TransparentBgInjection = @"(function(){
+        try{
+            var css = 'html,body{background:transparent!important;background-color:transparent!important}';
+            var st = document.createElement('style'); st.id='__tb_transparent_bg'; st.textContent = css; document.head.appendChild(st);
+            // Ensure the style persists when the page mutates
+            var obs = new MutationObserver(function(){ if(!document.getElementById('__tb_transparent_bg')) document.head.appendChild(st); });
+            obs.observe(document.documentElement || document, { childList:true, subtree:true });
+            try{ document.documentElement.style.background='transparent'; document.body.style.background='transparent'; }catch(e){}
+        }catch(e){}
+    })();";
 
     public MainWindow()
     {
@@ -128,6 +144,9 @@ public partial class MainWindow : Window
         TabBarPanel.Background = transparent ? System.Windows.Media.Brushes.Transparent : BrushTabBar;
         UrlBarGrid.Background = transparent ? System.Windows.Media.Brushes.Transparent : BrushUrlBar;
         StatusBarGrid.Background = transparent ? System.Windows.Media.Brushes.Transparent : BrushStatusBar;
+        // The window/chrome transparency only affects chrome elements (title/tab/url/status bars).
+        // The WebView area (and what the web page shows through) is controlled separately
+        // by ApplyWebViewTransparency and the "网页背景透明" setting.
     }
 
     /// <summary>
@@ -137,9 +156,29 @@ public partial class MainWindow : Window
     private void ApplyWebViewTransparency(BrowserTab tab)
     {
         if (!tab.IsInitialized) return;
-        tab.WebView.DefaultBackgroundColor = _settings.TransparentBackground
-            ? System.Drawing.Color.Transparent
-            : System.Drawing.Color.White;
+        // Use an explicit ARGB transparent white for better compatibility
+        // with WebView2 hosting. Also set the WPF control background.
+        if (_settings.TransparentBackground)
+        {
+            try
+            {
+                // Use fully transparent ARGB (alpha=0)
+                tab.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0, 0, 0, 0);
+                //tab.WebView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
+                // Ensure the WebView host shows the desired light page background when web content is transparent
+                WebViewHost.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF1, 0xF5, 0xF9));
+            }
+            catch { }
+        }
+        else
+        {
+            try
+            {
+                tab.WebView.DefaultBackgroundColor = System.Drawing.Color.White;
+                WebViewHost.Background = System.Windows.Media.Brushes.Transparent;
+            }
+            catch { }
+        }
     }
 
     private void LoadNewtabTemplate()
@@ -193,8 +232,18 @@ public partial class MainWindow : Window
         {
             await wv.EnsureCoreWebView2Async(_webViewEnv);
             tab.IsInitialized = true;
-            ApplyWebViewSettings(tab);
+            await ApplyWebViewSettings(tab);
             HookWebViewEvents(tab);
+            // If transparent background is enabled in settings, ensure script injection is applied
+            try
+            {
+                if (_settings.TransparentBackground && tab.WebView.CoreWebView2 != null)
+                {
+                    var id = await tab.WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(TransparentBgInjection);
+                    tab.TransparentScriptId = id;
+                }
+            }
+            catch { }
         }
 
         UpdateTabUI();
@@ -204,7 +253,7 @@ public partial class MainWindow : Window
             NavigateTab(tab, url);
     }
 
-    private void ApplyWebViewSettings(BrowserTab tab)
+    private async Task ApplyWebViewSettings(BrowserTab tab)
     {
         if (tab.WebView.CoreWebView2 == null) return;
         var settings = tab.WebView.CoreWebView2.Settings;
@@ -215,6 +264,19 @@ public partial class MainWindow : Window
             settings.UserAgent = DefaultMobileUserAgent;
 
         ApplyWebViewTransparency(tab);
+        // Ensure DOM scripts (transparent background injection) are set
+        if (_settings.TransparentBackground)
+        {
+            try
+            {
+                if (tab.WebView.CoreWebView2 != null && string.IsNullOrEmpty(tab.TransparentScriptId))
+                {
+                    var id = await tab.WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(TransparentBgInjection);
+                    tab.TransparentScriptId = id;
+                }
+            }
+            catch { }
+        }
     }
 
     private void HookWebViewEvents(BrowserTab tab)
@@ -296,7 +358,7 @@ public partial class MainWindow : Window
                 scripts.Add("(function(){var st=document.createElement('style');st.textContent='img,video,source{display:none!important}';document.head.appendChild(st);})();");
 
             if (_settings.TransparentBackground)
-                scripts.Add("(function(){var st=document.createElement('style');st.textContent='html,body{background:transparent!important}';document.head.appendChild(st);})();");
+                scripts.Add(TransparentBgInjection);
 
             foreach (var script in scripts)
             {
@@ -613,7 +675,7 @@ public partial class MainWindow : Window
         RegisterHotkeys();
 
         foreach (var tab in _tabs)
-            ApplyWebViewSettings(tab);
+            _ = ApplyWebViewSettings(tab);
     }
 
     // --- Event handlers ---
