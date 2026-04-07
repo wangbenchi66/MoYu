@@ -37,6 +37,17 @@ public partial class MainWindow : Window
     private bool _hoverHeaderVisible;
     private string _newtabHtml = "";
     private readonly System.Windows.Threading.DispatcherTimer _opacitySaveTimer;
+    private SettingsWindow? _settingsWindow;
+
+    // Theme colours used to restore backgrounds after transparent mode is toggled off
+    private static readonly System.Windows.Media.SolidColorBrush BrushTitleBar =
+        new(System.Windows.Media.Color.FromRgb(0x18, 0x18, 0x25));
+    private static readonly System.Windows.Media.SolidColorBrush BrushTabBar =
+        new(System.Windows.Media.Color.FromRgb(0x11, 0x11, 0x1B));
+    private static readonly System.Windows.Media.SolidColorBrush BrushUrlBar =
+        new(System.Windows.Media.Color.FromRgb(0x1E, 0x1E, 0x2E));
+    private static readonly System.Windows.Media.SolidColorBrush BrushStatusBar =
+        new(System.Windows.Media.Color.FromRgb(0x11, 0x11, 0x1B));
 
     private const string NewTabUrl = "about:newtab";
     private const int MaxTabTitleLength = 16;
@@ -98,6 +109,32 @@ public partial class MainWindow : Window
         }
 
         _isClickThrough = _settings.ClickThroughMode;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+            Win32Helper.SetClickThrough(hwnd, _isClickThrough);
+
+        ApplyWindowTransparency(_settings.WindowTransparent);
+    }
+
+    /// <summary>Toggles window chrome backgrounds for the "软件背景透明" feature.</summary>
+    private void ApplyWindowTransparency(bool transparent)
+    {
+        TitleBar.Background = transparent ? System.Windows.Media.Brushes.Transparent : BrushTitleBar;
+        TabBarPanel.Background = transparent ? System.Windows.Media.Brushes.Transparent : BrushTabBar;
+        UrlBarGrid.Background = transparent ? System.Windows.Media.Brushes.Transparent : BrushUrlBar;
+        StatusBarGrid.Background = transparent ? System.Windows.Media.Brushes.Transparent : BrushStatusBar;
+    }
+
+    /// <summary>
+    /// Sets WebView2 DefaultBackgroundColor so the rendering surface is transparent
+    /// when the "网页背景透明" toggle is on.
+    /// </summary>
+    private void ApplyWebViewTransparency(BrowserTab tab)
+    {
+        if (!tab.IsInitialized) return;
+        tab.WebView.DefaultBackgroundColor = _settings.TransparentBackground
+            ? System.Drawing.Color.Transparent
+            : System.Drawing.Color.White;
     }
 
     private void LoadNewtabTemplate()
@@ -171,6 +208,8 @@ public partial class MainWindow : Window
             settings.UserAgent = _settings.UserAgent;
         else if (_settings.MobileMold)
             settings.UserAgent = DefaultMobileUserAgent;
+
+        ApplyWebViewTransparency(tab);
     }
 
     private void HookWebViewEvents(BrowserTab tab)
@@ -511,16 +550,51 @@ public partial class MainWindow : Window
 
     private void OpenSettings()
     {
-        var win = new SettingsWindow(_settings);
-        win.Owner = this;
-        if (win.ShowDialog() == true)
+        // If a settings window is already open, just bring it to the front
+        if (_settingsWindow?.IsVisible == true)
         {
-            ApplySettings();
-            _hotkeyService.UnregisterAll();
-            RegisterHotkeys();
-            foreach (var tab in _tabs)
-                ApplyWebViewSettings(tab);
+            _settingsWindow.Activate();
+            return;
         }
+
+        _settingsWindow = new SettingsWindow(_settings, ApplyAllSettings);
+        _settingsWindow.Owner = this;
+        _settingsWindow.Show();
+    }
+
+    /// <summary>Full settings re-apply called by the live settings callback.</summary>
+    private void ApplyAllSettings()
+    {
+        // Don't overwrite window position/size during a live settings session
+        Opacity = _settings.Opacity;
+        Topmost = _settings.TopMost;
+        ShowInTaskbar = _settings.ShowInTaskbar;
+        StatusOpacitySlider.Value = _settings.Opacity;
+
+        TitleBar.Visibility = _settings.NoTitle ? Visibility.Collapsed : Visibility.Visible;
+        TitleBarRow.Height = _settings.NoTitle ? new GridLength(0) : new GridLength(40);
+
+        TabBarPanel.Visibility = _settings.ShowTabBar ? Visibility.Visible : Visibility.Collapsed;
+        TabBarRow.Height = _settings.ShowTabBar ? new GridLength(32) : new GridLength(0);
+
+        if (_settings.HoverHeaderMode && !_settings.NoTitle)
+        {
+            TitleBar.Visibility = Visibility.Collapsed;
+            TitleBarRow.Height = new GridLength(0);
+        }
+
+        _isClickThrough = _settings.ClickThroughMode;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+            Win32Helper.SetClickThrough(hwnd, _isClickThrough);
+
+        ApplyWindowTransparency(_settings.WindowTransparent);
+
+        _hotkeyService.UnregisterAll();
+        RegisterHotkeys();
+
+        foreach (var tab in _tabs)
+            ApplyWebViewSettings(tab);
     }
 
     // --- Event handlers ---

@@ -38,6 +38,7 @@ public class AppSettings
     public bool AutoHide { get; set; } = false;
     public bool NoImageMode { get; set; } = false;
     public bool TransparentBackground { get; set; } = false;
+    public bool WindowTransparent { get; set; } = false;
     public bool MobileMold { get; set; } = false;
     public bool ClickThroughMode { get; set; } = false;
 
