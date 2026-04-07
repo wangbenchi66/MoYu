@@ -104,7 +104,7 @@
                           Background="#F1F5F9" Padding="0">
                 <Grid>
                     <Border Background="Transparent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
-                    <Border Background="White" Opacity="1.0" CornerRadius="8" Padding="24" Width="760" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,40">
+                    <!--<Border Background="Transparent" Opacity="1.0" CornerRadius="8" Padding="24" Width="760" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,40">
                         <StackPanel Width="720">
                             <StackPanel HorizontalAlignment="Center" Margin="0,8">
                                 <TextBlock Text="🌐" FontSize="28" HorizontalAlignment="Center"/>
@@ -167,7 +167,7 @@
                                 </Border>
                             </StackPanel>
                         </StackPanel>
-                    </Border>
+                    </Border>-->
                 </Grid>
             </ScrollViewer>
         </Grid>

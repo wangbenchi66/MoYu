@@ -232,18 +232,10 @@ public partial class MainWindow : Window
         {
             await wv.EnsureCoreWebView2Async(_webViewEnv);
             tab.IsInitialized = true;
+            // 先应用 WebView2 级别设置（UA/背景色等）
             await ApplyWebViewSettings(tab);
+            // 再挂事件，事件里会根据设置再注入一次脚本，保证导航后也生效
             HookWebViewEvents(tab);
-            // If transparent background is enabled in settings, ensure script injection is applied
-            try
-            {
-                if (_settings.TransparentBackground && tab.WebView.CoreWebView2 != null)
-                {
-                    var id = await tab.WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(TransparentBgInjection);
-                    tab.TransparentScriptId = id;
-                }
-            }
-            catch { }
         }
 
         UpdateTabUI();
@@ -277,6 +269,45 @@ public partial class MainWindow : Window
             }
             catch { }
         }
+
+        // Enable no-image mode at the resource level so images are not downloaded at all.
+        if (_settings.NoImageMode)
+        {
+            EnableNoImageMode(tab.WebView.CoreWebView2);
+        }
+    }
+
+    /// <summary>
+    /// Enables a lightweight "no image" mode by intercepting image resources
+    /// in WebView2. This works in addition to the CSS-based hiding used on DOMContentLoaded.
+    /// </summary>
+    private void EnableNoImageMode(CoreWebView2 core)
+    {
+        try
+        {
+            // Add a filter for image resources. If this was already added, WebView2
+            // will throw and we simply ignore it.
+            core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Image);
+        }
+        catch
+        {
+            // Ignore duplicate filter registration
+        }
+
+        core.WebResourceRequested += (sender, args) =>
+        {
+            if (args.ResourceContext == CoreWebView2WebResourceContext.Image)
+            {
+                var env = ((CoreWebView2)sender).Environment;
+                // Return an empty 200 OK so the page believes the request succeeded
+                var response = env.CreateWebResourceResponse(
+                    null,
+                    200,
+                    "OK",
+                    "Content-Type: text/plain");
+                args.Response = response;
+            }
+        };
     }
 
     private void HookWebViewEvents(BrowserTab tab)
