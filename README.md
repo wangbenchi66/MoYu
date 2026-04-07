@@ -8,7 +8,7 @@
 
 | 功能 | 说明 |
 |---|---|
-| 无边框透明窗口 | `WindowStyle=None` + `AllowsTransparency=True` + `Background=Transparent` |
+| 无边框透明窗口 | `WindowStyle=None` + Win32 `WS_EX_LAYERED`（不使用 `AllowsTransparency`） |
 | 内置 WebView2 | 使用 Microsoft WebView2（Chromium 内核）渲染网页 |
 | 透明度调节 | 底部 Slider，范围 10%–100%，实时生效 |
 | 网页背景透明 | 自动注入 CSS 使 `html/body` 背景透明，配合窗口透明使用 |
@@ -147,7 +147,67 @@ TransBrowser/
 
 ---
 
-## 参考
+## 透明度实现（Win32 Layered Window）
+
+TransBrowser 使用 **Win32 Layered Window**（`WS_EX_LAYERED` + `SetLayeredWindowAttributes`）实现窗口级透明，而**不是** WPF 的 `Opacity` 属性。这带来以下优势：
+
+| 对比项 | WPF Opacity | Win32 Layered Window |
+|---|---|---|
+| WebView2 透明 | ❌ 子窗口不受影响 | ✅ 整个窗口含 WebView2 同步透明 |
+| 渲染质量 | WPF 软件渲染 | 系统 DWM 合成，无闪烁 |
+| 性能 | 较差（重复重绘） | 优（GPU 合成层） |
+| 点击穿透 | 不支持 | 可选（不启用 `WS_EX_TRANSPARENT`） |
+
+### 关键实现
+
+#### 1. 禁用 WPF 透明（XAML）
+
+```xml
+<Window WindowStyle="None"
+        AllowsTransparency="False"
+        Background="Transparent">
+```
+
+> ⚠️ `AllowsTransparency="False"` 是必须的。若保留 `True`，WPF 会用软件渲染处理透明，导致与 Win32 Layered 冲突。
+
+#### 2. Win32 初始化（`OnSourceInitialized`）
+
+```csharp
+protected override void OnSourceInitialized(EventArgs e)
+{
+    base.OnSourceInitialized(e);
+    var hwnd = new WindowInteropHelper(this).Handle;
+    _transparencyService.Initialize(hwnd);        // 设置 WS_EX_LAYERED
+    _transparencyService.SetTransparency(_settings.Opacity);
+}
+```
+
+#### 3. WebView2 透明背景
+
+```csharp
+await wv.EnsureCoreWebView2Async();
+wv.DefaultBackgroundColor = System.Drawing.Color.Transparent;
+```
+
+> ⚠️ WebView2 默认背景为白色，必须手动设置为透明，否则 Win32 透明效果无法穿透 WebView2。
+
+### 透明策略（TransparencyMode）
+
+| 模式 | 行为 |
+|---|---|
+| `None` | 窗口完全不透明（alpha = 255） |
+| `Fixed` | 始终使用设置中的透明度值（默认） |
+| `Dynamic` | 鼠标悬停时完全不透明，鼠标离开时恢复设置值 |
+
+通过 `AppSettings.TransparencyMode` 配置。
+
+### 老板键联动
+
+老板键（默认可在设置中自定义）第一次按下时将窗口透明度降至 0.1（近乎隐形），再次按下恢复到当前设置的透明度值。
+
+---
+
+
 
 - 产品形态参考：[yclown/TransBrowser](https://github.com/yclown/TransBrowser)
 - 技术栈：WPF (.NET 8) + [Microsoft WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)

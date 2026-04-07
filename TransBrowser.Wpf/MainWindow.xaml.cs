@@ -82,6 +82,7 @@ public partial class MainWindow : Window
         };
         MouseLeave += (_, _) =>
         {
+            if (_settings.TransparencyMode == TransparencyMode.Dynamic && !_bossKeyActive)
                 _transparencyService.SetTransparency(_settings.Opacity);
         };
 
@@ -108,6 +109,7 @@ public partial class MainWindow : Window
         TabBarPanel.Visibility = _settings.ShowTabBar ? Visibility.Visible : Visibility.Collapsed;
         TabBarRow.Height = _settings.ShowTabBar ? new GridLength(32) : new GridLength(0);
 
+        if (_settings.HoverHeaderMode && !_settings.NoTitle)
         {
             TitleBar.Visibility = Visibility.Collapsed;
             TitleBarRow.Height = new GridLength(0);
@@ -121,6 +123,7 @@ public partial class MainWindow : Window
         ApplyWindowShadow(_settings.DisableWindowShadow);
         ApplyAntiScreenshot(_settings.AntiScreenshotMode);
 
+        AddTab(!string.IsNullOrEmpty(_settings.StartUrl) ? _settings.StartUrl : NewTabUrl);
     }
 
     private async void AddTab(string url)
@@ -282,6 +285,7 @@ public partial class MainWindow : Window
                 UpdateTabUI();
             });
 
+            if (!url.StartsWith("about:") && !url.Contains("newtab.local") && !string.IsNullOrEmpty(url))
             {
                 Dispatcher.Invoke(() =>
                 {
@@ -303,6 +307,7 @@ public partial class MainWindow : Window
                 });
             }
 
+            if (e.IsSuccess && !string.IsNullOrEmpty(_settings.AutoScript))
             {
                 try { await wv.CoreWebView2.ExecuteScriptAsync(_settings.AutoScript); }
                 catch { }
@@ -563,6 +568,7 @@ public partial class MainWindow : Window
 
     private void ToggleClickThrough()
     {
+        _isClickThrough = !_isClickThrough;
         var hwnd = new WindowInteropHelper(this).Handle;
         Win32Helper.SetClickThrough(hwnd, _isClickThrough);
         StatusText.Text = _isClickThrough ? "⚡ 穿透模式已开启" : "";
@@ -599,6 +605,7 @@ public partial class MainWindow : Window
         menu.Items.Add("穿透模式切换", null, (s, e) => Dispatcher.Invoke(ToggleClickThrough));
         menu.Items.Add("总在最前切换", null, (s, e) => Dispatcher.Invoke(() =>
         {
+            Topmost = !Topmost;
             _settings.TopMost = Topmost;
             SettingsService.Save(_settings);
         }));
@@ -638,6 +645,7 @@ public partial class MainWindow : Window
         TabBarPanel.Visibility = _settings.ShowTabBar ? Visibility.Visible : Visibility.Collapsed;
         TabBarRow.Height = _settings.ShowTabBar ? new GridLength(32) : new GridLength(0);
 
+        if (_settings.HoverHeaderMode && !_settings.NoTitle)
         {
             TitleBar.Visibility = Visibility.Collapsed;
             TitleBarRow.Height = new GridLength(0);
