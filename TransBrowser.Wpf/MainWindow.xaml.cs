@@ -860,7 +860,8 @@ public partial class MainWindow : Window
         {
             e.Cancel = true;
             Hide();
-            ShowTrayNotification();
+            if (_settings.ShowMinimizeNotification && _trayIcon != null)
+                _trayIcon.ShowBalloonTip(2000, "TransBrowser", "程序已最小化到系统托盘", System.Windows.Forms.ToolTipIcon.Info);
             return;
         }
 
@@ -889,17 +890,8 @@ public partial class MainWindow : Window
             if (_settings.AutoHide)
                 Hide();
 
-            // Only show notification here when not also going through CloseToTray path
-            // (CloseToTray already shows the notification via MainWindow_Closing)
-            if (_settings.ShowMinimizeNotification && !_settings.CloseToTray)
-                ShowTrayNotification();
+            if (_settings.ShowMinimizeNotification && _trayIcon != null)
+                _trayIcon.ShowBalloonTip(2000, "TransBrowser", "程序已最小化到系统托盘", System.Windows.Forms.ToolTipIcon.Info);
         }
-    }
-
-    /// <summary>Shows a tray balloon tip when the app hides to the system tray.</summary>
-    private void ShowTrayNotification()
-    {
-        if (_settings.ShowMinimizeNotification && _trayIcon != null)
-            _trayIcon.ShowBalloonTip(2000, "TransBrowser", "程序已最小化到系统托盘", System.Windows.Forms.ToolTipIcon.Info);
     }
 }
