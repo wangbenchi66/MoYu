@@ -206,7 +206,7 @@
                         <ToggleButton Grid.Row="6" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
                                       x:Name="SwDisableShadow"
                                       Checked="SwDisableShadow_Changed" Unchecked="SwDisableShadow_Changed"/>
-                        <TextBlock Grid.Row="6" Grid.Column="3" Style="{StaticResource LabelStyle}" Text="关闭最小化到托盘"/>
+                        <TextBlock Grid.Row="6" Grid.Column="3" Style="{StaticResource LabelStyle}" Text="关闭时最小化托盘"/>
                         <ToggleButton Grid.Row="6" Grid.Column="4" Style="{StaticResource ToggleSwitch}"
                                       x:Name="SwCloseToTray"
                                       Checked="SwCloseToTray_Changed" Unchecked="SwCloseToTray_Changed"/>
