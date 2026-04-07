@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     private bool _isClickThrough;
     private bool _hoverHeaderVisible;
     private string _newtabHtml = "";
+    private readonly System.Windows.Threading.DispatcherTimer _opacitySaveTimer;
 
     private const string NewTabUrl = "about:newtab";
     private const int MaxTabTitleLength = 16;
@@ -46,6 +47,15 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _opacitySaveTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(300)
+        };
+        _opacitySaveTimer.Tick += (_, _) =>
+        {
+            _opacitySaveTimer.Stop();
+            SettingsService.Save(_settings);
+        };
         Loaded += MainWindow_Loaded;
         Deactivated += MainWindow_Deactivated;
         Closing += MainWindow_Closing;
@@ -549,10 +559,16 @@ public partial class MainWindow : Window
     {
         Opacity = e.NewValue;
         _settings.Opacity = e.NewValue;
+
+        // Debounce: restart the 300 ms timer; fires once after dragging pauses
+        _opacitySaveTimer.Stop();
+        _opacitySaveTimer.Start();
     }
 
     private void StatusOpacitySlider_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
     {
+        // Force an immediate save when the user releases the thumb
+        _opacitySaveTimer.Stop();
         SettingsService.Save(_settings);
     }
 
