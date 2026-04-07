@@ -3,14 +3,59 @@ using System.Text.Json;
 
 namespace TransBrowser.Wpf;
 
+public class CustomSite
+{
+    public string Name { get; set; } = "";
+    public string Url { get; set; } = "";
+}
+
+public class HistoryItem
+{
+    public string Title { get; set; } = "";
+    public string Url { get; set; } = "";
+    public DateTime VisitedAt { get; set; } = DateTime.Now;
+}
+
 public class AppSettings
 {
-    public string StartUrl { get; set; } = "https://www.bing.com";
-    public double Opacity { get; set; } = 0.9;
+    // Window
+    public double Opacity { get; set; } = 1.0;
     public double WindowLeft { get; set; } = 100;
     public double WindowTop { get; set; } = 100;
-    public double WindowWidth { get; set; } = 1200;
-    public double WindowHeight { get; set; } = 800;
+    public double WindowWidth { get; set; } = 900;
+    public double WindowHeight { get; set; } = 650;
+    public bool TopMost { get; set; } = false;
+    public bool ShowInTaskbar { get; set; } = true;
+    public bool NoTitle { get; set; } = false;
+    public bool HoverHeaderMode { get; set; } = false;
+
+    // TabBar
+    public bool ShowTabBar { get; set; } = true;
+
+    // Browser
+    public string StartUrl { get; set; } = "";
+    public string UserAgent { get; set; } = "";
+    public bool AutoHide { get; set; } = false;
+    public bool NoImageMode { get; set; } = false;
+    public bool TransparentBackground { get; set; } = false;
+    public bool MobileMold { get; set; } = false;
+    public bool ClickThroughMode { get; set; } = false;
+
+    // Hotkeys
+    public string BossKey { get; set; } = "Alt+Q";
+    public string OpacityUp { get; set; } = "Alt+Right";
+    public string OpacityDown { get; set; } = "Alt+Left";
+    public string OpacityReset { get; set; } = "Alt+Up";
+    public string ClickThrough { get; set; } = "Ctrl+Alt+T";
+    public string GoBack { get; set; } = "Alt+Shift+Z";
+    public string RunJs { get; set; } = "Alt+Shift+C";
+
+    // Data
+    public List<CustomSite> CustomSites { get; set; } = new();
+    public List<HistoryItem> History { get; set; } = new();
+
+    // Auto script
+    public string AutoScript { get; set; } = "";
 }
 
 public static class SettingsService
@@ -33,11 +78,7 @@ public static class SettingsService
                 return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
             }
         }
-        catch
-        {
-            // Return defaults on any error
-        }
-
+        catch { }
         return new AppSettings();
     }
 
@@ -49,9 +90,6 @@ public static class SettingsService
             var json = JsonSerializer.Serialize(settings, JsonOptions);
             File.WriteAllText(SettingsFile, json);
         }
-        catch
-        {
-            // Ignore save errors silently
-        }
+        catch { }
     }
 }

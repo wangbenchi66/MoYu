@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f0f2f5;color:#333;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.container{width:90%;max-width:640px}
+h2{text-align:center;color:#555;font-size:18px;font-weight:500;margin-bottom:24px}
+.url-row{display:flex;gap:8px;margin-bottom:28px}
+.url-row input{flex:1;padding:10px 14px;border:1px solid #d9d9d9;border-radius:8px;font-size:14px;outline:none;transition:border-color .2s}
+.url-row input:focus{border-color:#1677ff}
+.url-row button{padding:10px 18px;background:#1677ff;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;transition:background .2s;white-space:nowrap}
+.url-row button:hover{background:#4096ff}
+.section-title{font-size:12px;color:#999;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;justify-content:space-between}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+@media(max-width:480px){.grid{grid-template-columns:repeat(3,1fr)}}
+.card{background:#fff;border:1px solid #f0f0f0;border-radius:10px;padding:12px 8px;text-align:center;cursor:pointer;transition:all .2s;text-decoration:none;color:#333;display:block;position:relative}
+.card:hover{border-color:#1677ff;box-shadow:0 4px 12px rgba(22,119,255,.15);transform:translateY(-2px)}
+.card .emoji{font-size:24px;margin-bottom:5px}
+.card .name{font-size:11px;color:#666;word-break:break-all}
+.card .del{position:absolute;top:3px;right:4px;font-size:11px;color:#ccc;cursor:pointer;line-height:1;display:none}
+.card:hover .del{display:block}
+.card .del:hover{color:#ff4d4f}
+.add-card{background:#f8f9fb;border:1px dashed #d9d9d9;border-radius:10px;padding:12px 8px;text-align:center;cursor:pointer;color:#bbb;font-size:22px;transition:all .2s}
+.add-card:hover{border-color:#1677ff;color:#1677ff}
+.add-form{display:none;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:16px;margin-top:10px}
+.add-form input{width:100%;padding:8px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;outline:none;margin-bottom:8px}
+.add-form input:focus{border-color:#1677ff}
+.add-form .btns{display:flex;gap:8px}
+.add-form .btns button{flex:1;padding:8px;border:none;border-radius:6px;cursor:pointer;font-size:13px}
+.add-form .btns .save{background:#1677ff;color:#fff}
+.add-form .btns .cancel{background:#f0f0f0;color:#666}
+.history-section{margin-top:24px}
+.search-box{margin-bottom:16px}
+.search-box input{width:100%;padding:10px 14px;border:1px solid #d9d9d9;border-radius:8px;font-size:14px;outline:none;transition:border-color .2s}
+.search-box input:focus{border-color:#1677ff}
+.history-list{list-style:none;padding:0}
+.history-item{background:#fff;border:1px solid #f0f0f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:10px}
+.history-item:hover{border-color:#1677ff;background:#f9fbff}
+.history-item .icon{font-size:16px;flex-shrink:0}
+.history-item .info{flex:1;min-width:0}
+.history-item .title{font-size:13px;color:#333;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-item .url{font-size:11px;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.load-more{width:100%;padding:10px;background:#fff;border:1px solid #f0f0f0;border-radius:8px;color:#666;cursor:pointer;font-size:13px;margin-top:8px;transition:all .2s}
+.load-more:hover{border-color:#1677ff;color:#1677ff;background:#f9fbff}
+.no-results{text-align:center;color:#999;padding:20px;font-size:13px}
+</style></head>
+<body>
+<div class='container'>
+  <h2>🌐 新标签页</h2>
+  <div class='url-row'>
+    <input id='u' type='text' placeholder='输入网址，回车打开...' autofocus onkeydown="if(event.key==='Enter')go()">
+    <button onclick='go()'>打开</button>
+  </div>
+  <div class='section-title'><span>内置快捷</span></div>
+  <div class='grid'>
+    <a class='card' onclick="nav('https://weread.qq.com/')">
+      <div class='emoji'>📚</div><div class='name'>微信读书</div>
+    </a>
+    <a class='card' onclick="nav('https://www.xiaohongshu.com')">
+      <div class='emoji'>📕</div><div class='name'>小红书</div>
+    </a>
+    <a class='card' onclick="nav('https://www.bilibili.com/')">
+      <div class='emoji'>📺</div><div class='name'>哔哩哔哩</div>
+    </a>
+  </div>
+  <div class='section-title'><span>我的网站</span></div>
+  <div class='grid' id='customGrid'></div>
+  <div class='add-form' id='addForm'>
+    <input id='siteName' placeholder='网站名称（可选）'>
+    <input id='siteUrl' placeholder='网站地址，如 https://example.com'>
+    <div class='btns'>
+      <button class='save' onclick='saveCustom()'>保存</button>
+      <button class='cancel' onclick='hideForm()'>取消</button>
+    </div>
+  </div>
+  <div class='history-section' id='historySection' style='display:none'>
+    <div class='section-title'><span>最近访问</span></div>
+    <div class='search-box'>
+      <input id='searchInput' type='text' placeholder='搜索历史记录（标题或网址）...' oninput='searchHistory()'>
+    </div>
+    <ul class='history-list' id='historyList'></ul>
+    <button class='load-more' id='loadMoreBtn' style='display:none' onclick='loadMoreHistory()'>加载更多</button>
+    <div class='no-results' id='noResults' style='display:none'>未找到匹配的历史记录</div>
+  </div>
+</div>
+<script>
+var CUSTOM=##CUSTOM_DATA##;
+var HISTORY=##HISTORY_DATA##;
+var displayedCount=0;
+var pageSize=10;
+var filteredHistory=[];
+
+function renderCustom(){
+  var g=document.getElementById('customGrid');
+  g.innerHTML='';
+  for(var i=0;i<CUSTOM.length;i++){
+    var s=CUSTOM[i];
+    var a=document.createElement('a');
+    a.className='card';
+    a.setAttribute('data-url',s.u);
+    a.onclick=(function(u){return function(e){if(e.target.classList.contains('del'))return;nav(u);};})(s.u);
+    a.innerHTML='<div class="emoji">🔗</div><div class="name">'+esc(s.n)+'</div><span class="del" title="删除" onclick="removeCustom(\''+escAttr(s.u)+'\');">✕</span>';
+    g.appendChild(a);
+  }
+  var plus=document.createElement('div');
+  plus.className='add-card';
+  plus.title='添加自定义网站';
+  plus.textContent='+';
+  plus.onclick=function(){document.getElementById('addForm').style.display='block';document.getElementById('siteUrl').focus();};
+  g.appendChild(plus);
+}
+
+function initHistory(){
+  filteredHistory=HISTORY.slice();
+  displayedCount=0;
+  if(HISTORY.length>0){
+    document.getElementById('historySection').style.display='block';
+    renderHistory();
+  }
+}
+
+function renderHistory(){
+  var list=document.getElementById('historyList');
+  var loadMoreBtn=document.getElementById('loadMoreBtn');
+  var noResults=document.getElementById('noResults');
+  
+  if(filteredHistory.length===0){
+    list.innerHTML='';
+    loadMoreBtn.style.display='none';
+    noResults.style.display='block';
+    return;
+  }
+  
+  noResults.style.display='none';
+  var endIndex=Math.min(displayedCount+pageSize,filteredHistory.length);
+  
+  for(var i=displayedCount;i<endIndex;i++){
+    var h=filteredHistory[i];
+    var li=document.createElement('li');
+    li.className='history-item';
+    li.onclick=(function(u){return function(){nav(u);};})(h.u);
+    li.innerHTML='<div class="icon">🕒</div><div class="info"><div class="title">'+esc(h.t)+'</div><div class="url">'+esc(h.u)+'</div></div>';
+    list.appendChild(li);
+  }
+  
+  displayedCount=endIndex;
+  loadMoreBtn.style.display=displayedCount<filteredHistory.length?'block':'none';
+}
+
+function loadMoreHistory(){
+  renderHistory();
+}
+
+function searchHistory(){
+  var query=document.getElementById('searchInput').value.toLowerCase().trim();
+  var list=document.getElementById('historyList');
+  list.innerHTML='';
+  displayedCount=0;
+  
+  if(query===''){
+    filteredHistory=HISTORY.slice();
+  }else{
+    filteredHistory=HISTORY.filter(function(h){
+      return h.t.toLowerCase().indexOf(query)>=0 || h.u.toLowerCase().indexOf(query)>=0;
+    });
+  }
+  
+  renderHistory();
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function escAttr(s){return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function nav(u){if(/^javascript:/i.test(u)||/^data:/i.test(u))return;location.href=u;}
+function go(){var u=document.getElementById('u').value.trim();if(!u)return;if(/^javascript:/i.test(u)||/^data:/i.test(u))return;if(!/^https?:\/\//i.test(u))u='https://'+u;location.href=u;}
+function saveCustom(){
+  var n=document.getElementById('siteName').value.trim();
+  var u=document.getElementById('siteUrl').value.trim();
+  if(!u)return;
+  if(/^javascript:/i.test(u)||/^data:/i.test(u))return;
+  window.chrome.webview.postMessage('add\t'+(n||u)+'\t'+u);
+  hideForm();
+}
+function removeCustom(u){
+  if(confirm('确认删除该网站？'))window.chrome.webview.postMessage('remove\t'+u);
+}
+function hideForm(){
+  document.getElementById('addForm').style.display='none';
+  document.getElementById('siteName').value='';
+  document.getElementById('siteUrl').value='';
+}
+renderCustom();
+initHistory();
+</script>
+</body></html>
