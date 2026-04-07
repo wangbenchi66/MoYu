@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     private System.Windows.Forms.NotifyIcon? _trayIcon;
     private bool _isClickThrough;
     private bool _hoverHeaderVisible;
+    private bool _forceClose;  // set to true when exiting via tray "退出"
     private string _newtabHtml = "";
     private readonly System.Windows.Threading.DispatcherTimer _opacitySaveTimer;
     private SettingsWindow? _settingsWindow;
@@ -70,6 +71,19 @@ public partial class MainWindow : Window
             obs.observe(document.documentElement || document, { childList:true, subtree:true });
             try{ document.documentElement.style.background='transparent'; document.body.style.background='transparent'; }catch(e){}
         }catch(e){}
+    })();";
+
+    // Inject grayscale CSS/script to all pages in the WebView
+    private const string GrayscaleBgInjection = @"(function(){
+        try{
+            var s=document.getElementById('__tb_grayscale');
+            if(!s){s=document.createElement('style');s.id='__tb_grayscale';(document.head||document.documentElement).appendChild(s);}
+            s.textContent='html{filter:grayscale(100%)!important;-webkit-filter:grayscale(100%)!important}';
+        }catch(e){}
+    })();";
+
+    private const string GrayscaleRemoveInjection = @"(function(){
+        try{var s=document.getElementById('__tb_grayscale');if(s)s.remove();}catch(e){}
     })();";
 
     public MainWindow()
@@ -135,6 +149,8 @@ public partial class MainWindow : Window
             Win32Helper.SetClickThrough(hwnd, _isClickThrough);
 
         ApplyWindowTransparency(_settings.WindowTransparent);
+        ApplyWindowShadow(_settings.DisableWindowShadow);
+        ApplyAntiScreenshot(_settings.AntiScreenshotMode);
     }
 
     /// <summary>Toggles window chrome backgrounds for the "软件背景透明" feature.</summary>
@@ -147,6 +163,39 @@ public partial class MainWindow : Window
         // The window/chrome transparency only affects chrome elements (title/tab/url/status bars).
         // The WebView area (and what the web page shows through) is controlled separately
         // by ApplyWebViewTransparency and the "网页背景透明" setting.
+    }
+
+    /// <summary>Enables or disables the DWM drop shadow for the main window ("禁用窗体阴影").</summary>
+    private void ApplyWindowShadow(bool disableShadow)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+            Win32Helper.SetWindowShadow(hwnd, !disableShadow);
+    }
+
+    /// <summary>Enables or disables anti-screenshot mode using SetWindowDisplayAffinity ("防截图模式").</summary>
+    private void ApplyAntiScreenshot(bool enable)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        bool ok = Win32Helper.SetWindowDisplayAffinity(hwnd,
+            enable ? Win32Helper.WDA_EXCLUDEFROMCAPTURE : Win32Helper.WDA_NONE);
+        if (!ok && enable)
+        {
+            // Feature requires Windows 10 2004+; silently revert the setting
+            _settings.AntiScreenshotMode = false;
+        }
+    }
+
+    /// <summary>Injects or removes the grayscale CSS on all initialized tabs ("灰度模式").</summary>
+    private void ApplyGrayscaleToAllTabs(bool enable)
+    {
+        foreach (var tab in _tabs)
+        {
+            if (tab.IsInitialized && tab.WebView.CoreWebView2 != null)
+                _ = tab.WebView.CoreWebView2.ExecuteScriptAsync(
+                    enable ? GrayscaleBgInjection : GrayscaleRemoveInjection);
+        }
     }
 
     /// <summary>
@@ -399,6 +448,9 @@ public partial class MainWindow : Window
 
             if (_settings.TransparentBackground)
                 scripts.Add(TransparentBgInjection);
+
+            if (_settings.GrayscaleMode)
+                scripts.Add(GrayscaleBgInjection);
 
             foreach (var script in scripts)
             {
@@ -663,7 +715,7 @@ public partial class MainWindow : Window
         }));
         menu.Items.Add("设置", null, (s, e) => Dispatcher.Invoke(OpenSettings));
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add("退出", null, (s, e) => Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown()));
+        menu.Items.Add("退出", null, (s, e) => Dispatcher.Invoke(() => { _forceClose = true; System.Windows.Application.Current.Shutdown(); }));
 
         _trayIcon.ContextMenuStrip = menu;
         _trayIcon.DoubleClick += (s, e) => Dispatcher.Invoke(() => { Show(); Activate(); WindowState = WindowState.Normal; });
@@ -710,6 +762,9 @@ public partial class MainWindow : Window
             Win32Helper.SetClickThrough(hwnd, _isClickThrough);
 
         ApplyWindowTransparency(_settings.WindowTransparent);
+        ApplyWindowShadow(_settings.DisableWindowShadow);
+        ApplyAntiScreenshot(_settings.AntiScreenshotMode);
+        ApplyGrayscaleToAllTabs(_settings.GrayscaleMode);
 
         _hotkeyService.UnregisterAll();
         RegisterHotkeys();
@@ -800,6 +855,16 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        // If "close to tray" is enabled and this is not a forced exit, minimize to tray
+        if (_settings.CloseToTray && !_forceClose)
+        {
+            e.Cancel = true;
+            Hide();
+            if (_settings.ShowMinimizeNotification && _trayIcon != null)
+                _trayIcon.ShowBalloonTip(2000, "TransBrowser", "程序已最小化到系统托盘", System.Windows.Forms.ToolTipIcon.Info);
+            return;
+        }
+
         _settings.WindowLeft = Left;
         _settings.WindowTop = Top;
         _settings.WindowWidth = Width;
@@ -820,7 +885,13 @@ public partial class MainWindow : Window
 
     private void MainWindow_StateChanged(object? sender, EventArgs e)
     {
-        if (WindowState == WindowState.Minimized && _settings.AutoHide)
-            Hide();
+        if (WindowState == WindowState.Minimized)
+        {
+            if (_settings.AutoHide)
+                Hide();
+
+            if (_settings.ShowMinimizeNotification && _trayIcon != null)
+                _trayIcon.ShowBalloonTip(2000, "TransBrowser", "程序已最小化到系统托盘", System.Windows.Forms.ToolTipIcon.Info);
+        }
     }
 }

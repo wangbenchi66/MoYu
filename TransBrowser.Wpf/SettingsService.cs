@@ -41,6 +41,11 @@ public class AppSettings
     public bool WindowTransparent { get; set; } = false;
     public bool MobileMold { get; set; } = false;
     public bool ClickThroughMode { get; set; } = false;
+    public bool GrayscaleMode { get; set; } = false;
+    public bool AntiScreenshotMode { get; set; } = false;
+    public bool DisableWindowShadow { get; set; } = false;
+    public bool CloseToTray { get; set; } = false;
+    public bool ShowMinimizeNotification { get; set; } = false;
 
     // Hotkeys
     public string BossKey { get; set; } = "Alt+Q";

@@ -56,6 +56,11 @@ public partial class SettingsWindow : Window
         SwNoImage.IsChecked = _settings.NoImageMode;
         SwTransparentBg.IsChecked = _settings.TransparentBackground;
         SwMobileMold.IsChecked = _settings.MobileMold;
+        SwGrayscale.IsChecked = _settings.GrayscaleMode;
+        SwAntiScreenshot.IsChecked = _settings.AntiScreenshotMode;
+        SwDisableShadow.IsChecked = _settings.DisableWindowShadow;
+        SwCloseToTray.IsChecked = _settings.CloseToTray;
+        SwMinimizeNotify.IsChecked = _settings.ShowMinimizeNotification;
 
         TxtStartUrl.Text = _settings.StartUrl;
         TxtUserAgent.Text = _settings.UserAgent;
@@ -163,6 +168,41 @@ public partial class SettingsWindow : Window
     {
         if (_loading) return;
         _settings.MobileMold = SwMobileMold.IsChecked == true;
+        ApplyAndSave();
+    }
+
+    private void SwGrayscale_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        _settings.GrayscaleMode = SwGrayscale.IsChecked == true;
+        ApplyAndSave();
+    }
+
+    private void SwAntiScreenshot_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        _settings.AntiScreenshotMode = SwAntiScreenshot.IsChecked == true;
+        ApplyAndSave();
+    }
+
+    private void SwDisableShadow_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        _settings.DisableWindowShadow = SwDisableShadow.IsChecked == true;
+        ApplyAndSave();
+    }
+
+    private void SwCloseToTray_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        _settings.CloseToTray = SwCloseToTray.IsChecked == true;
+        ApplyAndSave();
+    }
+
+    private void SwMinimizeNotify_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        _settings.ShowMinimizeNotification = SwMinimizeNotify.IsChecked == true;
         ApplyAndSave();
     }
 

@@ -23,7 +23,23 @@ public static class Win32Helper
     [DllImport("user32.dll")]
     public static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint dwAffinity);
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+
+    private const int DWMWA_NCRENDERING_POLICY = 2;
+    private const int DWMNCRP_DISABLED = 1;
+    private const int DWMNCRP_USEWINDOWSTYLE = 0;
+
     public const uint WDA_NONE = 0x00000000;
+    public const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
+
+    /// <summary>Enables or disables the DWM non-client shadow for a window.</summary>
+    public static void SetWindowShadow(IntPtr hwnd, bool enable)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        int policy = enable ? DWMNCRP_USEWINDOWSTYLE : DWMNCRP_DISABLED;
+        DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, ref policy, sizeof(int));
+    }
 
     public static void SetClickThrough(IntPtr hwnd, bool enable)
     {

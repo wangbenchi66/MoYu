@@ -1,7 +1,7 @@
 <Window x:Class="TransBrowser.Wpf.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="设置" Height="700" Width="500"
+        Title="设置" Height="800" Width="500"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
@@ -136,6 +136,9 @@
                             <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
+                            <RowDefinition Height="32"/>
+                            <RowDefinition Height="32"/>
+                            <RowDefinition Height="32"/>
                         </Grid.RowDefinitions>
 
                         <!-- Row 0 -->
@@ -187,6 +190,32 @@
                         <ToggleButton Grid.Row="4" Grid.Column="4" Style="{StaticResource ToggleSwitch}"
                                       x:Name="SwTransparentBg"
                                       Checked="SwTransparentBg_Changed" Unchecked="SwTransparentBg_Changed"/>
+
+                        <!-- Row 5 -->
+                        <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource LabelStyle}" Text="灰度模式"/>
+                        <ToggleButton Grid.Row="5" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      x:Name="SwGrayscale"
+                                      Checked="SwGrayscale_Changed" Unchecked="SwGrayscale_Changed"/>
+                        <TextBlock Grid.Row="5" Grid.Column="3" Style="{StaticResource LabelStyle}" Text="防截图模式"/>
+                        <ToggleButton Grid.Row="5" Grid.Column="4" Style="{StaticResource ToggleSwitch}"
+                                      x:Name="SwAntiScreenshot"
+                                      Checked="SwAntiScreenshot_Changed" Unchecked="SwAntiScreenshot_Changed"/>
+
+                        <!-- Row 6 -->
+                        <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource LabelStyle}" Text="禁用窗体阴影"/>
+                        <ToggleButton Grid.Row="6" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      x:Name="SwDisableShadow"
+                                      Checked="SwDisableShadow_Changed" Unchecked="SwDisableShadow_Changed"/>
+                        <TextBlock Grid.Row="6" Grid.Column="3" Style="{StaticResource LabelStyle}" Text="关闭最小化到托盘"/>
+                        <ToggleButton Grid.Row="6" Grid.Column="4" Style="{StaticResource ToggleSwitch}"
+                                      x:Name="SwCloseToTray"
+                                      Checked="SwCloseToTray_Changed" Unchecked="SwCloseToTray_Changed"/>
+
+                        <!-- Row 7 -->
+                        <TextBlock Grid.Row="7" Grid.Column="0" Style="{StaticResource LabelStyle}" Text="最小化时提示"/>
+                        <ToggleButton Grid.Row="7" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      x:Name="SwMinimizeNotify"
+                                      Checked="SwMinimizeNotify_Changed" Unchecked="SwMinimizeNotify_Changed"/>
                     </Grid>
 
                     <!-- ═══ 浏览器设置 ═══ -->
