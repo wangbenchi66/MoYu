@@ -156,17 +156,16 @@ public partial class MainWindow : Window
     private void ApplyWebViewTransparency(BrowserTab tab)
     {
         if (!tab.IsInitialized) return;
-        // Use an explicit ARGB transparent white for better compatibility
-        // with WebView2 hosting. Also set the WPF control background.
         if (_settings.TransparentBackground)
         {
             try
             {
-                // Use fully transparent ARGB (alpha=0)
+                // Make the WebView2 rendering surface fully transparent so the WPF
+                // window background (and whatever is behind the window) shows through.
                 tab.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0, 0, 0, 0);
-                //tab.WebView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
-                // Ensure the WebView host shows the desired light page background when web content is transparent
-                WebViewHost.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF1, 0xF5, 0xF9));
+                // Keep the host grid transparent – an opaque host would create a visible
+                // overlay layer behind the now-transparent WebView content (the bug).
+                WebViewHost.Background = System.Windows.Media.Brushes.Transparent;
             }
             catch { }
         }
@@ -178,6 +177,16 @@ public partial class MainWindow : Window
                 WebViewHost.Background = System.Windows.Media.Brushes.Transparent;
             }
             catch { }
+        }
+
+        // The new-tab overlay is a WPF panel that floats above the WebView. When
+        // transparent background is active its solid backdrop must also be cleared;
+        // otherwise it appears as an opaque rectangle over the transparent window.
+        if (NewTabOverlay != null)
+        {
+            NewTabOverlay.Background = _settings.TransparentBackground
+                ? System.Windows.Media.Brushes.Transparent
+                : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF1, 0xF5, 0xF9));
         }
     }
 
