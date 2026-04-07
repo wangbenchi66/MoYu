@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Navigation;
 using WpfTextBox = System.Windows.Controls.TextBox;
 using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 using WpfKey = System.Windows.Input.Key;
@@ -73,6 +74,8 @@ public partial class SettingsWindow : Window
         TxtClickThrough.Text = _settings.ClickThrough;
         TxtGoBack.Text = _settings.GoBack;
         TxtRunJs.Text = _settings.RunJs;
+
+        ApplyThemeColorPreview(_settings.ThemeBackColor);
     }
 
     // ── Persist & notify ────────────────────────────────────────────────────
@@ -305,4 +308,46 @@ public partial class SettingsWindow : Window
     }
 
     private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
+
+    // ── Background color picker ──────────────────────────────────────────────
+    private void BtnPickColor_Click(object sender, RoutedEventArgs e)
+    {
+        using var dlg = new System.Windows.Forms.ColorDialog
+        {
+            FullOpen = true,
+            Color = HexToDrawingColor(_settings.ThemeBackColor)
+        };
+        if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        {
+            var hex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
+            _settings.ThemeBackColor = hex;
+            ApplyThemeColorPreview(hex);
+            ApplyAndSave();
+        }
+    }
+
+    private void ApplyThemeColorPreview(string hex)
+    {
+        try
+        {
+            ThemeColorPreview.Background =
+                new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+        }
+        catch { }
+    }
+
+    private static System.Drawing.Color HexToDrawingColor(string hex)
+    {
+        try { return System.Drawing.ColorTranslator.FromHtml(hex); }
+        catch { return System.Drawing.Color.White; }
+    }
+
+    // ── Hyperlinks ───────────────────────────────────────────────────────────
+    private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
+        catch { }
+        e.Handled = true;
+    }
 }

@@ -121,6 +121,24 @@
                                    TextAlignment="Right"/>
                     </Grid>
 
+                    <!-- Background color picker -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{StaticResource LabelStyle}" Text="背景色"/>
+                        <Border Grid.Column="1" x:Name="ThemeColorPreview"
+                                Height="22" CornerRadius="3"
+                                Background="#FFFFFF"
+                                BorderBrush="#45475A" BorderThickness="1"
+                                VerticalAlignment="Center"/>
+                        <Button Grid.Column="2" Style="{StaticResource BtnStyle}"
+                                Content="选择" Margin="4,0,0,0"
+                                Click="BtnPickColor_Click"/>
+                    </Grid>
+
                     <!-- 2-column switch rows – window settings -->
                     <Grid Margin="0,0,0,2">
                         <Grid.ColumnDefinitions>
@@ -336,6 +354,25 @@
                                  GotFocus="HotkeyTextBox_GotFocus"
                                  LostFocus="HotkeyTextBox_LostFocus"/>
                     </Grid>
+
+                    <!-- ═══ 开源地址 ═══ -->
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="开源地址"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Foreground="#6C7086" FontSize="11" VerticalAlignment="Center" Text="项目地址：" Margin="0,0,4,0"/>
+                        <TextBlock>
+                            <Hyperlink x:Name="LinkGithub" RequestNavigate="Hyperlink_RequestNavigate"
+                                       NavigateUri="https://github.com/wangbenchi66/TransBrowser">
+                                <Run Foreground="#89B4FA" FontSize="11" Text="GitHub"/>
+                            </Hyperlink>
+                        </TextBlock>
+                        <TextBlock Foreground="#6C7086" FontSize="11" VerticalAlignment="Center" Text="  |  " Margin="2,0"/>
+                        <TextBlock>
+                            <Hyperlink x:Name="LinkRef" RequestNavigate="Hyperlink_RequestNavigate"
+                                       NavigateUri="https://github.com/yclown/TransBrowser">
+                                <Run Foreground="#89B4FA" FontSize="11" Text="参考项目 (yclown/TransBrowser)"/>
+                            </Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
 
                 </StackPanel>
             </ScrollViewer>

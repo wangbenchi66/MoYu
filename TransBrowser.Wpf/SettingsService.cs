@@ -32,6 +32,9 @@ public class AppSettings
     // TabBar
     public bool ShowTabBar { get; set; } = true;
 
+    // Appearance
+    public string ThemeBackColor { get; set; } = "#FFFFFF";
+
     // Browser
     public string StartUrl { get; set; } = "";
     public string UserAgent { get; set; } = "";

@@ -1,60 +1,342 @@
-using System;
-using System.Runtime.InteropServices;
+using System.IO;
+using System.Reflection;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
+using WpfButton = System.Windows.Controls.Button;
+using WpfClipboard = System.Windows.Clipboard;
+using WpfCursors = System.Windows.Input.Cursors;
+using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
+using WpfMouseEventArgs = System.Windows.Input.MouseEventArgs;
+using WpfOrientation = System.Windows.Controls.Orientation;
 
-namespace TransBrowser.Wpf
+namespace TransBrowser.Wpf;
+
+public class BrowserTab
 {
-    public static class Win32Helper
+    public WebView2 WebView { get; set; } = null!;
+    public string Title { get; set; } = "新标签页";
+    public string Url { get; set; } = "";
+    public bool IsInitialized { get; set; }
+    public WpfButton? TabButton { get; set; }
+    // Holds the id returned by CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync
+    public string? TransparentScriptId { get; set; }
+}
+
+public partial class MainWindow : Window
+{
+    private AppSettings _settings = new();
+    private readonly List<BrowserTab> _tabs = new();
+    private BrowserTab? _activeTab;
+    private CoreWebView2Environment? _webViewEnv;
+    private readonly GlobalHotkeyService _hotkeyService = new();
+    private System.Windows.Forms.NotifyIcon? _trayIcon;
+    private bool _isClickThrough;
+    private bool _hoverHeaderVisible;
+    private bool _forceClose;  // set to true when exiting via tray "退出"
+    private string _newtabHtml = "";
+    private readonly System.Windows.Threading.DispatcherTimer _opacitySaveTimer;
+    private SettingsWindow? _settingsWindow;
+
+    // Theme colours used to restore backgrounds after transparent mode is toggled off
+    // Use light theme colors to match updated XAML
+    private static readonly System.Windows.Media.SolidColorBrush BrushTitleBar =
+        new(System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF));
+    private static readonly System.Windows.Media.SolidColorBrush BrushTabBar =
+        new(System.Windows.Media.Color.FromRgb(0xF3, 0xF4, 0xF6));
+    private static readonly System.Windows.Media.SolidColorBrush BrushUrlBar =
+        new(System.Windows.Media.Color.FromRgb(0xF3, 0xF4, 0xF6));
+    private static readonly System.Windows.Media.SolidColorBrush BrushStatusBar =
+        new(System.Windows.Media.Color.FromRgb(0xF3, 0xF4, 0xF6));
+    private static readonly System.Windows.Media.SolidColorBrush BrushRootBackground =
+        new(System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF));
+
+    private const string NewTabUrl = "about:newtab";
+    private const int MaxTabTitleLength = 16;
+    private const int MaxHistoryItems = 50;
+    private const string DefaultMobileUserAgent =
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+
+    // Inject only html/body background transparent to avoid breaking page UI components.
+    private const string TransparentBgInjection = @"(function(){
+        try{
+            var css = 'html,body{background:transparent!important;background-color:transparent!important}';
+            var st = document.createElement('style'); st.id='__tb_transparent_bg'; st.textContent = css; document.head.appendChild(st);
+            // Ensure the style persists when the page mutates
+            var obs = new MutationObserver(function(){ if(!document.getElementById('__tb_transparent_bg')) document.head.appendChild(st); });
+            obs.observe(document.documentElement || document, { childList:true, subtree:true });
+            try{ document.documentElement.style.background='transparent'; document.body.style.background='transparent'; }catch(e){}
+        }catch(e){}
+    })();";
+
+    // Inject grayscale CSS/script to all pages in the WebView
+    private const string GrayscaleBgInjection = @"(function(){
+        try{
+            var s=document.getElementById('__tb_grayscale');
+            if(!s){s=document.createElement('style');s.id='__tb_grayscale';(document.head||document.documentElement).appendChild(s);}
+            s.textContent='html{filter:grayscale(100%)!important;-webkit-filter:grayscale(100%)!important}';
+        }catch(e){}
+    })();";
+
+    private const string GrayscaleRemoveInjection = @"(function(){
+        try{var s=document.getElementById('__tb_grayscale');if(s)s.remove();}catch(e){}
+    })();";
+
+    public MainWindow()
     {
-        // Function to get window exstyle
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-        // Function to set window exstyle
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-        // Function to set layered window attributes
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
-
-        // Constants for GetWindowLong and SetWindowLong
-        private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_LAYERED = 0x00080000;
-        private const int LWA_ALPHA = 0x00000002;
-        private const int LWA_COLORKEY = 0x00000001;
-
-        // Function to apply layered opacity
-        public static void ApplyLayeredOpacity(IntPtr hwnd, double opacity)
+        // Initialize the dispatcher timer before calling InitializeComponent()
+        // because XAML initialization can raise events (e.g. ValueChanged) that
+        // access the timer. Initializing it first prevents a NullReferenceException.
+        _opacitySaveTimer = new System.Windows.Threading.DispatcherTimer
         {
-            if (hwnd == IntPtr.Zero) return; // Guard for hwnd==IntPtr.Zero
+            Interval = TimeSpan.FromMilliseconds(300)
+        };
+        _opacitySaveTimer.Tick += (_, _) =>
+        {
+            _opacitySaveTimer.Stop();
+            SettingsService.Save(_settings);
+        };
 
-            int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+        InitializeComponent();
+        Loaded += MainWindow_Loaded;
+        Deactivated += MainWindow_Deactivated;
+        Closing += MainWindow_Closing;
+        StateChanged += MainWindow_StateChanged;
+    }
 
-            byte alpha = (byte)(opacity * 255); // Map 0.01-1.0 to byte 3-255
-            SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        _settings = SettingsService.Load();
+        ApplySettings();
+        LoadNewtabTemplate();
+        await InitWebViewEnvironmentAsync();
+        AddTab(string.IsNullOrEmpty(_settings.StartUrl) ? NewTabUrl : _settings.StartUrl);
+        SetupTrayIcon();
+        _hotkeyService.Initialize(this);
+        RegisterHotkeys();
+    }
+
+    private void ApplySettings()
+    {
+        Opacity = _settings.Opacity;
+        Left = _settings.WindowLeft;
+        Top = _settings.WindowTop;
+        Width = _settings.WindowWidth;
+        Height = _settings.WindowHeight;
+        Topmost = _settings.TopMost;
+        ShowInTaskbar = _settings.ShowInTaskbar;
+        StatusOpacitySlider.Value = _settings.Opacity;
+
+        TitleBar.Visibility = _settings.NoTitle ? Visibility.Collapsed : Visibility.Visible;
+        TitleBarRow.Height = _settings.NoTitle ? new GridLength(0) : new GridLength(40);
+
+        TabBarPanel.Visibility = _settings.ShowTabBar ? Visibility.Visible : Visibility.Collapsed;
+        TabBarRow.Height = _settings.ShowTabBar ? new GridLength(32) : new GridLength(0);
+
+        if (_settings.HoverHeaderMode && !_settings.NoTitle)
+        {
+            TitleBar.Visibility = Visibility.Collapsed;
+            TitleBarRow.Height = new GridLength(0);
+        }
+
+        _isClickThrough = _settings.ClickThroughMode;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+            Win32Helper.SetClickThrough(hwnd, _isClickThrough);
+
+        ApplyWindowTransparency(_settings.WindowTransparent);
+        ApplyWindowShadow(_settings.DisableWindowShadow);
+        ApplyAntiScreenshot(_settings.AntiScreenshotMode);
+    }
+
+    /// <summary>Toggles window chrome backgrounds for the "软件背景透明" feature.</summary>
+    private void ApplyWindowTransparency(bool transparent)
+    {
+        TitleBar.Background = transparent ? System.Windows.Media.Brushes.Transparent : ParseColorBrush(_settings.ThemeBackColor, BrushTitleBar);
+        TabBarPanel.Background = transparent ? System.Windows.Media.Brushes.Transparent : BrushTabBar;
+        UrlBarGrid.Background = transparent ? System.Windows.Media.Brushes.Transparent : BrushUrlBar;
+        StatusBarGrid.Background = transparent ? System.Windows.Media.Brushes.Transparent : BrushStatusBar;
+        // The window/chrome transparency only affects chrome elements (title/tab/url/status bars).
+        // The WebView area (and what the web page shows through) is controlled separately
+        // by ApplyWebViewTransparency and the "网页背景透明" setting.
+    }
+
+    /// <summary>Parses a hex color string (e.g. "#FFFFFF") into a SolidColorBrush, falling back to <paramref name="fallback"/> on error.</summary>
+    private static System.Windows.Media.SolidColorBrush ParseColorBrush(string hex, System.Windows.Media.SolidColorBrush fallback)
+    {
+        try
+        {
+            var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex);
+            return new System.Windows.Media.SolidColorBrush(color);
+        }
+        catch { return fallback; }
+    }
+
+    /// <summary>Enables or disables the DWM drop shadow for the main window ("禁用窗体阴影").</summary>
+    private void ApplyWindowShadow(bool disableShadow)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+            Win32Helper.SetWindowShadow(hwnd, !disableShadow);
+    }
+
+    /// <summary>Enables or disables anti-screenshot mode using SetWindowDisplayAffinity ("防截图模式").</summary>
+    private void ApplyAntiScreenshot(bool enable)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        bool ok = Win32Helper.SetWindowDisplayAffinity(hwnd,
+            enable ? Win32Helper.WDA_EXCLUDEFROMCAPTURE : Win32Helper.WDA_NONE);
+        if (!ok && enable)
+        {
+            // Feature requires Windows 10 2004+; silently revert the setting
+            _settings.AntiScreenshotMode = false;
         }
     }
 
-    public partial class MainWindow
+    /// <summary>Injects or removes the grayscale CSS on all initialized tabs ("灰度模式").</summary>
+    private void ApplyGrayscaleToAllTabs(bool enable)
     {
-        // Call ApplyLayeredOpacity from ApplySettings/ApplyAllSettings and StatusOpacitySlider_ValueChanged
-        public void ApplySettings()
+        foreach (var tab in _tabs)
         {
-            // Existing code...
-            ApplyLayeredOpacity(this.Handle, desiredOpacity);
+            if (tab.IsInitialized && tab.WebView.CoreWebView2 != null)
+                _ = tab.WebView.CoreWebView2.ExecuteScriptAsync(
+                    enable ? GrayscaleBgInjection : GrayscaleRemoveInjection);
+        }
+    }
+
+    /// <summary>
+    /// Sets WebView2 DefaultBackgroundColor so the rendering surface is transparent
+    /// when the "网页背景透明" toggle is on.
+    /// </summary>
+    private void ApplyWebViewTransparency(BrowserTab tab)
+    {
+        if (!tab.IsInitialized) return;
+        if (_settings.TransparentBackground)
+        {
+            try
+            {
+                // Make the WebView2 rendering surface fully transparent so the WPF
+                // window background (and whatever is behind the window) shows through.
+                tab.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0, 0, 0, 0);
+                // Keep the host grid transparent – an opaque host would create a visible
+                // overlay layer behind the now-transparent WebView content (the bug).
+                WebViewHost.Background = System.Windows.Media.Brushes.Transparent;
+            }
+            catch { }
+        }
+        else
+        {
+            try
+            {
+                tab.WebView.DefaultBackgroundColor = System.Drawing.Color.White;
+                WebViewHost.Background = System.Windows.Media.Brushes.Transparent;
+            }
+            catch { }
         }
 
-        public void StatusOpacitySlider_ValueChanged(double value)
+        // The new-tab overlay is a WPF panel that floats above the WebView. When
+        // transparent background is active its solid backdrop must also be cleared;
+        // otherwise it appears as an opaque rectangle over the transparent window.
+        if (NewTabOverlay != null)
         {
-            // Existing code...
-            ApplyLayeredOpacity(this.Handle, value);
+            NewTabOverlay.Background = _settings.TransparentBackground
+                ? System.Windows.Media.Brushes.Transparent
+                : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF1, 0xF5, 0xF9));
+        }
+    }
+
+    private void LoadNewtabTemplate()
+    {
+        try
+        {
+            var asm = Assembly.GetExecutingAssembly();
+            using var stream = asm.GetManifestResourceStream("TransBrowser.Wpf.Resources.newtab.html");
+            if (stream != null)
+                using (var reader = new StreamReader(stream))
+                    _newtabHtml = reader.ReadToEnd();
+        }
+        catch { }
+
+        if (string.IsNullOrEmpty(_newtabHtml))
+            _newtabHtml = "<html><body><h1>新标签页</h1></body></html>";
+    }
+
+    private string BuildNewtabHtml()
+    {
+        var customJson = JsonSerializer.Serialize(
+            _settings.CustomSites.Select(s => new { n = s.Name, u = s.Url }).ToList());
+        var historyJson = JsonSerializer.Serialize(
+            _settings.History.Take(MaxHistoryItems).Select(h => new { t = h.Title, u = h.Url }).ToList());
+
+        return _newtabHtml
+            .Replace("##CUSTOM_DATA##", customJson)
+            .Replace("##HISTORY_DATA##", historyJson);
+    }
+
+    private async Task InitWebViewEnvironmentAsync()
+    {
+        try
+        {
+            var userDataFolder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "TransBrowser", "WebView2");
+            _webViewEnv = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+        }
+        catch { }
+    }
+
+    private async void AddTab(string url = "")
+    {
+        var wv = new WebView2 { Visibility = Visibility.Collapsed };
+        var tab = new BrowserTab { WebView = wv, Url = url };
+        _tabs.Add(tab);
+        WebViewHost.Children.Add(wv);
+
+        if (_webViewEnv != null)
+        {
+            await wv.EnsureCoreWebView2Async(_webViewEnv);
+            tab.IsInitialized = true;
+            // 先应用 WebView2 级别设置（UA/背景色等）
+            await ApplyWebViewSettings(tab);
+            // 再挂事件，事件里会根据设置再注入一次脚本，保证导航后也生效
+            HookWebViewEvents(tab);
         }
 
-        public void SetOpacity(double value)
+        UpdateTabUI();
+        SwitchToTab(tab);
+
+        if (tab.IsInitialized)
+            NavigateTab(tab, url);
+    }
+
+    private async Task ApplyWebViewSettings(BrowserTab tab)
+    {
+        if (tab.WebView.CoreWebView2 == null) return;
+        var settings = tab.WebView.CoreWebView2.Settings;
+
+        if (!string.IsNullOrEmpty(_settings.UserAgent))
+            settings.UserAgent = _settings.UserAgent;
+        else if (_settings.MobileMold)
+            settings.UserAgent = DefaultMobileUserAgent;
+
+        ApplyWebViewTransparency(tab);
+        // Ensure DOM scripts (transparent background injection) are set
+        if (_settings.TransparentBackground)
         {
-            // Existing code...
-            ApplyLayeredOpacity(this.Handle, value);
+            try
+            {
+                if (tab.WebView.CoreWebView2 != null && string.IsNullOrEmpty(tab.TransparentScriptId))
+                {
+                    var id = await tab.WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(TransparentBgInjection);
+                    tab.TransparentScriptId = id;
+                }
+            }
+            catch { }
         }
 
         // Enable no-image mode at the resource level so images are not downloaded at all.
