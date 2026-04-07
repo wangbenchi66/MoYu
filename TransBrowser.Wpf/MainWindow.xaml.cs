@@ -40,14 +40,15 @@ public partial class MainWindow : Window
     private SettingsWindow? _settingsWindow;
 
     // Theme colours used to restore backgrounds after transparent mode is toggled off
+    // Use light theme colors to match updated XAML
     private static readonly System.Windows.Media.SolidColorBrush BrushTitleBar =
-        new(System.Windows.Media.Color.FromRgb(0x18, 0x18, 0x25));
+        new(System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF));
     private static readonly System.Windows.Media.SolidColorBrush BrushTabBar =
-        new(System.Windows.Media.Color.FromRgb(0x11, 0x11, 0x1B));
+        new(System.Windows.Media.Color.FromRgb(0xF3, 0xF4, 0xF6));
     private static readonly System.Windows.Media.SolidColorBrush BrushUrlBar =
-        new(System.Windows.Media.Color.FromRgb(0x1E, 0x1E, 0x2E));
+        new(System.Windows.Media.Color.FromRgb(0xF3, 0xF4, 0xF6));
     private static readonly System.Windows.Media.SolidColorBrush BrushStatusBar =
-        new(System.Windows.Media.Color.FromRgb(0x11, 0x11, 0x1B));
+        new(System.Windows.Media.Color.FromRgb(0xF3, 0xF4, 0xF6));
 
     private const string NewTabUrl = "about:newtab";
     private const int MaxTabTitleLength = 16;
@@ -186,7 +187,7 @@ public partial class MainWindow : Window
         var wv = new WebView2 { Visibility = Visibility.Collapsed };
         var tab = new BrowserTab { WebView = wv, Url = url };
         _tabs.Add(tab);
-        WebViewContainer.Children.Add(wv);
+        WebViewHost.Children.Add(wv);
 
         if (_webViewEnv != null)
         {
@@ -366,8 +367,12 @@ public partial class MainWindow : Window
 
         if (url == NewTabUrl || string.IsNullOrEmpty(url))
         {
-            tab.WebView.CoreWebView2.NavigateToString(BuildNewtabHtml());
+            // For new-tab pages we show the built-in overlay UI instead of navigating
+            // the WebView. Keep the webview content consistent though.
+            try { tab.WebView.CoreWebView2.NavigateToString(BuildNewtabHtml()); } catch { }
             tab.Url = NewTabUrl;
+            if (NewTabOverlay != null)
+                NewTabOverlay.Visibility = Visibility.Visible;
         }
         else
         {
@@ -375,6 +380,8 @@ public partial class MainWindow : Window
                 !url.StartsWith("file://") && !url.StartsWith("about:"))
                 url = "https://" + url;
             tab.WebView.CoreWebView2.Navigate(url);
+            if (NewTabOverlay != null)
+                NewTabOverlay.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -389,6 +396,14 @@ public partial class MainWindow : Window
                     : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x11, 0x11, 0x1B));
         }
 
+        // Show or hide the new-tab overlay depending on the tab URL
+        if (NewTabOverlay != null)
+        {
+            NewTabOverlay.Visibility = (tab.Url == NewTabUrl || (tab.Url?.Contains("about:") == true))
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
         _activeTab = tab;
         TxtUrl.Text = tab.Url == NewTabUrl ? "" : tab.Url;
         TitleText.Text = tab.Title;
@@ -400,7 +415,7 @@ public partial class MainWindow : Window
 
         var idx = _tabs.IndexOf(tab);
         _tabs.Remove(tab);
-        WebViewContainer.Children.Remove(tab.WebView);
+        WebViewHost.Children.Remove(tab.WebView);
         tab.WebView.Dispose();
 
         var nextTab = _tabs[Math.Min(idx, _tabs.Count - 1)];
