@@ -715,10 +715,12 @@ public partial class MainWindow : Window
 
     private void Window_MouseMove(object sender, WpfMouseEventArgs e)
     {
+        if (!_settings.HoverHeaderMode || _settings.NoTitle) return;
 
         var pos = e.GetPosition(this);
         if (pos.Y < 5)
         {
+            if (!_hoverHeaderVisible)
             {
                 TitleBar.Visibility = Visibility.Visible;
                 TitleBarRow.Height = new GridLength(40);
