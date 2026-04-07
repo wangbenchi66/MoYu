@@ -110,7 +110,8 @@
                     Minimum="0.01" Maximum="1.0" TickFrequency="0.05"
                     IsSnapToTickEnabled="True" VerticalAlignment="Center"
                     Foreground="#89B4FA" Margin="4,0"
-                    ValueChanged="StatusOpacitySlider_ValueChanged"/>
+                    ValueChanged="StatusOpacitySlider_ValueChanged"
+                    Thumb.DragCompleted="StatusOpacitySlider_DragCompleted"/>
             <ResizeGrip Grid.Column="2" VerticalAlignment="Bottom"/>
         </Grid>
     </Grid>

@@ -24,7 +24,9 @@ public static class IniMigrationService
 
                 if (line.StartsWith('[') && line.EndsWith(']'))
                 {
-                    currentSection = line[1..^1].Trim();
+                    var sectionName = line[1..^1].Trim();
+                    if (!string.IsNullOrEmpty(sectionName))
+                        currentSection = sectionName;
                     continue;
                 }
 

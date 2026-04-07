@@ -38,6 +38,10 @@ public partial class MainWindow : Window
     private string _newtabHtml = "";
 
     private const string NewTabUrl = "about:newtab";
+    private const int MaxTabTitleLength = 16;
+    private const int MaxHistoryItems = 50;
+    private const string DefaultMobileUserAgent =
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 
     public MainWindow()
     {
@@ -107,7 +111,7 @@ public partial class MainWindow : Window
         var customJson = JsonSerializer.Serialize(
             _settings.CustomSites.Select(s => new { n = s.Name, u = s.Url }).ToList());
         var historyJson = JsonSerializer.Serialize(
-            _settings.History.Take(50).Select(h => new { t = h.Title, u = h.Url }).ToList());
+            _settings.History.Take(MaxHistoryItems).Select(h => new { t = h.Title, u = h.Url }).ToList());
 
         return _newtabHtml
             .Replace("##CUSTOM_DATA##", customJson)
@@ -156,7 +160,7 @@ public partial class MainWindow : Window
         if (!string.IsNullOrEmpty(_settings.UserAgent))
             settings.UserAgent = _settings.UserAgent;
         else if (_settings.MobileMold)
-            settings.UserAgent = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+            settings.UserAgent = DefaultMobileUserAgent;
     }
 
     private void HookWebViewEvents(BrowserTab tab)
@@ -213,8 +217,8 @@ public partial class MainWindow : Window
                         VisitedAt = DateTime.Now
                     });
 
-                    if (_settings.History.Count > 50)
-                        _settings.History = _settings.History.Take(50).ToList();
+                    if (_settings.History.Count > MaxHistoryItems)
+                        _settings.History = _settings.History.Take(MaxHistoryItems).ToList();
 
                     SettingsService.Save(_settings);
                 });
@@ -374,7 +378,7 @@ public partial class MainWindow : Window
             var sp = new StackPanel { Orientation = WpfOrientation.Horizontal };
             sp.Children.Add(new TextBlock
             {
-                Text = tab.Title.Length > 16 ? tab.Title[..16] + "…" : tab.Title,
+                Text = tab.Title.Length > MaxTabTitleLength ? tab.Title[..MaxTabTitleLength] + "…" : tab.Title,
                 Foreground = System.Windows.Media.Brushes.White,
                 FontSize = 11,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -545,7 +549,11 @@ public partial class MainWindow : Window
     {
         Opacity = e.NewValue;
         _settings.Opacity = e.NewValue;
-        // Note: intentionally does not call SettingsService.Save here to avoid disk writes on every slider tick
+    }
+
+    private void StatusOpacitySlider_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        SettingsService.Save(_settings);
     }
 
     private void Window_MouseMove(object sender, WpfMouseEventArgs e)
