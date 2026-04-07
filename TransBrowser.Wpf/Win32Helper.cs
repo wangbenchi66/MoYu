@@ -7,12 +7,16 @@ public static class Win32Helper
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_LAYERED = 0x00080000;
+    private const int LWA_ALPHA = 0x00000002;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
 
     [DllImport("user32.dll")]
     public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -49,5 +53,27 @@ public static class Win32Helper
         else
             exStyle &= ~WS_EX_TRANSPARENT;
         SetWindowLong(hwnd, GWL_EXSTYLE, exStyle);
+    }
+
+    /// <summary>
+    /// Enables Win32 WS_EX_LAYERED extended style on the window (idempotent).
+    /// Must be called before <see cref="SetAlpha"/>.
+    /// </summary>
+    public static void EnableLayered(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        if ((exStyle & WS_EX_LAYERED) == 0)
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+    }
+
+    /// <summary>
+    /// Sets the per-pixel alpha for a layered window.
+    /// <paramref name="alpha"/> 0 = fully transparent, 255 = fully opaque.
+    /// </summary>
+    public static void SetAlpha(IntPtr hwnd, byte alpha)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
     }
 }

@@ -1,97 +1,243 @@
-using System;
-using System.Runtime.InteropServices;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using Microsoft.Web.WebView2.Core;
+using WpfButton = System.Windows.Controls.Button;
+using WpfCursors = System.Windows.Input.Cursors;
+using WpfOrientation = System.Windows.Controls.Orientation;
+using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
+using WpfMouseEventArgs = System.Windows.Input.MouseEventArgs;
+using WpfMouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
+using WpfClipboard = System.Windows.Clipboard;
+using WpfKey = System.Windows.Input.Key;
 
-namespace TransBrowser.Wpf
+namespace TransBrowser.Wpf;
+
+public class BrowserTab
 {
-    public static class Win32Helper
+    public Microsoft.Web.WebView2.Wpf.WebView2 WebView { get; set; } = null!;
+    public string Url { get; set; } = "";
+    public string Title { get; set; } = "新标签页";
+    public System.Windows.Controls.Button? TabButton { get; set; }
+}
+
+public partial class MainWindow : Window
+{
+    private const string NewTabUrl = "about:newtab";
+    private const int MaxHistoryItems = 200;
+    private const int MaxTabTitleLength = 20;
+    private const string TransparentBgInjection =
+        "document.documentElement.style.background='transparent';" +
+        "document.body.style.background='transparent';";
+    private const string GrayscaleBgInjection =
+        "(function(){var s=document.createElement('style');" +
+        "s.textContent='html{filter:grayscale(1)!important}';" +
+        "document.head.appendChild(s);})();";
+
+    private readonly AppSettings _settings;
+    private readonly List<BrowserTab> _tabs = new();
+    private BrowserTab? _activeTab;
+    private readonly GlobalHotkeyService _hotkeyService;
+    private readonly WindowTransparencyService _transparencyService;
+    private System.Windows.Forms.NotifyIcon? _trayIcon;
+    private SettingsWindow? _settingsWindow;
+    private bool _isClickThrough;
+    private bool _hoverHeaderVisible;
+    private bool _forceClose;
+    private bool _bossKeyActive;
+    private readonly System.Windows.Threading.DispatcherTimer _opacitySaveTimer;
+
+    public MainWindow()
     {
-        // Function to get window exstyle
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+        InitializeComponent();
 
-        // Function to set window exstyle
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+        _settings = SettingsService.Load();
+        _hotkeyService = new GlobalHotkeyService();
+        _transparencyService = new WindowTransparencyService();
 
-        // Function to set layered window attributes
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
-
-        // Constants for GetWindowLong and SetWindowLong
-        private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_LAYERED = 0x00080000;
-        private const int LWA_ALPHA = 0x00000002;
-        private const int LWA_COLORKEY = 0x00000001;
-
-        // Function to apply layered opacity
-        public static void ApplyLayeredOpacity(IntPtr hwnd, double opacity)
+        _opacitySaveTimer = new System.Windows.Threading.DispatcherTimer
         {
-            if (hwnd == IntPtr.Zero) return; // Guard for hwnd==IntPtr.Zero
+            Interval = TimeSpan.FromMilliseconds(300)
+        };
+        _opacitySaveTimer.Tick += (_, _) => { _opacitySaveTimer.Stop(); SettingsService.Save(_settings); };
 
-            int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+        Left = _settings.WindowLeft;
+        Top = _settings.WindowTop;
+        Width = _settings.WindowWidth;
+        Height = _settings.WindowHeight;
+        Topmost = _settings.TopMost;
+        ShowInTaskbar = _settings.ShowInTaskbar;
 
-            byte alpha = (byte)(opacity * 255); // Map 0.01-1.0 to byte 3-255
-            SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
-        }
+        Deactivated += MainWindow_Deactivated;
+        Closing += MainWindow_Closing;
+        StateChanged += MainWindow_StateChanged;
+        Loaded += MainWindow_Loaded;
+
+        MouseEnter += (_, _) =>
+        {
+            if (_settings.TransparencyMode == TransparencyMode.Dynamic)
+                _transparencyService.SetTransparency(1.0);
+        };
+        MouseLeave += (_, _) =>
+        {
+                _transparencyService.SetTransparency(_settings.Opacity);
+        };
+
+        SetupTrayIcon();
     }
 
-    public partial class MainWindow
+    protected override void OnSourceInitialized(EventArgs e)
     {
-        // Call ApplyLayeredOpacity from ApplySettings/ApplyAllSettings and StatusOpacitySlider_ValueChanged
-        public void ApplySettings()
+        base.OnSourceInitialized(e);
+        var hwnd = new WindowInteropHelper(this).Handle;
+        _transparencyService.Initialize(hwnd);
+        _transparencyService.SetTransparency(_settings.Opacity);
+        _hotkeyService.Initialize(this);
+        RegisterHotkeys();
+    }
+
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        StatusOpacitySlider.Value = _settings.Opacity;
+
+        TitleBar.Visibility = _settings.NoTitle ? Visibility.Collapsed : Visibility.Visible;
+        TitleBarRow.Height = _settings.NoTitle ? new GridLength(0) : new GridLength(40);
+
+        TabBarPanel.Visibility = _settings.ShowTabBar ? Visibility.Visible : Visibility.Collapsed;
+        TabBarRow.Height = _settings.ShowTabBar ? new GridLength(32) : new GridLength(0);
+
         {
-            // Existing code...
-            ApplyLayeredOpacity(this.Handle, desiredOpacity);
+            TitleBar.Visibility = Visibility.Collapsed;
+            TitleBarRow.Height = new GridLength(0);
         }
 
-        public void StatusOpacitySlider_ValueChanged(double value)
-        {
-            // Existing code...
-            ApplyLayeredOpacity(this.Handle, value);
-        }
+        _isClickThrough = _settings.ClickThroughMode;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+            Win32Helper.SetClickThrough(hwnd, _isClickThrough);
 
-        public void SetOpacity(double value)
-        {
-            // Existing code...
-            ApplyLayeredOpacity(this.Handle, value);
-        }
+        ApplyWindowShadow(_settings.DisableWindowShadow);
+        ApplyAntiScreenshot(_settings.AntiScreenshotMode);
 
-        // Enable no-image mode at the resource level so images are not downloaded at all.
+    }
+
+    private async void AddTab(string url)
+    {
+        var wv = new Microsoft.Web.WebView2.Wpf.WebView2();
+
+        var tab = new BrowserTab { WebView = wv, Url = url, Title = "新标签页" };
+        _tabs.Add(tab);
+        WebViewHost.Children.Add(wv);
+
+        await wv.EnsureCoreWebView2Async();
+
+        // WebView2 background must be explicitly transparent so the Win32
+        // layered window alpha is visible through the WebView2 content area.
+        wv.DefaultBackgroundColor = System.Drawing.Color.Transparent;
+
+        HookWebViewEvents(tab);
+        _ = ApplyWebViewSettings(tab);
+
         if (_settings.NoImageMode)
-        {
             EnableNoImageMode(tab.WebView.CoreWebView2);
+
+        UpdateTabUI();
+        SwitchToTab(tab);
+        NavigateTab(tab, url);
+    }
+
+    private async Task ApplyWebViewSettings(BrowserTab tab)
+    {
+        if (tab.WebView.CoreWebView2 == null) return;
+
+        if (_settings.MobileMold)
+        {
+            tab.WebView.CoreWebView2.Settings.UserAgent =
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) " +
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1";
+        }
+        else if (!string.IsNullOrEmpty(_settings.UserAgent))
+        {
+            tab.WebView.CoreWebView2.Settings.UserAgent = _settings.UserAgent;
+        }
+
+        // Keep WebView2 background transparent for Win32 layered transparency
+        tab.WebView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
+
+        await Task.CompletedTask;
+    }
+
+    private void ApplyWindowTransparency(bool enable)
+    {
+        // Re-apply transparent WebView2 background to all tabs.
+        // Win32 layered window always controls the actual window-level opacity.
+        foreach (var tab in _tabs)
+            tab.WebView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
+    }
+
+    private void ApplyWindowShadow(bool disable)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+            Win32Helper.SetWindowShadow(hwnd, !disable);
+    }
+
+    private void ApplyAntiScreenshot(bool enable)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+            Win32Helper.SetWindowDisplayAffinity(
+                hwnd,
+                enable ? Win32Helper.WDA_EXCLUDEFROMCAPTURE : Win32Helper.WDA_NONE);
+    }
+
+    private void ApplyGrayscaleToAllTabs(bool enable)
+    {
+        foreach (var tab in _tabs)
+        {
+            if (tab.WebView.CoreWebView2 != null)
+            {
+                try { _ = tab.WebView.CoreWebView2.ExecuteScriptAsync(GrayscaleBgInjection); }
+                catch { }
+            }
         }
     }
 
-    /// <summary>
-    /// Enables a lightweight "no image" mode by intercepting image resources
-    /// in WebView2. This works in addition to the CSS-based hiding used on DOMContentLoaded.
-    /// </summary>
+    private string BuildNewtabHtml()
+    {
+        var asm = System.Reflection.Assembly.GetExecutingAssembly();
+        using var stream = asm.GetManifestResourceStream("TransBrowser.Wpf.Resources.newtab.html");
+        if (stream == null) return "<html><body>新标签页</body></html>";
+        using var reader = new StreamReader(stream);
+        var html = reader.ReadToEnd();
+
+        var customJson = System.Text.Json.JsonSerializer.Serialize(
+            _settings.CustomSites.Select(s => new { n = s.Name, u = s.Url }).ToList());
+        var historyJson = System.Text.Json.JsonSerializer.Serialize(
+            _settings.History.Take(200).Select(h => new { t = h.Title, u = h.Url }).ToList());
+
+        html = html.Replace("##CUSTOM_DATA##", customJson)
+                   .Replace("##HISTORY_DATA##", historyJson);
+        return html;
+    }
+
     private void EnableNoImageMode(CoreWebView2 core)
     {
         try
         {
-            // Add a filter for image resources. If this was already added, WebView2
-            // will throw and we simply ignore it.
             core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Image);
         }
-        catch
-        {
-            // Ignore duplicate filter registration
-        }
+        catch { }
 
         core.WebResourceRequested += (sender, args) =>
         {
-            if (args.ResourceContext == CoreWebView2WebResourceContext.Image)
+            if (args.ResourceContext == CoreWebView2WebResourceContext.Image &&
+                sender is CoreWebView2 coreWebView2)
             {
-                var env = ((CoreWebView2)sender).Environment;
-                // Return an empty 200 OK so the page believes the request succeeded
-                var response = env.CreateWebResourceResponse(
-                    null,
-                    200,
-                    "OK",
-                    "Content-Type: text/plain");
+                var env = coreWebView2.Environment;
+                var response = env.CreateWebResourceResponse(null, 200, "OK", "Content-Type: text/plain");
                 args.Response = response;
             }
         };
@@ -136,7 +282,6 @@ namespace TransBrowser.Wpf
                 UpdateTabUI();
             });
 
-            if (!url.StartsWith("about:") && !url.Contains("newtab.local") && !string.IsNullOrEmpty(url))
             {
                 Dispatcher.Invoke(() =>
                 {
@@ -158,12 +303,8 @@ namespace TransBrowser.Wpf
                 });
             }
 
-            if (e.IsSuccess && !string.IsNullOrEmpty(_settings.AutoScript))
             {
-                try
-                {
-                    await wv.CoreWebView2.ExecuteScriptAsync(_settings.AutoScript);
-                }
+                try { await wv.CoreWebView2.ExecuteScriptAsync(_settings.AutoScript); }
                 catch { }
             }
         };
@@ -250,8 +391,6 @@ namespace TransBrowser.Wpf
 
         if (url == NewTabUrl || string.IsNullOrEmpty(url))
         {
-            // For new-tab pages we show the built-in overlay UI instead of navigating
-            // the WebView. Keep the webview content consistent though.
             try { tab.WebView.CoreWebView2.NavigateToString(BuildNewtabHtml()); } catch { }
             tab.Url = NewTabUrl;
             if (NewTabOverlay != null)
@@ -279,7 +418,6 @@ namespace TransBrowser.Wpf
                     : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x11, 0x11, 0x1B));
         }
 
-        // Show or hide the new-tab overlay depending on the tab URL
         if (NewTabOverlay != null)
         {
             NewTabOverlay.Visibility = (tab.Url == NewTabUrl || (tab.Url?.Contains("about:") == true))
@@ -368,20 +506,44 @@ namespace TransBrowser.Wpf
 
     private void RegisterHotkeys()
     {
-        _hotkeyService.Register(1, _settings.BossKey, ToggleVisibility);
-        _hotkeyService.Register(2, _settings.OpacityUp, () => Dispatcher.Invoke(() => SetOpacity(Math.Min(1.0, Opacity + 0.1))));
-        _hotkeyService.Register(3, _settings.OpacityDown, () => Dispatcher.Invoke(() => SetOpacity(Math.Max(0.1, Opacity - 0.1))));
-        _hotkeyService.Register(4, _settings.OpacityReset, () => Dispatcher.Invoke(() => SetOpacity(1.0)));
-        _hotkeyService.Register(5, _settings.ClickThrough, () => Dispatcher.Invoke(ToggleClickThrough));
-        _hotkeyService.Register(6, _settings.GoBack, () => Dispatcher.Invoke(() => _activeTab?.WebView.CoreWebView2?.GoBack()));
-        _hotkeyService.Register(7, _settings.RunJs, () => Dispatcher.Invoke(OpenJsEditor));
+        // Boss key: first press drops opacity to 0.1 (nearly invisible);
+        // second press restores to the settings opacity value.
+        _hotkeyService.Register(1, _settings.BossKey, () => Dispatcher.Invoke(() =>
+        {
+            if (_bossKeyActive)
+            {
+                _bossKeyActive = false;
+                _transparencyService.SetTransparency(_settings.Opacity);
+            }
+            else
+            {
+                _bossKeyActive = true;
+                _transparencyService.SetTransparency(0.1);
+            }
+        }));
+
+        _hotkeyService.Register(2, _settings.OpacityUp,
+            () => Dispatcher.Invoke(() => SetOpacity(Math.Min(1.0, _settings.Opacity + 0.1))));
+        _hotkeyService.Register(3, _settings.OpacityDown,
+            () => Dispatcher.Invoke(() => SetOpacity(Math.Max(0.01, _settings.Opacity - 0.1))));
+        _hotkeyService.Register(4, _settings.OpacityReset,
+            () => Dispatcher.Invoke(() => SetOpacity(1.0)));
+        _hotkeyService.Register(5, _settings.ClickThrough,
+            () => Dispatcher.Invoke(ToggleClickThrough));
+        _hotkeyService.Register(6, _settings.GoBack,
+            () => Dispatcher.Invoke(() => _activeTab?.WebView.CoreWebView2?.GoBack()));
+        _hotkeyService.Register(7, _settings.RunJs,
+            () => Dispatcher.Invoke(OpenJsEditor));
     }
 
+    /// <summary>
+    /// Sets the window opacity via Win32 layered window – NOT via WPF Opacity property.
+    /// </summary>
     private void SetOpacity(double value)
     {
-        Opacity = value;
-        StatusOpacitySlider.Value = value;
         _settings.Opacity = value;
+        StatusOpacitySlider.Value = value;
+            _transparencyService.SetTransparency(value);
         SettingsService.Save(_settings);
     }
 
@@ -401,7 +563,6 @@ namespace TransBrowser.Wpf
 
     private void ToggleClickThrough()
     {
-        _isClickThrough = !_isClickThrough;
         var hwnd = new WindowInteropHelper(this).Handle;
         Win32Helper.SetClickThrough(hwnd, _isClickThrough);
         StatusText.Text = _isClickThrough ? "⚡ 穿透模式已开启" : "";
@@ -438,7 +599,6 @@ namespace TransBrowser.Wpf
         menu.Items.Add("穿透模式切换", null, (s, e) => Dispatcher.Invoke(ToggleClickThrough));
         menu.Items.Add("总在最前切换", null, (s, e) => Dispatcher.Invoke(() =>
         {
-            Topmost = !Topmost;
             _settings.TopMost = Topmost;
             SettingsService.Save(_settings);
         }));
@@ -452,7 +612,6 @@ namespace TransBrowser.Wpf
 
     private void OpenSettings()
     {
-        // If a settings window is already open, just bring it to the front
         if (_settingsWindow?.IsVisible == true)
         {
             _settingsWindow.Activate();
@@ -464,11 +623,11 @@ namespace TransBrowser.Wpf
         _settingsWindow.Show();
     }
 
-    /// <summary>Full settings re-apply called by the live settings callback.</summary>
     private void ApplyAllSettings()
     {
-        // Don't overwrite window position/size during a live settings session
-        Opacity = _settings.Opacity;
+        // Use Win32 layered window for opacity – do NOT set the WPF Opacity property
+            _transparencyService.SetTransparency(_settings.Opacity);
+
         Topmost = _settings.TopMost;
         ShowInTaskbar = _settings.ShowInTaskbar;
         StatusOpacitySlider.Value = _settings.Opacity;
@@ -479,7 +638,6 @@ namespace TransBrowser.Wpf
         TabBarPanel.Visibility = _settings.ShowTabBar ? Visibility.Visible : Visibility.Collapsed;
         TabBarRow.Height = _settings.ShowTabBar ? new GridLength(32) : new GridLength(0);
 
-        if (_settings.HoverHeaderMode && !_settings.NoTitle)
         {
             TitleBar.Visibility = Visibility.Collapsed;
             TitleBarRow.Height = new GridLength(0);
@@ -502,9 +660,7 @@ namespace TransBrowser.Wpf
             _ = ApplyWebViewSettings(tab);
     }
 
-    // --- Event handlers ---
-
-    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void TitleBar_MouseLeftButtonDown(object sender, WpfMouseButtonEventArgs e)
     {
         if (e.ClickCount == 2)
             WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
@@ -525,7 +681,7 @@ namespace TransBrowser.Wpf
 
     private void TxtUrl_KeyDown(object sender, WpfKeyEventArgs e)
     {
-        if (e.Key == Key.Enter && _activeTab != null)
+        if (e.Key == WpfKey.Enter && _activeTab != null)
         {
             NavigateTab(_activeTab, TxtUrl.Text.Trim());
             e.Handled = true;
@@ -536,29 +692,25 @@ namespace TransBrowser.Wpf
 
     private void StatusOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        Opacity = e.NewValue;
         _settings.Opacity = e.NewValue;
+            _transparencyService.SetTransparency(e.NewValue);
 
-        // Debounce: restart the 300 ms timer; fires once after dragging pauses
         _opacitySaveTimer.Stop();
         _opacitySaveTimer.Start();
     }
 
     private void StatusOpacitySlider_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
     {
-        // Force an immediate save when the user releases the thumb
         _opacitySaveTimer.Stop();
         SettingsService.Save(_settings);
     }
 
     private void Window_MouseMove(object sender, WpfMouseEventArgs e)
     {
-        if (!_settings.HoverHeaderMode || _settings.NoTitle) return;
 
         var pos = e.GetPosition(this);
         if (pos.Y < 5)
         {
-            if (!_hoverHeaderVisible)
             {
                 TitleBar.Visibility = Visibility.Visible;
                 TitleBarRow.Height = new GridLength(40);
@@ -584,7 +736,6 @@ namespace TransBrowser.Wpf
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        // If "close to tray" is enabled and this is not a forced exit, minimize to tray
         if (_settings.CloseToTray && !_forceClose)
         {
             e.Cancel = true;

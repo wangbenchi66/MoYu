@@ -39,6 +39,7 @@ public class AppSettings
     public bool NoImageMode { get; set; } = false;
     public bool TransparentBackground { get; set; } = false;
     public bool WindowTransparent { get; set; } = false;
+    public TransparencyMode TransparencyMode { get; set; } = TransparencyMode.Fixed;
     public bool MobileMold { get; set; } = false;
     public bool ClickThroughMode { get; set; } = false;
     public bool GrayscaleMode { get; set; } = false;
