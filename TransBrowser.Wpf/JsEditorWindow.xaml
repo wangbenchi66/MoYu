@@ -1,0 +1,49 @@
+<Window x:Class="TransBrowser.Wpf.JsEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="JS 编辑器" Height="400" Width="560"
+        Background="#1E1E2E" Foreground="White"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBox Grid.Row="0"
+                 x:Name="TxtCode"
+                 Background="#181825"
+                 Foreground="#CDD6F4"
+                 BorderBrush="#45475A"
+                 BorderThickness="1"
+                 FontFamily="Consolas"
+                 FontSize="13"
+                 AcceptsReturn="True"
+                 AcceptsTab="True"
+                 TextWrapping="NoWrap"
+                 HorizontalScrollBarVisibility="Auto"
+                 VerticalScrollBarVisibility="Auto"
+                 Padding="8"
+                 Margin="0,0,0,8"/>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="BtnRun"
+                    Content="▶ 运行"
+                    Click="BtnRun_Click"
+                    Background="#A6E3A1"
+                    Foreground="#1E1E2E"
+                    BorderThickness="0"
+                    Padding="16,6"
+                    Cursor="Hand"
+                    FontSize="13"
+                    Margin="0,0,8,0"/>
+            <Button x:Name="BtnClose"
+                    Content="关闭"
+                    Click="BtnClose_Click"
+                    Background="#313244"
+                    Foreground="White"
+                    BorderBrush="#45475A"
+                    Padding="16,6"
+                    Cursor="Hand"
+                    FontSize="13"/>
+        </StackPanel>
+    </Grid>
+</Window>
