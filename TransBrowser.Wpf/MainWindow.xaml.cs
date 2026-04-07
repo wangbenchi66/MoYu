@@ -414,12 +414,20 @@ public partial class MainWindow : Window
     private void RegisterHotkeys()
     {
         _hotkeyService.Register(1, _settings.BossKey, ToggleVisibility);
-        _hotkeyService.Register(2, _settings.OpacityUp, () => Dispatcher.Invoke(() => { Opacity = Math.Min(1.0, Opacity + 0.1); StatusOpacitySlider.Value = Opacity; _settings.Opacity = Opacity; SettingsService.Save(_settings); }));
-        _hotkeyService.Register(3, _settings.OpacityDown, () => Dispatcher.Invoke(() => { Opacity = Math.Max(0.1, Opacity - 0.1); StatusOpacitySlider.Value = Opacity; _settings.Opacity = Opacity; SettingsService.Save(_settings); }));
-        _hotkeyService.Register(4, _settings.OpacityReset, () => Dispatcher.Invoke(() => { Opacity = 1.0; StatusOpacitySlider.Value = 1.0; _settings.Opacity = 1.0; SettingsService.Save(_settings); }));
+        _hotkeyService.Register(2, _settings.OpacityUp, () => Dispatcher.Invoke(() => SetOpacity(Math.Min(1.0, Opacity + 0.1))));
+        _hotkeyService.Register(3, _settings.OpacityDown, () => Dispatcher.Invoke(() => SetOpacity(Math.Max(0.1, Opacity - 0.1))));
+        _hotkeyService.Register(4, _settings.OpacityReset, () => Dispatcher.Invoke(() => SetOpacity(1.0)));
         _hotkeyService.Register(5, _settings.ClickThrough, () => Dispatcher.Invoke(ToggleClickThrough));
         _hotkeyService.Register(6, _settings.GoBack, () => Dispatcher.Invoke(() => _activeTab?.WebView.CoreWebView2?.GoBack()));
         _hotkeyService.Register(7, _settings.RunJs, () => Dispatcher.Invoke(OpenJsEditor));
+    }
+
+    private void SetOpacity(double value)
+    {
+        Opacity = value;
+        StatusOpacitySlider.Value = value;
+        _settings.Opacity = value;
+        SettingsService.Save(_settings);
     }
 
     private void ToggleVisibility()
@@ -537,6 +545,7 @@ public partial class MainWindow : Window
     {
         Opacity = e.NewValue;
         _settings.Opacity = e.NewValue;
+        // Note: intentionally does not call SettingsService.Save here to avoid disk writes on every slider tick
     }
 
     private void Window_MouseMove(object sender, WpfMouseEventArgs e)

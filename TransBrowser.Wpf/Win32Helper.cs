@@ -24,7 +24,6 @@ public static class Win32Helper
     public static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint dwAffinity);
 
     public const uint WDA_NONE = 0x00000000;
-    public const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
 
     public static void SetClickThrough(IntPtr hwnd, bool enable)
     {
