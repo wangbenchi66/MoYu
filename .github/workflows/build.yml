@@ -1,0 +1,64 @@
+name: Build Electron Multi-Arch
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+        arch: [x64, arm64]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - run: npm install
+        working-directory: MoYu
+
+      - run: npm run build
+        working-directory: MoYu
+
+      - name: Build Electron
+        run: npx electron-builder --${{ matrix.os == 'windows-latest' && 'win' || 'mac' }} --${{ matrix.arch }}
+        working-directory: MoYu
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.os }}-${{ matrix.arch }}
+          path: MoYu/dist/**
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 读取版本号
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./MoYu/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - uses: actions/download-artifact@v4
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          files: |
+            **/*.exe
+            **/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
