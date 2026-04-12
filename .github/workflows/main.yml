@@ -44,5 +44,11 @@ jobs:
         with:
           name: MoYu-${{ matrix.os }}-v${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
           path: |
-            MoYu/dist/
-            MoYu/release/
+            MoYu/release/*.exe
+            MoYu/release/*.msi
+            MoYu/release/*.dmg
+            MoYu/release/*.AppImage
+            MoYu/release/*.zip
+            MoYu/release/*.deb
+            MoYu/release/*.rpm
+            MoYu/release/*.pkg
