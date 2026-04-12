@@ -42,4 +42,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MoYu-${{ matrix.os }}-v${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
-          path: MoYu/dist/**
+          path: |
+            MoYu/dist/
+            MoYu/release/
