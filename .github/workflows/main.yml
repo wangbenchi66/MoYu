@@ -1,7 +1,7 @@
 name: Build Electron Multi-Arch
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: npm
+          # cache 已移除，避免锁文件报错
 
       - name: Install dependencies
         run: npm install
@@ -30,9 +30,6 @@ jobs:
         working-directory: MoYu
 
       - name: Build Electron app
-        # 根据操作系统和架构生成对应的安装包
-        # Windows: --win, macOS: --mac
-        # 架构参数直接使用 --x64 或 --arm64
         run: npx electron-builder --${{ runner.os == 'Windows' && 'win' || 'mac' }} --${{ matrix.arch }}
         working-directory: MoYu
 
@@ -40,6 +37,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-${{ matrix.os }}-${{ matrix.arch }}
-          # 根据 electron-builder 默认输出路径调整（通常是 dist/ 或 release/）
-          # 这里沿用你原来的路径，若实际输出目录不同请修改
           path: MoYu/dist/**
