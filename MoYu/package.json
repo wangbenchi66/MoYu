@@ -1,0 +1,83 @@
+{
+  "name": "moyu",
+  "description": "摸鱼工作台",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "author": "wangbenchi66",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:web\" \"npm:dev:electron\"",
+    "dev:web": "vite",
+    "dev:electron": "wait-on tcp:5173 && electron .",
+    "start": "electron .",
+    "build": "vite build --base=./",
+    "preview": "vite preview",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "vue": "^3.5.32",
+    "element-plus": "^2.3.10",
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "concurrently": "^8.2.2",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "vite": "^5.4.19",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "copyright": "Copyright © 2026 wangbenchi66",
+    "appId": "com.moyu_wangbenchi66.app",
+    "productName": "MoYu",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "src/**/*",
+      "electron/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "public/icon.png",
+      "signAndEditExecutable": true,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "identity": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "publish": {
+    "provider": "github"
+  }
+}

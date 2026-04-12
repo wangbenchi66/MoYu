@@ -1,0 +1,1973 @@
+:root {
+  --text: #283247;
+  --text-secondary: #6f7a90;
+  --muted: #8a93a5;
+  --line: rgba(172, 181, 201, 0.26);
+  --line-soft: rgba(172, 181, 201, 0.18);
+  /* 默认将 surface/shell/page alpha 设为 1，使标题栏和工具栏默认为不透明白色
+     当设置 `fullWindowTransparent` 时，渲染逻辑会把这些变量覆盖为 0，从而变为透明 */
+  --surface-alpha: 1;
+  --shell-alpha: 1;
+  --page-alpha: 1;
+  --surface: rgba(255, 255, 255, var(--surface-alpha, 1));
+  --page-surface: rgba(255, 255, 255, var(--page-alpha, 1));
+  --primary: #2f78ff;
+  --primary-soft: rgba(47, 120, 255, 0.14);
+  --danger: #eb5454;
+  --shadow: 0 18px 50px rgba(132, 145, 170, 0.18);
+  /* 滚动条变量 */
+  --scrollbar-width: 6px;
+  --scrollbar-thumb: rgba(60, 68, 80, 0.12);
+  --scrollbar-thumb-hover: rgba(60, 68, 80, 0.22);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb-radius: 6px;
+  --scrollbar-thumb-shadow: 0 6px 12px rgba(60,68,80,0.04);
+  /* 顶部与标签栏尺寸：可通过变量微调以减小 UI 体积 */
+  --topbar-height: 32px;
+  --topbar-padding-vertical: 6px;
+  --topbar-padding-horizontal: 10px;
+  --tab-height: 28px;
+  --tab-chip-min-width: 96px;
+  --tab-padding-horizontal: 10px;
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+}
+/* 项目内统一滚动条样式（仅影响应用自身元素）
+   现代风格：细条、圆角、悬停强调、轻微阴影；默认微弱，鼠标移入时变明显 */
+.window-shell {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.window-shell ::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+  background: transparent;
+}
+
+.window-shell ::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: var(--scrollbar-thumb-radius);
+}
+
+.window-shell ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-thumb-radius);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  box-shadow: var(--scrollbar-thumb-shadow);
+  transition: background 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+  opacity: 0.6;
+}
+
+/* 悬停/交互时强调显示 */
+.window-shell:hover ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-hover);
+  box-shadow: 0 6px 14px rgba(60,68,80,0.06);
+  opacity: 1;
+}
+
+/* 当需要隐藏滚动条时（不影响滚动行为） */
+.window-shell.hide-scrollbars,
+.window-shell.hide-scrollbars * {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+.window-shell.hide-scrollbars ::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.window-shell.hide-scrollbars ::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  color: var(--text);
+}
+
+body {
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+
+.window-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* padding: 10px; */ /* 统一内边距，保持内容不贴边，同时为可能的阴影和边框留出空间 */
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  color: var(--text);
+  -webkit-app-region: drag;
+}
+
+/* 使整个窗口主体默认可拖动，具体交互元素通过 no-drag 覆盖为可交互 */
+
+/* 交互元素与主要面板禁止拖动（保持可点击/可选中文本） */
+.no-drag,
+.no-drag *,
+button,
+input,
+textarea,
+select,
+a,
+.panel,
+.page-frame,
+.workspace,
+.webview-wrap,
+.webview-frame,
+webview,
+iframe {
+  -webkit-app-region: no-drag;
+}
+
+.window-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+  /* background:
+    radial-gradient(circle at top right, rgba(113, 188, 255, 0.32), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, var(--shell-alpha, 0.9)), rgba(236, 241, 247, calc(var(--shell-alpha, 0.9) - 0.08))); */
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  /* border: 1px solid rgba(255, 255, 255, var(--shell-alpha, 0.75)); */
+  pointer-events: none;
+}
+
+.topbar,
+.tabbar {
+  position: relative;
+  z-index: 60; /* 保证标题栏与标签栏位于 webview 之上，避免被网页覆盖 */
+}
+
+.page-host,
+.workspace {
+  position: relative;
+  z-index: 1;
+}
+
+.panel {
+  background: var(--surface);
+  /* box-shadow: var(--shadow); */
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.no-drag,
+.no-drag * {
+  -webkit-app-region: no-drag;
+}
+
+.topbar {
+  min-height: var(--topbar-height, 46px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* 使用 shell alpha 变量渲染标题栏背景（单色），便于通过设置切换透明度 */
+  background: rgba(255, 255, 255, var(--shell-alpha, 1));
+  border-radius: 0;
+}
+
+/* Make topbar and tabbar visually merge when both present */
+.topbar {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.tabbar {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pin-btn,
+.control-btn,
+.tab-add,
+.open-btn,
+.primary-btn,
+.toggle-row,
+.site-card,
+.history-item,
+.tab-chip {
+  cursor: pointer;
+}
+
+.pin-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.8));
+  color: var(--muted);
+}
+
+.pin-btn.active {
+  color: var(--primary);
+  border-color: rgba(47, 120, 255, 0.34);
+  background: rgba(47, 120, 255, 0.08);
+}
+
+.control-btn.pin-toggle.active {
+  color: var(--primary);
+  border-color: rgba(47, 120, 255, 0.34);
+  background: rgba(47, 120, 255, 0.08);
+}
+
+.brand-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 10px;
+}
+
+.brand-block strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.brand-block span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.window-controls {
+  display: flex;
+  gap: 6px;
+  position: relative;
+  z-index: 3;
+}
+
+.window-controls,
+.window-controls * {
+  pointer-events: auto;
+}
+
+.nav-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, var(--shell-alpha, 0.74));
+}
+
+.nav-btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.nav-btn.active {
+  color: var(--text);
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.96));
+  border-color: var(--line);
+}
+
+.settings-badge {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.65));
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.control-btn {
+  -webkit-app-region: no-drag;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.75));
+  color: var(--text);
+}
+
+.control-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  vertical-align: middle;
+  fill: currentColor;
+}
+
+.control-btn.close:hover {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.tabbar {
+  background: color-mix(in srgb, var(--header-tint) 22%, rgba(255, 255, 255, var(--shell-alpha, 0.92)));
+}
+
+/* Make non-interactive areas of tabbar draggable so merged header/tab area can drag */
+.tabbar {
+  -webkit-app-region: drag;
+}
+
+/* Keep interactive elements inside tabbar clickable */
+.tabbar .tab-chip,
+.tabbar .tab-add,
+.tabbar .close-mark,
+.tabbar button,
+.tabbar .el-button {
+  -webkit-app-region: no-drag !important;
+}
+/* 紧凑模式（compact-header-tabs）样式已移除，相关视觉由常规样式控制 */
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tab-chip {
+  min-width: var(--tab-chip-min-width, 112px);
+  max-width: 220px;
+  height: var(--tab-height, 34px);
+  padding: 0 var(--tab-padding-horizontal, 10px);
+  border: 1px solid transparent;
+  border-radius: 10px 10px 0 0;
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.6));
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.tab-chip.active {
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.96));
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.close-mark {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.tab-add {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px dashed var(--line);
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.6));
+}
+
+.workspace {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 10px;
+}
+
+.page-host {
+  min-height: 0;
+  flex: 1;
+  position: relative;
+}
+
+.main-page {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.settings-page {
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  padding: 20px 18px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal-layer {
+  position: absolute;
+  inset: 10px;
+  /* 提升到高优先级，确保设置面板位于所有窗口控件之上 */
+  z-index: 10000;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 56px 20px 20px;
+  background: rgba(255, 255, 255, var(--shell-alpha, 0.22));
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  border-radius: 18px;
+}
+
+.settings-modal {
+  width: min(560px, 100%);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+/* 浮动样式：将设置面板变为较小的悬浮窗口（非模态） */
+.settings-modal-layer.settings-floating {
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 12px;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  /* 确保浮动模式可以接收鼠标/滚动事件并允许滚动 */
+  pointer-events: auto;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.settings-modal-layer.settings-floating .settings-modal {
+  width: min(420px, 92%);
+  margin: 12px 20px 0 auto;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, calc(var(--surface-alpha, 0.74) - 0.12));
+  box-shadow: 0 3px 9px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(210, 220, 230, 0.12);
+  /* 限制最大高度并在内部启用滚动 */
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.control-btn.floating-btn {
+  margin-right: 8px;
+}
+
+.control-btn.floating-btn.active {
+  color: var(--primary);
+  border-color: rgba(47, 120, 255, 0.34);
+  background: rgba(47, 120, 255, 0.06);
+}
+
+.settings-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px 0;
+}
+
+.settings-modal-header strong {
+  display: block;
+  font-size: 16px;
+}
+
+.settings-modal-header span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.browser-stage,
+.settings-panel {
+  min-height: 0;
+}
+
+.browser-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.url-input,
+.history-input,
+.text-field {
+  width: 100%;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(186, 193, 208, 0.62);
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.88));
+  padding: 0 14px;
+  color: var(--text);
+}
+
+.url-input:focus,
+.history-input:focus,
+.text-field:focus {
+  outline: none;
+  border-color: rgba(47, 120, 255, 0.5);
+  box-shadow: 0 0 0 3px rgba(47, 120, 255, 0.12);
+}
+
+.open-btn,
+.primary-btn {
+  flex: 0 0 auto;
+  height: 38px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+}
+
+.page-frame {
+  min-height: 0;
+  flex: 1;
+  /* padding: 16px; */
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 使 page-frame 成为定位父容器，方便覆盖层放置于 webview 之上 */
+.page-frame {
+  position: relative;
+}
+
+.page-frame.is-webview {
+  /* padding: 10px; */
+  overflow: hidden;
+}
+
+.mode-transparent-page .page-frame.is-webview {
+  background: rgba(255, 255, 255, var(--page-alpha, 0.12));
+}
+
+.page-head h1 {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 600;
+}
+
+.page-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.link-section {
+  margin-top: 18px;
+}
+
+.section-title,
+.shortcut-title,
+.field-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.card-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.card-grid.favorites {
+  grid-template-columns: repeat(2, minmax(0, 180px));
+}
+
+.site-card {
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid rgba(220, 224, 235, 0.85);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: left;
+}
+
+.site-card.favorite {
+  min-height: 106px;
+  justify-content: center;
+}
+
+.site-card strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.site-card small {
+  color: var(--muted);
+}
+
+.site-url {
+  margin-top: auto;
+  font-size: 11px;
+  font-style: normal;
+  color: #73819a;
+  word-break: break-all;
+}
+
+.site-mark {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.site-mark.green {
+  background: linear-gradient(135deg, #3bc977, #49aa66);
+}
+
+.site-mark.pink {
+  background: linear-gradient(135deg, #ff6a88, #ff477e);
+}
+
+.site-mark.blue {
+  background: linear-gradient(135deg, #5d8eff, #4f6bff);
+}
+
+.site-mark.neutral {
+  background: linear-gradient(135deg, #c9ced9, #aeb5c4);
+}
+
+.recent-section {
+  padding-bottom: 8px;
+}
+
+.history-input {
+  margin-top: 12px;
+}
+
+.history-list {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item {
+  min-height: 46px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(220, 224, 235, 0.85);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-item strong {
+  font-size: 14px;
+}
+
+.history-item span {
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.settings-panel {
+  padding: 20px 18px;
+  overflow: auto;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.settings-header p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings-header span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.settings-block {
+  margin-top: 20px;
+}
+
+.section-panel {
+  padding: 14px;
+  border: 1px solid rgba(220, 224, 235, 0.85);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.slider {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.toggle-grid {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.toggle-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toggle-title {
+  margin: 0;
+  font-size: 13px;
+  color: #60708a;
+}
+
+.toggle-row,
+.color-row {
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid rgba(213, 219, 232, 0.85);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.72));
+  color: var(--text);
+  text-align: left;
+}
+
+/* 当将标题与标签设为非紧凑模式时，子开关显示为禁用样式 */
+.nested-controls.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.nested-toggle {
+  padding-left: 8px;
+}
+
+.switch {
+  width: 56px; /* 与容器 flex 基准一致，确保轨道填满 */
+  height: 28px;
+  border-radius: 999px;
+  background: #c8ccd5;
+  position: relative;
+  transition: background 0.2s ease;
+  box-sizing: border-box;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 5px; /* 使圆点垂直居中（28 - 18 = 10） */
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  transition: transform 0.2s ease;
+}
+
+.switch.on {
+  background: var(--primary);
+}
+
+.switch.on::after {
+  transform: translateX(32px); /* 56 - 3 - 18 - 3 = 32 */
+}
+
+.color-input {
+  width: 68px;
+  height: 28px;
+  border: 1px solid rgba(186, 193, 208, 0.62);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.82));
+}
+
+.inline-field {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+
+.shortcut-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+.shortcut-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.webview-wrap {
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.webview-meta {
+  min-height: 38px;
+  padding: 6px 8px;
+  border-radius: 0;
+  background: var(--surface);
+  border: 1px solid rgba(213, 219, 232, 0.85);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.webview-meta strong {
+  font-size: 13px;
+}
+
+.webview-meta span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.webview-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: var(--page-surface);
+}
+
+.mode-transparent-page .webview-frame {
+  background: transparent;
+}
+
+/* 将 webview 叠放以避免使用 display:none 导致某些 Electron 版本重载 webview */
+.webview-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.webview-wrap .webview-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(213, 219, 232, 0.85);
+  border-radius: 0;
+  overflow: hidden;
+  background: var(--page-surface);
+  transition: opacity 140ms ease;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.webview-wrap .webview-frame.webview-active {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+/* DEBUG: 高亮活跃 webview 边界，便于排查被覆盖问题；调试完成后可移除 */
+.webview-wrap .webview-frame.webview-active {
+  box-shadow: 0 8px 30px rgba(34, 197, 94, 0.12);
+  outline: 2px solid rgba(34, 197, 94, 0.12);
+}
+
+/* 覆盖面板（仪表盘 / 本地阅读视图）位于 webview 之上 */
+.overlay-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  padding: 12px 12px;
+  box-sizing: border-box;
+  overflow: auto;
+  background: transparent;
+}
+
+/* 当 overlay-panel 显示时，确保其内部 panel/卡片样式仍然可视 */
+.overlay-panel > .panel,
+.overlay-panel.panel {
+  background: var(--surface);
+}
+
+/* 当 page-frame 用于承载真实网页时，允许网页自身决定背景颜色（非仪表盘/本地阅读视图） */
+/* 当需要网页透明时，使用 `.mode-transparent-page .webview-frame` 覆盖为透明 */
+
+.page-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.page-preview.compact {
+  max-width: 460px;
+}
+
+.preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.preview-header strong {
+  display: block;
+  font-size: 28px;
+}
+
+.preview-header p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.preview-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.preview-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 16px;
+}
+
+.preview-copy,
+.preview-note {
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid rgba(220, 224, 235, 0.85);
+}
+
+.preview-copy h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+}
+
+.preview-copy p {
+  margin: 0;
+  line-height: 1.8;
+  color: #4f5c72;
+}
+
+.preview-points {
+  margin: 14px 0 0;
+  padding-left: 18px;
+  color: #4f5c72;
+}
+
+.secondary-btn,
+.text-link,
+.control-toggle,
+.recommend-card,
+.doc-item,
+.site-chip {
+  cursor: pointer;
+}
+
+.secondary-btn {
+  flex: 0 0 auto;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  color: var(--text);
+}
+
+.secondary-btn.compact {
+  height: 34px;
+  padding: 0 12px;
+}
+
+.secondary-btn.wide {
+  width: 100%;
+}
+
+.hidden-input {
+  display: none;
+}
+
+.workspace-shell {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.workspace-sidebar,
+.control-rail {
+  min-height: 0;
+  padding: 14px;
+  overflow: auto;
+}
+
+.control-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workspace-block {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.7));
+  border: 1px solid rgba(216, 223, 235, 0.9);
+}
+
+.workspace-block + .workspace-block {
+  margin-top: 12px;
+}
+
+.compact-block {
+  padding: 12px;
+}
+
+.hero-block {
+  background:
+    radial-gradient(circle at top right, rgba(91, 162, 255, 0.22), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, var(--shell-alpha, 0.92)), rgba(245, 248, 253, calc(var(--shell-alpha, 0.92) - 0.10)));
+}
+
+.hero-label {
+  display: inline-flex;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(47, 120, 255, 0.12);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.hero-block h1 {
+  margin: 12px 0 8px;
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.hero-block p {
+  margin: 0;
+  color: #556276;
+  line-height: 1.7;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-card {
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid rgba(220, 224, 235, 0.9);
+}
+
+.metric-card strong {
+  display: block;
+  font-size: 24px;
+}
+
+.metric-card span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.block-head strong {
+  font-size: 14px;
+}
+
+.block-head span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.mini-input {
+  width: 100%;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(186, 193, 208, 0.62);
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.92));
+  padding: 0 12px;
+  color: var(--text);
+}
+
+.recommend-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.recommend-card,
+.doc-item {
+  width: 100%;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(220, 224, 235, 0.85);
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.92));
+  color: var(--text);
+  text-align: left;
+}
+
+.recommend-card strong,
+.doc-item strong {
+  display: block;
+  font-size: 14px;
+}
+
+.recommend-card small,
+.doc-item small,
+.text-link {
+  color: var(--muted);
+}
+
+.favorite-form {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.chip-list,
+.doc-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.site-chip {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 10px;
+  border: 1px solid rgba(220, 224, 235, 0.85);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.site-chip em,
+.doc-item em {
+  font-style: normal;
+  color: var(--muted);
+}
+
+.text-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.empty-hint {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(245, 248, 252, 0.9);
+  color: #647389;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.reader-stage {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reader-toolbar {
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reader-toolbar strong {
+  display: block;
+  font-size: 15px;
+}
+
+.reader-toolbar span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.reader-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reader-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(213, 219, 232, 0.85);
+  font-size: 12px;
+  color: #60708a;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.9fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.dashboard-panel {
+  min-height: 0;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(220, 224, 235, 0.85);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.history-list.compact {
+  max-height: 100%;
+  overflow: auto;
+}
+
+.control-toggle-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.control-toggle {
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(213, 219, 232, 0.85);
+  background: rgba(255, 255, 255, 0.88);
+  color: #5d6a80;
+}
+
+.control-toggle.active {
+  background: rgba(47, 120, 255, 0.12);
+  border-color: rgba(47, 120, 255, 0.3);
+  color: var(--primary);
+}
+
+.range-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  color: #60708a;
+  font-size: 13px;
+}
+
+.rail-list {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.local-reader {
+  height: 100%;
+  min-height: 0;
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(220, 224, 235, 0.85);
+  overflow: auto;
+  color: var(--reader-text-color);
+}
+
+.local-reader-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(220, 224, 235, 0.85);
+}
+
+.local-reader-head strong {
+  font-size: 16px;
+}
+
+.local-reader-head span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.local-reader-content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.9;
+  font-size: var(--reader-font-scale);
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+}
+
+.settings-grid-compact {
+  grid-template-columns: 1fr;
+}
+
+.settings-row-gap {
+  margin-top: 12px;
+}
+
+.site-mark.rose {
+  background: linear-gradient(135deg, #ff859b, #ff6077);
+}
+
+.site-mark.orange {
+  background: linear-gradient(135deg, #ffb454, #ff8a3d);
+}
+
+.site-mark.ink {
+  background: linear-gradient(135deg, #434861, #1f2436);
+}
+
+.site-mark.slate {
+  background: linear-gradient(135deg, #8f9ab2, #6c7892);
+}
+
+@media (max-width: 1280px) {
+  .workspace-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .control-rail {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    overflow: auto hidden;
+  }
+
+  .control-rail .workspace-block {
+    min-width: 280px;
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 980px) {
+  .workspace-shell,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nav-row {
+    flex-wrap: wrap;
+  }
+}
+
+.preview-points li + li {
+  margin-top: 8px;
+}
+
+.preview-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-note span,
+.preview-note small {
+  color: var(--muted);
+}
+
+.preview-note strong {
+  font-size: 24px;
+  color: var(--primary);
+}
+
+.mode-grayscale {
+  filter: grayscale(1);
+}
+
+.mode-no-image .site-mark,
+.mode-no-image .media-demo {
+  visibility: hidden;
+}
+
+.mode-mobile .page-frame,
+.mode-mobile .nav-row {
+  /* 在移动模拟模式下不要限制容器宽度；保持单栏铺满 */
+  max-width: none;
+  width: 100%;
+}
+
+.mode-hover-header .header-hotzone {
+  /* invisible strip at very top to catch mouse enter and reveal header/tab */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px; /* 感应高度：缩小以减少顶部空白（更紧凑） */
+  z-index: 9998;
+  pointer-events: auto;
+  -webkit-app-region: drag; /* 使热区可直接拖动窗口（当顶部栏未显示时） */
+}
+
+/* 在悬停模式下，topbar/tabbar 保持在文档流中但默认不可见（保留占位），避免遮挡和不可拖动的问题
+   保持与常驻模式一致的宽度与边距，避免视觉差异 */
+.mode-hover-header .topbar,
+.mode-hover-header .tabbar {
+  position: relative;
+  z-index: 1;
+  transition: opacity 0.18s ease;
+  opacity: 0;
+  pointer-events: none;
+  /* 保持占位高度以避免布局跳动 */
+}
+
+/* topbar 可见时显示 */
+.mode-hover-header .topbar.visible,
+.mode-hover-header.header-hover-active .topbar {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 10000;
+}
+
+/* tabbar 可见时显示（紧贴 topbar） */
+.mode-hover-header .tabbar.visible,
+.mode-hover-header.header-hover-active .tabbar {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 10000;
+}
+
+/* 中央拖动句柄：在 topbar 中占据中间伸缩区域，提供明确且稳定的拖动目标 */
+.title-drag {
+  flex: 1 1 auto;
+  height: 100%;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.title-drag, .title-drag * {
+  pointer-events: auto; /* 确保拖动区域可响应鼠标以触发拖动 */
+}
+
+/* 在热区或自身悬停时显示 */
+.mode-hover-header .header-hotzone:hover ~ .topbar,
+.mode-hover-header .topbar:hover {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 10000; /* 提升到热区之上，保证交互不被热区遮挡 */
+}
+
+.mode-hover-header .header-hotzone:hover ~ .page-host .tabbar,
+.mode-hover-header .tabbar:hover {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 10000;
+}
+
+/* JS 驱动的激活类：更可靠地控制显示（由 App.vue 的 headerHoverActive 控制） */
+
+.mode-hover-header.header-hover-active .topbar,
+.mode-hover-header.header-hover-active .tabbar {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 10000;
+}
+
+/* 当通过 JS 激活（headerHoverActive）时，保持热区为 drag（仍可作为拖动后备），不使用 pointer-events: none */
+.mode-hover-header.header-hover-active .header-hotzone {
+  pointer-events: auto;
+  -webkit-app-region: drag;
+}
+
+/* 确保激活时 topbar 本身也作为拖动区域（其子元素通过 no-drag 保持可交互） */
+.mode-hover-header.header-hover-active .topbar {
+  -webkit-app-region: drag;
+}
+
+/* 当 topbar 可见（由 headerHoverActive 控制）时，禁止 header-hotzone 捕获指针事件，避免覆盖 topbar 的拖动区域 */
+.mode-hover-header.header-hover-active .header-hotzone {
+  pointer-events: none;
+}
+
+/* 强制将 topbar 及其中央拖动句柄设为 drag（提高优先级以覆盖可能的样式冲突） */
+.mode-hover-header.header-hover-active .topbar,
+.mode-hover-header.header-hover-active .topbar .title-drag {
+  -webkit-app-region: drag !important;
+}
+
+/* 确保交互控件仍然为 no-drag（避免按钮/输入被当作拖动区域） */
+.mode-hover-header.header-hover-active .topbar .no-drag,
+.mode-hover-header.header-hover-active .topbar button,
+.mode-hover-header.header-hover-active .topbar input,
+.mode-hover-header.header-hover-active .topbar .window-controls {
+  -webkit-app-region: no-drag !important;
+}
+
+.hide-tabs .workspace {
+  grid-template-columns: minmax(0, 1fr) 420px;
+}
+
+@media (max-width: 1280px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-body,
+  .toggle-grid,
+  .shortcut-grid,
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-grid.favorites {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ==================== Element Plus 按钮覆盖与整合（使 el-button 遵循项目视觉规范） ==================== */
+/* 这些规则针对我们常用的类名（control-btn, icon-btn, tab-chip, tab-add, toggle-row 等）
+   当按钮由 BaseButton (el-button) 渲染时，保持原有外观与交互 */
+.el-button.control-btn,
+.el-button.pin-btn,
+.el-button.tab-add,
+.el-button.primary-btn,
+.el-button.open-btn,
+.el-button.toggle-row,
+.el-button.site-card,
+.el-button.history-item,
+.el-button.tab-chip,
+.el-button.secondary-btn,
+.el-button.mini-reset-icon,
+.el-button.counter {
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, var(--surface-alpha, 0.75));
+  color: var(--text);
+  padding: 0 10px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  box-shadow: none;
+}
+
+.el-button.tab-chip {
+  min-width: 112px;
+  max-width: 220px;
+  height: 34px;
+  padding: 0 12px;
+}
+
+.el-button.tab-add {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px dashed var(--line);
+  background: rgba(255,255,255,var(--surface-alpha,0.6));
+}
+
+.el-button.control-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.el-button.control-btn svg,
+.el-button.control-btn .el-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.el-button.control-btn.close:hover {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.el-button.icon-btn.icon-only {
+  background: transparent;
+  border: none;
+  padding: 6px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 120ms ease, transform 120ms ease, color 120ms ease;
+}
+
+.el-button.icon-btn.icon-only:hover {
+  background: rgba(16, 23, 32, 0.04);
+  transform: translateY(-1px);
+}
+
+.el-button.icon-btn.icon-only.on {
+  color: #409eff;
+  background: rgba(64, 158, 255, 0.06);
+}
+
+.el-button.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255,255,255,var(--surface-alpha,0.65));
+  color: var(--text-secondary);
+}
+
+.el-button.mini-reset-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.el-button.secondary-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,var(--surface-alpha,0.65));
+  border: 1px solid var(--line-soft);
+}
+
+.el-button.history-item {
+  text-align: left;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(240,240,240,1);
+  background: #fff;
+}
+
+.el-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(47,120,255,0.08);
+}
+
+/* 小尺寸适配 */
+.el-button--small.control-btn,
+.el-button--small.icon-btn {
+  height: 28px;
+  font-size: 13px;
+}
+
+/* 文本型按钮在表单内保持轻量 */
+.el-button--text.secondary-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+/* 覆盖默认 primary 视觉以更贴合主题 */
+.el-button--primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: rgba(47,120,255,0.12);
+}
+
+/* 透明/plain 按钮保持无背景 */
+.el-button--plain {
+  background: transparent;
+  border: none;
+}
+
+/* ==================== 结束 Element Plus 覆盖 ==================== */
+
+/* 进一步修正 el-button 内部结构：确保 slot 内容按项目原始布局对齐 */
+.el-button.tab-chip .el-button__content,
+.el-button.tab-add .el-button__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+/* 保证标签标题截断并留下关闭区域空间 */
+.el-button.tab-chip .tab-title {
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 36px);
+}
+
+/* 关闭标记微调：靠右、可点击、与文本垂直居中 */
+.el-button.tab-chip .close-mark {
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 设置面板的 toggle-row 内容使用 el-button__content 对齐 */
+.settings-page .el-button.toggle-row .el-button__content,
+.settings-modal .el-button.toggle-row .el-button__content,
+.settings-modal-layer .el-button.toggle-row .el-button__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+/* 让 switch 在垂直方向上居中显示 */
+.switch,
+.el-button .switch {
+  vertical-align: middle;
+  display: inline-block;
+}
+
+
+/* 额外微调：确保 tab-chip 在 el-button 渲染时外观与原生一致 */
+.el-button.tab-chip {
+  padding: 0 12px;
+  border-radius: 10px 10px 0 0;
+  min-width: 112px;
+  max-width: 220px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.el-button.tab-chip .el-button__content {
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.el-button.tab-chip .tab-title {
+  max-width: calc(100% - 36px);
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.el-button.tab-chip .close-mark {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  border-radius: 6px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.el-button.tab-chip .close-mark:hover {
+  background: rgba(0,0,0,0.04);
+  color: var(--danger);
+}
+
+/* make el-icon inside close-mark match expected size and center */
+.close-mark .el-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  font-size: 14px;
+}
+
+/* 设置面板内的 toggle-row 微调：保证文本与 switch 垂直居中且无内嵌白色条 */
+.el-button.toggle-row {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 10px;
+  background: rgba(255,255,255,var(--surface-alpha,0.72));
+  border: 1px solid rgba(213,219,232,0.85);
+  color: var(--text);
+}
+
+.el-button.toggle-row .el-button__content {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 当 toggle-row 内含 switch 时，保持 switch 垂直居中 */
+.el-button.toggle-row .switch {
+  margin: 0;
+  align-self: center;
+}
+
+/* 小屏幕下稍微压缩高度，避免过大留白 */
+@media (max-width: 520px) {
+  .el-button.toggle-row { min-height: 42px; padding: 8px 10px; }
+  .el-button.tab-chip { height: 32px; }
+}
+
+/* 强制设置：设置面板中所有 toggle-row（无论是 el-button 还是原生 button）
+   左侧文字靠左，右侧开关靠右，并在同一列对齐 */
+.settings-page .toggle-column,
+.settings-modal .toggle-column,
+.settings-modal-layer .toggle-column {
+  display: block;
+}
+
+.el-button.toggle-row,
+.toggle-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  box-sizing: border-box;
+  min-height: 46px;
+  padding: 10px 14px;
+}
+
+.el-button.toggle-row .el-button__content {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px;
+  width: 100%;
+}
+
+/* 左侧文字：始终靠左并占据可用宽度 */
+.el-button.toggle-row .el-button__content > span:first-child,
+.toggle-row > span:first-child {
+  flex: 1 1 auto;
+  text-align: left;
+  padding-left: 2px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* 右侧开关：固定宽度，靠右对齐，保持列对齐 */
+.el-button.toggle-row .switch,
+.toggle-row .switch {
+  flex: 0 0 56px !important; /* 包含内间距，确保对齐 */
+  margin-left: 12px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 在设置页的每个 toggle-column 内，为每个开关行添加垂直间距，模仿阅读控制的间距 */
+.toggle-column .el-button.toggle-row,
+.toggle-column .toggle-row {
+  margin-bottom: 10px;
+}
+
+.toggle-column .el-button.toggle-row:last-child,
+.toggle-column .toggle-row:last-child {
+  margin-bottom: 0;
+}
+
+/* 标题后第一个开关与标题之间的上边距，避免紧贴标题 */
+.toggle-column .toggle-title + .el-button.toggle-row,
+.toggle-column .toggle-title + .toggle-row {
+  margin-top: 10px;
+}
+
+/* 当 switch 为 on 状态，其视觉需要更突出，保持原始色调 */
+.el-button.toggle-row .switch.on,
+.toggle-row .switch.on {
+  background: var(--primary) !important;
+}
+
+/* 避免内嵌白块：如果 el-button 自带 background，确保边框与背景一致 */
+.settings-page .el-button.toggle-row,
+.settings-modal .el-button.toggle-row {
+  background: rgba(255,255,255,var(--surface-alpha,0.72));
+  border: 1px solid rgba(213,219,232,0.85);
+}
+
+
