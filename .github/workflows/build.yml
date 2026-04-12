@@ -7,8 +7,11 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest, macos-latest]
-        arch: [x64, arm64]
+        include:
+          - os: windows-latest
+            arch: x64
+          - os: macos-latest
+            arch: universal
 
     runs-on: ${{ matrix.os }}
 
@@ -28,37 +31,21 @@ jobs:
         working-directory: MoYu
 
       - name: Build Electron
-        run: npx electron-builder --${{ matrix.os == 'windows-latest' && 'win' || 'mac' }} --${{ matrix.arch }} --publish never
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            npx electron-builder --win --x64 --publish never
+          else
+            npx electron-builder --mac --universal --publish never
+          fi
         working-directory: MoYu
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: MoYu-${{ matrix.os }}-${{ matrix.arch }}
-          path: MoYu/dist/**
+          path: |
+            MoYu/dist/*.exe
+            MoYu/dist/*.msi
+            MoYu/dist/*.dmg
+            MoYu/dist/*.pkg
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 读取版本号
-        id: get_version
-        run: |
-          VERSION=$(node -p "require('./MoYu/package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - uses: actions/download-artifact@v4
-
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          name: Release v${{ steps.get_version.outputs.version }}
-          files: |
-            **/*.exe
-            **/*.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # release job removed: this workflow only builds and uploads installer artifacts
