@@ -25,6 +25,7 @@ jobs:
         run: |
           VERSION=$(node -p "require('./MoYu/package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+        shell: bash
 
       - name: Install dependencies
         run: npm install
