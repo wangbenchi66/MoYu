@@ -28,13 +28,13 @@ jobs:
         working-directory: MoYu
 
       - name: Build Electron
-        run: npx electron-builder --${{ matrix.os == 'windows-latest' && 'win' || 'mac' }} --${{ matrix.arch }}
+        run: npx electron-builder --${{ matrix.os == 'windows-latest' && 'win' || 'mac' }} --${{ matrix.arch }} --publish never
         working-directory: MoYu
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: app-${{ matrix.os }}-${{ matrix.arch }}
+          name: MoYu-${{ matrix.os }}-${{ matrix.arch }}
           path: MoYu/dist/**
 
   release:

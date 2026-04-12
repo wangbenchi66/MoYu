@@ -7,7 +7,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows, macos]
         arch: [x64, arm64]
 
     runs-on: ${{ matrix.os }}
@@ -19,7 +19,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          # cache 已移除，避免锁文件报错
+
+      - name: Read version from package.json
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./MoYu/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Install dependencies
         run: npm install
@@ -36,5 +41,5 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: app-${{ matrix.os }}-${{ matrix.arch }}
+          name: MoYu-${{ matrix.os }}-v${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
           path: MoYu/dist/**
