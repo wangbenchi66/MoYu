@@ -401,20 +401,25 @@ function runWebviewJS(script, tabId) {
       const now = Date.now();
       if (lastMap[sig] && now - lastMap[sig] < 1200) {
         try {
-          console.log('[runWebviewJS] skipped duplicate script for', tid);
+          console.log('[runWebviewJS] skipped duplicate script for', tid, 'sigLen=', sig.length);
         } catch (e) {}
         return Promise.resolve();
       }
       lastMap[sig] = now;
     } catch (e) {}
     try {
+      try {
+        console.log('[runWebviewJS] executing script for', tid);
+      } catch (e) {}
       const p = w.executeJavaScript(script);
       if (p && typeof p.then === 'function') {
-        return p.catch((err) => {
-          try {
-            console.error('[runWebviewJS] executeJavaScript error', err);
-          } catch (e) {}
-        });
+        return p
+          .then((r) => r)
+          .catch((err) => {
+            try {
+              console.error('[runWebviewJS] executeJavaScript error', err);
+            } catch (e) {}
+          });
       }
       return Promise.resolve();
     } catch (err) {
@@ -833,6 +838,9 @@ function syncWebviewFontSize() {
 
 function syncWebviewAutoScroll() {
   const tabId = arguments.length ? arguments[0] : undefined;
+  try {
+    console.log('[syncWebviewAutoScroll] called enabled=', settings.autoScrollEnabled, 'speed=', settings.autoScrollSpeed, 'tabId=', tabId);
+  } catch (e) {}
   runWebviewJS(buildAutoScrollScript(settings.autoScrollEnabled, settings.autoScrollSpeed), tabId);
 }
 

@@ -365,12 +365,16 @@ function onAutoScrollSpeedInput(e) {
 
 function toggleAutoScroll() {
   try {
+    console.log('[bottomToolbar] toggleAutoScroll current=', props.settings.autoScrollEnabled);
     props.patchSetting('autoScrollEnabled', !props.settings.autoScrollEnabled);
+    console.log('[bottomToolbar] toggleAutoScroll after=', props.settings.autoScrollEnabled);
   } catch (e) {}
 }
 
 function adjustAutoSpeed(delta) {
   try {
+    // 仅在自动滚动已开启时调整速度
+    if (!props.settings.autoScrollEnabled) return;
     const cur = Number(props.settings.autoScrollSpeed || 22);
     const min = 5;
     const max = 80;
@@ -378,14 +382,21 @@ function adjustAutoSpeed(delta) {
     if (next < min) next = min;
     if (next > max) next = max;
     props.patchSetting('autoScrollSpeed', next);
-    // 打开自动滚动以立即生效（如果用户只是调整速度）
-    if (!props.settings.autoScrollEnabled) props.patchSetting('autoScrollEnabled', true);
     updatePopPosition(next, 5, 80);
   } catch (e) {}
 }
 
 function onGlobalKeydown(e) {
   try {
+    // 仅在应用/窗口聚焦时响应全局快捷键（避免应用外误触）
+    if (typeof document !== 'undefined' && !document.hasFocus()) return;
+    // 如果事件已由渲染进程处理，跳过以避免双重切换
+    if (e && e.__glassReaderHandled) return;
+    // 如果用户已在设置中配置了全局自动滚动快捷键，则由渲染进程的 `localShortcutHandler` 统一处理，
+    // 防止同一键被工具栏与渲染进程同时处理导致双重切换。
+    if (props.settings && (props.settings.autoToggleShortcut || props.settings.autoSpeedDownShortcut || props.settings.autoSpeedUpShortcut)) {
+      return;
+    }
     // 调试输出，确认是否收到事件
     try {
       console.log('[bottomToolbar] keydown', e && e.key, 'target=', e && e.target && e.target.tagName);
@@ -399,13 +410,26 @@ function onGlobalKeydown(e) {
       if (tag === 'input' || tag === 'textarea' || editable) return;
     }
     // 按键映射："=" 开/关，"[" 慢， "]" 快
-    if (e.key === '=') {
+    const k = e && e.key;
+    // 兼容 Shift 带来的符号（例如 Shift+'=' -> '+'）以及不同键盘布局
+    const match = (expected) => {
+      if (!k || !expected) return false;
+      if (k === expected) return true;
+      // common shifted counterparts
+      if (expected === '=' && k === '+') return true;
+      if (expected === '[' && k === '{') return true;
+      if (expected === ']' && k === '}') return true;
+      return false;
+    };
+
+    if (match('=')) {
       e.preventDefault();
+      console.log('[bottomToolbar] onGlobalKeydown matched =, active:', document && document.activeElement && document.activeElement.tagName);
       toggleAutoScroll();
-    } else if (e.key === '[') {
+    } else if (match('[')) {
       e.preventDefault();
       adjustAutoSpeed(-5);
-    } else if (e.key === ']') {
+    } else if (match(']')) {
       e.preventDefault();
       adjustAutoSpeed(5);
     }

@@ -78,6 +78,7 @@ const toolbarProps = computed(() => {
 const hotzoneHeight = ref(28);
 let _resizeObserver = null;
 let _pmHandler = null;
+let _mouseInsideWindow = false;
 let _lastNear = false;
 // 缓存常用 DOM 元素，避免在频繁事件中反复查询
 let _topbarEl = null;
@@ -130,7 +131,16 @@ function onWindowMouseOut(e) {
   try {
     // 当鼠标移出窗口（relatedTarget 为 null）时立即隐藏
     const to = e && e.relatedTarget;
-    if (!to && headerHoverActive.value) headerHoverActive.value = false;
+    if (!to) {
+      _mouseInsideWindow = false;
+      if (headerHoverActive.value) headerHoverActive.value = false;
+    }
+  } catch (e) {}
+}
+
+function onWindowMouseOver() {
+  try {
+    _mouseInsideWindow = true;
   } catch (e) {}
 }
 
@@ -205,6 +215,11 @@ function formatAcceleratorFromEvent(e) {
   };
 
   let keyName = map[e.key] || e.key;
+  // 当 Shift 被按下且 e.key 返回的是符号（如 '+' / '{' / '}'），将其映射回基础键
+  const shiftReverseMap = { '+': '=', '{': '[', '}': ']' };
+  if (e.shiftKey && shiftReverseMap[keyName]) {
+    keyName = shiftReverseMap[keyName];
+  }
   if (keyName.length === 1) keyName = keyName.toUpperCase();
   // 对于 FunctionKeys F1..F12 保持原样
   parts.push(keyName);
@@ -436,6 +451,8 @@ onMounted(() => {
     window.addEventListener('pointermove', _pmHandler);
     // pointerdown 也用于触发进入检测（在 webview 上也更可靠）
     window.addEventListener('pointerdown', _pmHandler);
+    // 鼠标进入/移出窗口标志（用于在窗口内时让本地快捷键生效，即便窗口未真正聚焦）
+    window.addEventListener('mouseover', onWindowMouseOver);
     // 窗口移出/失焦的回退处理
     window.addEventListener('mouseout', onWindowMouseOut);
     window.addEventListener('blur', onWindowBlur);
@@ -446,6 +463,11 @@ onMounted(() => {
       openSettingsModal();
     });
   }
+
+  // 本地快捷键处理：将部分快捷键限制为仅在应用窗口聚焦时生效（bossKey 仍由主进程全局注册）
+  try {
+    window.addEventListener('keydown', localShortcutHandler, true);
+  } catch (e) {}
 });
 
 onBeforeUnmount(() => {
@@ -461,6 +483,7 @@ onBeforeUnmount(() => {
   } catch (e) {}
   try {
     window.removeEventListener('mouseout', onWindowMouseOut);
+    window.removeEventListener('mouseover', onWindowMouseOver);
     window.removeEventListener('blur', onWindowBlur);
   } catch (e) {}
   try {
@@ -473,7 +496,108 @@ onBeforeUnmount(() => {
   } catch (e) {}
   removeOpenSettingsListener?.();
   removeOpenSettingsListener = null;
+  try {
+    window.removeEventListener('keydown', localShortcutHandler, true);
+  } catch (e) {}
 });
+
+/**
+ * 本地快捷键处理器（仅在窗口聚焦时生效）
+ * 使用 `formatAcceleratorFromEvent` 将按键事件序列化为类似 "Ctrl+Alt+T" 的字符串，
+ * 然后与 `settings` 中保存的快捷键做匹配。注意：老板键 (`bossKey`) 保持由主进程作为全局快捷键处理，
+ * 因此这里会忽略与 `bossKey` 相同的组合，避免重复触发。
+ */
+function localShortcutHandler(e) {
+  try {
+    // 仅当窗口聚焦或鼠标仍在窗口内部时生效（老板键由主进程全局处理）
+    if (typeof document !== 'undefined' && !document.hasFocus() && !_mouseInsideWindow) return;
+    const acc = formatAcceleratorFromEvent(e);
+    // 调试：记录序列，便于定位例如 '=' 在不同键盘/布局下的表现
+    try {
+      console.log('[shortcut] acc=', acc, ' autoToggle=', settings.autoToggleShortcut);
+    } catch (err) {}
+    if (!acc) return;
+    // 严格解析加速器字符串并比较：要求修饰键集合与主键都匹配才认为相同
+    const mapShifted = { '+': '=', '{': '[', '}': ']' };
+    function parseAccelString(s) {
+      if (!s) return { mods: new Set(), key: '' };
+      // 处理可能的连续 '+'（替换为占位符再复原）
+      let t = String(s).replace(/\+\+/g, '+PLUS');
+      const parts = t
+        .split('+')
+        .map((p) => (p === 'PLUS' ? '+' : p))
+        .filter((p) => p !== '');
+      if (parts.length === 0) return { mods: new Set(), key: '' };
+      const rawKey = parts[parts.length - 1];
+      const mappedKey = mapShifted[rawKey] || rawKey;
+      const mods = new Set(parts.slice(0, parts.length - 1));
+      return { mods, key: mappedKey };
+    }
+
+    function accelEquals(a, b) {
+      const pa = parseAccelString(a || '');
+      const pb = parseAccelString(b || '');
+      if (!pa.key || !pb.key) return false;
+      if (pa.key !== pb.key) return false;
+      if (pa.mods.size !== pb.mods.size) return false;
+      for (const m of pa.mods) if (!pb.mods.has(m)) return false;
+      return true;
+    }
+
+    // 忽略 bossKey（主进程已注册）
+    if (accelEquals(acc, settings.bossKey || '')) return;
+
+    // 对应设置：调整透明度 / 切换鼠标穿透 / 自动滚动控制 等
+    if (accelEquals(acc, settings.decreaseTransparencyShortcut || '')) {
+      e.preventDefault();
+      const next = Math.max(0, Number(settings.transparency || 0) - 8);
+      patchSetting('transparency', next);
+      if (desktopApi?.setTransparency) desktopApi.setTransparency(next).catch(() => {});
+      return;
+    }
+    if (accelEquals(acc, settings.increaseTransparencyShortcut || '')) {
+      e.preventDefault();
+      const next = Math.min(85, Number(settings.transparency || 0) + 8);
+      patchSetting('transparency', next);
+      if (desktopApi?.setTransparency) desktopApi.setTransparency(next).catch(() => {});
+      return;
+    }
+    if (accelEquals(acc, settings.clickThroughShortcut || '')) {
+      e.preventDefault();
+      patchSetting('clickThroughMode', !settings.clickThroughMode);
+      return;
+    }
+    // 将自动滚动相关快捷键也在渲染进程内处理（保持与 BottomToolbar 的行为一致）
+    try {
+      console.log('[shortcut] acc=', acc, ' settingAutoToggle=', settings.autoToggleShortcut);
+    } catch (e) {}
+    if (accelEquals(acc, settings.autoToggleShortcut || '')) {
+      e.preventDefault();
+      try {
+        e.__glassReaderHandled = true;
+      } catch (err) {}
+      console.log('[shortcut] autoToggle matched -> toggling autoScrollEnabled', settings.autoScrollEnabled);
+      patchSetting('autoScrollEnabled', !settings.autoScrollEnabled);
+      return;
+    }
+    if (accelEquals(acc, settings.autoSpeedDownShortcut || '')) {
+      // 仅当自动滚动已开启时允许调整速度
+      if (!settings.autoScrollEnabled) return;
+      e.preventDefault();
+      const next = Math.max(5, Number(settings.autoScrollSpeed || 22) - 5);
+      patchSetting('autoScrollSpeed', next);
+      return;
+    }
+    if (accelEquals(acc, settings.autoSpeedUpShortcut || '')) {
+      // 仅当自动滚动已开启时允许调整速度
+      if (!settings.autoScrollEnabled) return;
+      e.preventDefault();
+      const next = Math.min(80, Number(settings.autoScrollSpeed || 22) + 5);
+      patchSetting('autoScrollSpeed', next);
+      return;
+    }
+  } catch (e) {}
+}
 </script>
 
 <template>
@@ -607,10 +731,10 @@ onBeforeUnmount(() => {
           <!-- 站点规则管理已移除（按需在页面内快速编辑弹窗保留） -->
 
           <section class="settings-block shortcut-block section-panel">
-            <div class="shortcut-title">全局快捷键</div>
+            <div class="shortcut-title">快捷键</div>
             <div class="shortcut-grid">
               <ShortcutRow
-                label="老板键"
+                label="老板键（电脑全局）"
                 :value="settings.bossKey"
                 keyName="bossKey"
                 :editingKey="editingShortcut"
@@ -621,7 +745,7 @@ onBeforeUnmount(() => {
                 @clear="clearCaptured" />
 
               <ShortcutRow
-                label="降低透明"
+                label="降低透明（仅在软件内生效）"
                 :value="settings.decreaseTransparencyShortcut"
                 keyName="decreaseTransparencyShortcut"
                 :editingKey="editingShortcut"
@@ -632,7 +756,7 @@ onBeforeUnmount(() => {
                 @clear="clearCaptured" />
 
               <ShortcutRow
-                label="提高透明"
+                label="提高透明（仅在软件内生效）"
                 :value="settings.increaseTransparencyShortcut"
                 keyName="increaseTransparencyShortcut"
                 :editingKey="editingShortcut"
@@ -643,7 +767,7 @@ onBeforeUnmount(() => {
                 @clear="clearCaptured" />
 
               <ShortcutRow
-                label="鼠标穿透"
+                label="鼠标穿透（仅在软件内生效）"
                 :value="settings.clickThroughShortcut"
                 keyName="clickThroughShortcut"
                 :editingKey="editingShortcut"
@@ -654,7 +778,7 @@ onBeforeUnmount(() => {
                 @clear="clearCaptured" />
 
               <ShortcutRow
-                label="自动滚动：切换（全局）"
+                label="自动滚动（仅在软件内生效）"
                 :value="settings.autoToggleShortcut"
                 keyName="autoToggleShortcut"
                 :editingKey="editingShortcut"
@@ -665,7 +789,7 @@ onBeforeUnmount(() => {
                 @clear="clearCaptured" />
 
               <ShortcutRow
-                label="自动滚动：减速（全局）"
+                label="自动滚动：减速（仅在软件内生效）"
                 :value="settings.autoSpeedDownShortcut"
                 keyName="autoSpeedDownShortcut"
                 :editingKey="editingShortcut"
@@ -676,7 +800,7 @@ onBeforeUnmount(() => {
                 @clear="clearCaptured" />
 
               <ShortcutRow
-                label="自动滚动：加速（全局）"
+                label="自动滚动：加速（仅在软件内生效）"
                 :value="settings.autoSpeedUpShortcut"
                 keyName="autoSpeedUpShortcut"
                 :editingKey="editingShortcut"

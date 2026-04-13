@@ -443,62 +443,14 @@ function updateTransparency(nextTransparency) {
 
 function registerGlobalShortcuts() {
     globalShortcut.unregisterAll()
-
-    const registrations = [
-        [currentSettings.bossKey, () => toggleMainWindow()],
-        [currentSettings.decreaseTransparencyShortcut, () => updateTransparency(currentSettings.transparency - 8)],
-        [currentSettings.increaseTransparencyShortcut, () => updateTransparency(currentSettings.transparency + 8)],
-        [currentSettings.clickThroughShortcut, () => {
-            currentSettings = normalizeSettings({
-                ...currentSettings,
-                clickThroughMode: !currentSettings.clickThroughMode,
-            })
-            saveSettings()
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                applyWindowSettings(mainWindow)
-            }
-            broadcastSettings()
-        }],
-        // 自动滚动控制（通过修改 currentSettings 并广播，使渲染进程同步状态）
-        [currentSettings.autoToggleShortcut, () => {
-            try {
-                currentSettings = normalizeSettings({ ...currentSettings, autoScrollEnabled: !currentSettings.autoScrollEnabled })
-                saveSettings()
-                broadcastSettings()
-            } catch (e) { console.warn('[shortcut] autoToggle handler failed', e) }
-        }],
-        [currentSettings.autoSpeedDownShortcut, () => {
-            try {
-                const next = Math.max(5, Number(currentSettings.autoScrollSpeed || defaultSettings.autoScrollSpeed) - 5)
-                currentSettings = normalizeSettings({ ...currentSettings, autoScrollSpeed: next })
-                // 开启自动滚动以便立即生效
-                currentSettings.autoScrollEnabled = true
-                saveSettings()
-                broadcastSettings()
-            } catch (e) { console.warn('[shortcut] autoSpeedDown handler failed', e) }
-        }],
-        [currentSettings.autoSpeedUpShortcut, () => {
-            try {
-                const next = Math.min(80, Number(currentSettings.autoScrollSpeed || defaultSettings.autoScrollSpeed) + 5)
-                currentSettings = normalizeSettings({ ...currentSettings, autoScrollSpeed: next })
-                currentSettings.autoScrollEnabled = true
-                saveSettings()
-                broadcastSettings()
-            } catch (e) { console.warn('[shortcut] autoSpeedUp handler failed', e) }
-        }],
-    ]
-
-    registrations.forEach(([accelerator, handler]) => {
-        if (!accelerator) {
-            return
+    // 仅将老板键注册为全局快捷键，其它快捷键应仅在应用聚焦时生效（由渲染进程处理）
+    try {
+        if (currentSettings.bossKey) {
+            globalShortcut.register(currentSettings.bossKey, () => toggleMainWindow())
         }
-
-        try {
-            globalShortcut.register(accelerator, handler)
-        } catch (error) {
-            console.warn(`[shortcut] register failed for ${accelerator}:`, error)
-        }
-    })
+    } catch (error) {
+        console.warn(`[shortcut] register failed for bossKey ${currentSettings.bossKey}:`, error)
+    }
 }
 
 function applyWindowsAcrylic(win, enabled) {
