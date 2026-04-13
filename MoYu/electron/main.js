@@ -377,26 +377,7 @@ function createTray() {
     tray = new Tray(trayImage)
     tray.setToolTip('MoYu')
 
-    const buildMenu = () => Menu.buildFromTemplate([
-        {
-            label: mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() ? '隐藏主窗口' : '显示主窗口',
-            click: () => toggleMainWindow(),
-        },
-        {
-            label: '打开设置',
-            click: () => openSettingsPanel(),
-        },
-        { type: 'separator' },
-        {
-            label: '退出',
-            click: () => {
-                isQuitting = true
-                app.quit()
-            },
-        },
-    ])
-
-    tray.setContextMenu(buildMenu())
+    tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate()))
     tray.on('double-click', () => toggleMainWindow())
 }
 
@@ -405,24 +386,7 @@ function refreshTrayMenu() {
         return
     }
 
-    tray.setContextMenu(Menu.buildFromTemplate([
-        {
-            label: mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() ? '隐藏主窗口' : '显示主窗口',
-            click: () => toggleMainWindow(),
-        },
-        {
-            label: '打开设置',
-            click: () => openSettingsPanel(),
-        },
-        { type: 'separator' },
-        {
-            label: '退出',
-            click: () => {
-                isQuitting = true
-                app.quit()
-            },
-        },
-    ]))
+    tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate()))
 }
 
 function updateTransparency(nextTransparency) {
@@ -439,6 +403,106 @@ function updateTransparency(nextTransparency) {
 
     broadcastSettings()
     refreshAutoHideMonitor()
+}
+
+function updateSettingsFromTray(partial) {
+    try {
+        currentSettings = normalizeSettings({ ...currentSettings, ...partial })
+        saveSettings()
+        registerGlobalShortcuts()
+        refreshAutoHideMonitor()
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            applyWindowSettings(mainWindow)
+        }
+        broadcastSettings()
+        refreshTrayMenu()
+    } catch (e) {
+        console.warn('[tray] updateSettingsFromTray failed:', e)
+    }
+}
+
+function buildTrayMenuTemplate() {
+    const isVisible = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()
+
+    const transparencyOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80]
+    const transparencySubmenu = transparencyOptions.map((v) => ({
+        label: `${v}%`,
+        type: 'radio',
+        checked: Number(currentSettings.transparency) === v,
+        click: () => updateTransparency(v),
+    }))
+
+    const autoScrollSpeeds = [5, 10, 20, 30, 40, 60, 80]
+    const autoScrollSubmenu = autoScrollSpeeds.map((v) => ({
+        label: `${v}`,
+        type: 'radio',
+        checked: Number(currentSettings.autoScrollSpeed) === v,
+        click: () => updateSettingsFromTray({ autoScrollSpeed: v }),
+    }))
+
+    const fontScaleOptions = [80, 100, 120, 140, 160]
+    const fontScaleSubmenu = fontScaleOptions.map((v) => ({
+        label: `${v}%`,
+        type: 'radio',
+        checked: Number(currentSettings.readerFontScale) === v,
+        click: () => updateSettingsFromTray({ readerFontScale: v }),
+    }))
+
+    return [
+        {
+            label: isVisible ? '隐藏主窗口' : '显示主窗口',
+            click: () => toggleMainWindow(),
+        },
+        {
+            label: '快速设置',
+            submenu: [
+                // 与设置页保持一致的顺序：透明度 -> 左侧开关（顺序与 leftToggleKeys）-> toolbarDisabled -> 右侧开关（顺序与 rightToggleKeys）
+                { label: '透明度', submenu: transparencySubmenu },
+                { type: 'separator' },
+                // 左侧开关（窗口行为）
+                { label: '系统任务栏显示', type: 'checkbox', checked: !!currentSettings.showInTaskbar, click: (item) => updateSettingsFromTray({ showInTaskbar: item.checked }) },
+                { label: '关闭时最小化到托盘', type: 'checkbox', checked: !!currentSettings.closeToTray, click: (item) => updateSettingsFromTray({ closeToTray: item.checked }) },
+                { label: '悬停显示标题栏', type: 'checkbox', checked: !!currentSettings.hoverHeaderMode, click: (item) => updateSettingsFromTray({ hoverHeaderMode: item.checked }) },
+                { label: '显示标签栏', type: 'checkbox', checked: !!currentSettings.showTabBar, click: (item) => updateSettingsFromTray({ showTabBar: item.checked }) },
+                { label: '鼠标移出隐藏窗口', type: 'checkbox', checked: !!currentSettings.autoHide, click: (item) => updateSettingsFromTray({ autoHide: item.checked }) },
+                { label: '隐藏时暂停媒体与滚动', type: 'checkbox', checked: !!currentSettings.pauseOnBlurHide, click: (item) => updateSettingsFromTray({ pauseOnBlurHide: item.checked }) },
+                { label: '工具栏显示', type: 'checkbox', checked: !!currentSettings.toolbarVisible, click: (item) => updateSettingsFromTray({ toolbarVisible: item.checked }) },
+                { label: '工具栏停靠底部', type: 'checkbox', checked: !!currentSettings.toolbarDocked, click: (item) => updateSettingsFromTray({ toolbarDocked: item.checked }) },
+                { label: '显示滚动条', type: 'checkbox', checked: !!currentSettings.showScrollbars, click: (item) => updateSettingsFromTray({ showScrollbars: item.checked }) },
+                // settings 中单独显示的禁用工具栏项
+                { label: '禁用工具栏（不再移入显示）', type: 'checkbox', checked: !!currentSettings.toolbarDisabled, click: (item) => updateSettingsFromTray({ toolbarDisabled: item.checked }) },
+                { type: 'separator' },
+                // 右侧开关（显示与渲染）
+                { label: '窗口始终置顶', type: 'checkbox', checked: !!currentSettings.alwaysOnTop, click: (item) => updateSettingsFromTray({ alwaysOnTop: item.checked }) },
+                { label: '软件背景透明', type: 'checkbox', checked: !!currentSettings.fullWindowTransparent, click: (item) => updateSettingsFromTray({ fullWindowTransparent: item.checked }) },
+                { label: '网页背景透明', type: 'checkbox', checked: !!currentSettings.pageTransparentMode, click: (item) => updateSettingsFromTray({ pageTransparentMode: item.checked }) },
+                { label: '强制修改文字颜色', type: 'checkbox', checked: !!currentSettings.forceReaderTextColor, click: (item) => updateSettingsFromTray({ forceReaderTextColor: item.checked }) },
+                { label: '强制阅读器字号', type: 'checkbox', checked: !!currentSettings.forceReaderFont, click: (item) => updateSettingsFromTray({ forceReaderFont: item.checked }) },
+                { label: '自动滚动', type: 'checkbox', checked: !!currentSettings.autoScrollEnabled, click: (item) => updateSettingsFromTray({ autoScrollEnabled: item.checked }) },
+                { label: '灰度模式', type: 'checkbox', checked: !!currentSettings.grayscaleMode, click: (item) => updateSettingsFromTray({ grayscaleMode: item.checked }) },
+                { label: '无图模式', type: 'checkbox', checked: !!currentSettings.noImageMode, click: (item) => updateSettingsFromTray({ noImageMode: item.checked }) },
+                { label: '鼠标穿透', type: 'checkbox', checked: !!currentSettings.clickThroughMode, click: (item) => updateSettingsFromTray({ clickThroughMode: item.checked }) },
+                { label: '手机模式', type: 'checkbox', checked: !!currentSettings.mobileMode, click: (item) => updateSettingsFromTray({ mobileMode: item.checked }) },
+                { label: '防截屏模式', type: 'checkbox', checked: !!currentSettings.antiScreenshotMode, click: (item) => updateSettingsFromTray({ antiScreenshotMode: item.checked }) },
+                { type: 'separator' },
+                // 额外控制项：自动滚动速度 & 阅读器字体缩放
+                { label: '自动滚动速度', submenu: autoScrollSubmenu },
+                { label: '阅读器字体缩放', submenu: fontScaleSubmenu },
+            ],
+        },
+        {
+            label: '打开设置',
+            click: () => openSettingsPanel(),
+        },
+        { type: 'separator' },
+        {
+            label: '退出',
+            click: () => {
+                isQuitting = true
+                app.quit()
+            },
+        },
+    ]
 }
 
 function registerGlobalShortcuts() {
