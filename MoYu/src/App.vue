@@ -37,6 +37,11 @@ const {
 } = useDesktopApp();
 const desktopApi = typeof window !== 'undefined' ? window.desktop : null;
 
+// 说明：
+// 1. 本文件为渲染进程入口，负责窗口级别的 UI 与全局快捷键处理。
+// 2. 主要职责包括：管理设置面板、捕获与匹配快捷键、协调 BottomToolbar 与 MainPage 的交互、以及窗口热区/悬停逻辑。
+// 3. 关键事件：window 的 keydown（快捷键捕获）、pointermove（热区检测）、mouseout/blur（失焦/移出回退处理）。
+
 const isSettingsOpen = ref(false);
 let removeOpenSettingsListener = null;
 const editingShortcut = ref(null);
@@ -102,6 +107,10 @@ function updateHotzoneFromDOM() {
   } catch (e) {}
 }
 
+// 说明：更新热区高度并缓存 DOM 引用
+// - 用于 hoverHeaderMode 功能：当鼠标靠近顶部热区时显示标题栏
+// - 减少频繁的 querySelector 调用，性能优化
+
 /**
  * 全局 pointermove 处理器
  * - 当开启 `hoverHeaderMode` 时，根据鼠标 Y 坐标判断是否进入热区
@@ -127,6 +136,10 @@ function _onPointerMoveForHeader(e) {
   } catch (e) {}
 }
 
+// 说明：全局 pointermove 处理器，用于检测光标是否进入顶部热区
+// - 当 hoverHeaderMode 开启时会触发 headerHoverActive 的开关
+// - 仅触发 UI 状态，不直接修改 DOM
+
 function onWindowMouseOut(e) {
   try {
     // 当鼠标移出窗口（relatedTarget 为 null）时立即隐藏
@@ -149,6 +162,9 @@ function onWindowBlur() {
     if (headerHoverActive.value) headerHoverActive.value = false;
   } catch (e) {}
 }
+
+// 说明：当窗口失焦时的回退处理
+// - 用于关闭 hoverHeaderMode 的显示状态，避免在失焦时仍保持悬停显示
 
 // 鼠标移入/移出处理，参考 BottomToolbar 的 container mouseenter/leave
 function clearHeaderHideTimeout() {
@@ -193,7 +209,9 @@ function onTopbarMouseLeave(e) {
 }
 
 function formatAcceleratorFromEvent(e) {
-  // 返回例如: Ctrl+Alt+T
+  // 将原生键事件格式化为可展示与可比较的“Accelerator”字符串
+  // 返回示例: "Ctrl+Alt+T" 或 "Shift+="
+  // 说明：用于在 UI 中展示快捷键及在代码中与设置项进行精确匹配。
   const isModifierOnly = (k) => ['Control', 'Shift', 'Alt', 'Meta'].includes(k);
   if (isModifierOnly(e.key)) {
     return null;
@@ -234,6 +252,7 @@ function formatTabTitle(title) {
 }
 
 function _onCaptureKeydown(e) {
+  // 用于快捷键编辑器：拦截一次按键并将其转为规范化的 Accelerator 存放到 capturedAccel
   e.preventDefault();
   const acc = formatAcceleratorFromEvent(e);
   if (!acc) return;
@@ -241,12 +260,14 @@ function _onCaptureKeydown(e) {
 }
 
 function startEditShortcut(key) {
+  // 进入指定快捷键的编辑模式：开始监听 keydown 捕获下一次按键
   editingShortcut.value = key;
   capturedAccel.value = settings[key] || '';
   window.addEventListener('keydown', _onCaptureKeydown);
 }
 
 function confirmShortcut(key) {
+  // 结束编辑并保存：停止监听并将捕获到的 Accelerator 写入设置
   window.removeEventListener('keydown', _onCaptureKeydown);
   editingShortcut.value = null;
   if (capturedAccel.value) {
@@ -261,6 +282,7 @@ function confirmShortcut(key) {
 }
 
 function cancelShortcut() {
+  // 取消快捷键编辑：清理状态
   window.removeEventListener('keydown', _onCaptureKeydown);
   editingShortcut.value = null;
   capturedAccel.value = '';
@@ -268,7 +290,7 @@ function cancelShortcut() {
 
 function clearCaptured(key) {
   if (editingShortcut.value !== key) return;
-  // 停止捕获键盘事件并将该快捷键保存为空（清除快捷键）
+  // 清除已配置的快捷键（将对应设置设为空）
   window.removeEventListener('keydown', _onCaptureKeydown);
   try {
     patchSetting(key, '');
@@ -512,10 +534,6 @@ function localShortcutHandler(e) {
     // 仅当窗口聚焦或鼠标仍在窗口内部时生效（老板键由主进程全局处理）
     if (typeof document !== 'undefined' && !document.hasFocus() && !_mouseInsideWindow) return;
     const acc = formatAcceleratorFromEvent(e);
-    // 调试：记录序列，便于定位例如 '=' 在不同键盘/布局下的表现
-    try {
-      console.log('[shortcut] acc=', acc, ' autoToggle=', settings.autoToggleShortcut);
-    } catch (err) {}
     if (!acc) return;
     // 严格解析加速器字符串并比较：要求修饰键集合与主键都匹配才认为相同
     const mapShifted = { '+': '=', '{': '[', '}': ']' };
@@ -568,15 +586,11 @@ function localShortcutHandler(e) {
       return;
     }
     // 将自动滚动相关快捷键也在渲染进程内处理（保持与 BottomToolbar 的行为一致）
-    try {
-      console.log('[shortcut] acc=', acc, ' settingAutoToggle=', settings.autoToggleShortcut);
-    } catch (e) {}
     if (accelEquals(acc, settings.autoToggleShortcut || '')) {
       e.preventDefault();
       try {
         e.__glassReaderHandled = true;
       } catch (err) {}
-      console.log('[shortcut] autoToggle matched -> toggling autoScrollEnabled', settings.autoScrollEnabled);
       patchSetting('autoScrollEnabled', !settings.autoScrollEnabled);
       return;
     }

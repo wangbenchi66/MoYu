@@ -1,3 +1,11 @@
+/**
+ * useDesktopApp.js
+ * 应用全局状态与工具集合（组合式 API），在渲染进程中作为单一来源管理：
+ * - 映射并维护 `settings`、`tabs`、`recentVisits` 等共享状态
+ * - 提供对设置的 patch/同步（patchSetting / scheduleSettingsSync / syncSettingsNow）
+ * - 提供 tab 管理、打开/关闭/导航、最近访问记录与推荐站点的操作接口
+ * 暴露给组件：settings、tabs、patchSetting、createPageTab、initializeDesktopApp 等。
+ */
 import { computed, reactive, ref } from 'vue'
 import * as ruleProviders from '../lib/ruleProviders'
 import * as siteRules from '../lib/siteRules'

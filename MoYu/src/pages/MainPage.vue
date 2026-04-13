@@ -1,4 +1,11 @@
 <script setup>
+// MainPage.vue
+// 页面主视图：管理多个 webview（tab）、本地阅读视图与与其相关的脚本注入/样式同步。
+// 主要职责：
+// - 管理 webview 实例生命周期、挂载/卸载与事件监听
+// - 将 settings 同步到 webview（注入样式、自动滚动、无图、滚动条等）
+// - 提供 runWebviewJS/runWebviewCss 等工具函数用于在 webview 内执行脚本或注入样式
+// - 管理本地阅读器（local-text）的自动滚动与用户交互暂停逻辑
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useDesktopApp } from '../composables/useDesktopApp';
 import recommendedPage from './RecommendedPage.vue';
@@ -401,16 +408,13 @@ function runWebviewJS(script, tabId) {
       const now = Date.now();
       if (lastMap[sig] && now - lastMap[sig] < 1200) {
         try {
-          console.log('[runWebviewJS] skipped duplicate script for', tid, 'sigLen=', sig.length);
+          console.log('[runWebviewJS] skipped duplicate script for', tid);
         } catch (e) {}
         return Promise.resolve();
       }
       lastMap[sig] = now;
     } catch (e) {}
     try {
-      try {
-        console.log('[runWebviewJS] executing script for', tid);
-      } catch (e) {}
       const p = w.executeJavaScript(script);
       if (p && typeof p.then === 'function') {
         return p
@@ -838,9 +842,6 @@ function syncWebviewFontSize() {
 
 function syncWebviewAutoScroll() {
   const tabId = arguments.length ? arguments[0] : undefined;
-  try {
-    console.log('[syncWebviewAutoScroll] called enabled=', settings.autoScrollEnabled, 'speed=', settings.autoScrollSpeed, 'tabId=', tabId);
-  } catch (e) {}
   runWebviewJS(buildAutoScrollScript(settings.autoScrollEnabled, settings.autoScrollSpeed), tabId);
 }
 

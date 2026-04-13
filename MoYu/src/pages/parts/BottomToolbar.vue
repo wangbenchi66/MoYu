@@ -1,4 +1,10 @@
 <script setup>
+// BottomToolbar.vue
+// 本文件负责底部工具栏的 UI 与本地交互控制。
+// 主要职责：
+// - 渲染底部工具栏、处理溢出和弹层位置
+// - 响应工具栏按钮（缩放、刷新、自动滚动、字号、无图等）并通过 patchSetting 更新设置
+// - 提供局部全局快捷键处理（onGlobalKeydown），仅在窗口/鼠标在窗内时生效，且避免与渲染进程重复处理
 import { ArrowLeft, ArrowRight, Close, Hide, Refresh, View, ZoomIn } from '@element-plus/icons-vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import BaseButton from '../../components/BaseButton.vue';
@@ -365,9 +371,7 @@ function onAutoScrollSpeedInput(e) {
 
 function toggleAutoScroll() {
   try {
-    console.log('[bottomToolbar] toggleAutoScroll current=', props.settings.autoScrollEnabled);
     props.patchSetting('autoScrollEnabled', !props.settings.autoScrollEnabled);
-    console.log('[bottomToolbar] toggleAutoScroll after=', props.settings.autoScrollEnabled);
   } catch (e) {}
 }
 
@@ -392,15 +396,9 @@ function onGlobalKeydown(e) {
     if (typeof document !== 'undefined' && !document.hasFocus()) return;
     // 如果事件已由渲染进程处理，跳过以避免双重切换
     if (e && e.__glassReaderHandled) return;
-    // 如果用户已在设置中配置了全局自动滚动快捷键，则由渲染进程的 `localShortcutHandler` 统一处理，
-    // 防止同一键被工具栏与渲染进程同时处理导致双重切换。
-    if (props.settings && (props.settings.autoToggleShortcut || props.settings.autoSpeedDownShortcut || props.settings.autoSpeedUpShortcut)) {
-      return;
-    }
+    // (duplicate-handling guard removed)
     // 调试输出，确认是否收到事件
-    try {
-      console.log('[bottomToolbar] keydown', e && e.key, 'target=', e && e.target && e.target.tagName);
-    } catch (e) {}
+    // (debug logs removed)
 
     // 不在输入或可编辑区域时才响应快捷键
     const active = document && document.activeElement;
@@ -424,7 +422,6 @@ function onGlobalKeydown(e) {
 
     if (match('=')) {
       e.preventDefault();
-      console.log('[bottomToolbar] onGlobalKeydown matched =, active:', document && document.activeElement && document.activeElement.tagName);
       toggleAutoScroll();
     } else if (match('[')) {
       e.preventDefault();
