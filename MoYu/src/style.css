@@ -172,12 +172,6 @@ iframe {
   -webkit-app-region: drag;
   user-select: none;
 }
-
-.no-drag,
-.no-drag * {
-  -webkit-app-region: no-drag;
-}
-
 .topbar {
   min-height: var(--topbar-height, 46px);
   display: flex;
@@ -1478,10 +1472,12 @@ iframe {
   top: 0;
   left: 0;
   right: 0;
-  height: 28px; /* 感应高度：缩小以减少顶部空白（更紧凑） */
-  z-index: 9998;
+  /* 感应高度：使用较小的可见热区，避免与 topbar/tabbar 大面积重叠造成事件抖动。
+     通过 JS 中的 hotzoneHeight 处理“靠近顶部”逻辑（包括 tabbar），避免把热区覆盖到 topbar 上*/
+  height: 12px;
+  z-index: 59;
   pointer-events: auto;
-  -webkit-app-region: drag; /* 使热区可直接拖动窗口（当顶部栏未显示时） */
+  -webkit-app-region: no-drag; /* 改为 no-drag，使空白区域也能接收鼠标事件以触发悬停显示 */
 }
 
 /* 在悬停模式下，topbar/tabbar 保持在文档流中但默认不可见（保留占位），避免遮挡和不可拖动的问题
@@ -1548,20 +1544,11 @@ iframe {
   z-index: 10000;
 }
 
-/* 当通过 JS 激活（headerHoverActive）时，保持热区为 drag（仍可作为拖动后备），不使用 pointer-events: none */
+/* 当激活时，不切换 header-hotzone 的 pointer-events，避免因 CSS 变化导致鼠标 enter/leave 抖动 */
 .mode-hover-header.header-hover-active .header-hotzone {
+  /* 保持默认 no-drag，允许热区继续接收事件（但 topbar z-index 更高，会覆盖交互） */
   pointer-events: auto;
-  -webkit-app-region: drag;
-}
-
-/* 确保激活时 topbar 本身也作为拖动区域（其子元素通过 no-drag 保持可交互） */
-.mode-hover-header.header-hover-active .topbar {
-  -webkit-app-region: drag;
-}
-
-/* 当 topbar 可见（由 headerHoverActive 控制）时，禁止 header-hotzone 捕获指针事件，避免覆盖 topbar 的拖动区域 */
-.mode-hover-header.header-hover-active .header-hotzone {
-  pointer-events: none;
+  -webkit-app-region: no-drag;
 }
 
 /* 强制将 topbar 及其中央拖动句柄设为 drag（提高优先级以覆盖可能的样式冲突） */
@@ -1629,10 +1616,6 @@ iframe {
 }
 
 .el-button.tab-chip {
-  min-width: 112px;
-  max-width: 220px;
-  height: 34px;
-  padding: 0 12px;
 }
 
 .el-button.tab-add {
@@ -1756,23 +1739,7 @@ iframe {
 /* ==================== 结束 Element Plus 覆盖 ==================== */
 
 /* 进一步修正 el-button 内部结构：确保 slot 内容按项目原始布局对齐 */
-.el-button.tab-chip .el-button__content,
-.el-button.tab-add .el-button__content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-}
-
-/* 保证标签标题截断并留下关闭区域空间 */
-.el-button.tab-chip .tab-title {
-  display: inline-block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: calc(100% - 36px);
-}
+/* 保证标签标题截断并留下关闭区域空间（在后文 .el-button.tab-chip 定义中已包含） */
 
 /* 关闭标记微调：靠右、可点击、与文本垂直居中 */
 .el-button.tab-chip .close-mark {

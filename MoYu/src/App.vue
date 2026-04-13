@@ -85,9 +85,12 @@ let _resizeObserver = null;
 let _pmHandler = null;
 let _mouseInsideWindow = false;
 let _lastNear = false;
+let _headerHideTimeout = null;
+const HEADER_HIDE_DELAY = 360;
 // 缓存常用 DOM 元素，避免在频繁事件中反复查询
 let _topbarEl = null;
 let _hzEl = null;
+let _tabbarEl = null;
 
 /**
  * 更新热区高度并缓存相关 DOM 元素
@@ -100,10 +103,24 @@ function updateHotzoneFromDOM() {
     _hzEl = document && document.querySelector ? document.querySelector('.header-hotzone') : null;
     _topbarEl = document && document.querySelector ? document.querySelector('.topbar') : null;
     if (!_hzEl) return;
-    const rect = _hzEl.getBoundingClientRect();
-    const h = rect && rect.height ? rect.height : _hzEl.offsetHeight || 0;
+    const baseHotzone = 28;
+    let h = baseHotzone;
+    // 如果标签栏开启，则将标签栏高度也计入热区，使在标签栏区域也被视为“靠近顶部”
+    try {
+      const tabbarEl = document.querySelector('.tabbar');
+      if (tabbarEl && settings && settings.showTabBar) {
+        const tRect = tabbarEl.getBoundingClientRect();
+        h += tRect && tRect.height ? tRect.height : tabbarEl.offsetHeight || 0;
+      }
+      // 同时把 topbar 自身高度也加入，确保覆盖整个标题栏区域
+      if (_topbarEl) {
+        const tbRect = _topbarEl.getBoundingClientRect();
+        h += tbRect && tbRect.height ? tbRect.height : _topbarEl.offsetHeight || 0;
+      }
+    } catch (e) {}
     // 加少量缓冲，包含 title-drag 区域
     hotzoneHeight.value = Math.max(24, Math.round(h + 8));
+    // 不修改 header-hotzone 的样式以避免触发 ResizeObserver 的循环变化
   } catch (e) {}
 }
 
@@ -124,14 +141,42 @@ function _onPointerMoveForHeader(e) {
       return;
     }
     const y = e && typeof e.clientY === 'number' ? e.clientY : 0;
-    const near = y <= (hotzoneHeight.value || 28);
+    const threshold = hotzoneHeight.value || 28;
+
+    // 基于阈值和事件目标判断是否靠近顶部
+    let near = y <= threshold;
+    try {
+      const tgt = e && (e.target || null);
+      if (tgt) {
+        if (_topbarEl && (_topbarEl === tgt || _topbarEl.contains(tgt))) near = true;
+        if (_tabbarEl && (_tabbarEl === tgt || _tabbarEl.contains(tgt))) near = true;
+      }
+    } catch (err) {}
+
+    // 行为参考 BottomToolbar：进入立即显示，离开延迟隐藏
     if (near && !_lastNear) {
       _lastNear = true;
+      try {
+        if (_headerHideTimeout) {
+          clearTimeout(_headerHideTimeout);
+          _headerHideTimeout = null;
+        }
+      } catch (err) {}
       if (!headerHoverActive.value) headerHoverActive.value = true;
     } else if (!near && _lastNear) {
       _lastNear = false;
-      // 立即隐藏（与底部工具栏的 container mouseleave 行为一致）
-      if (headerHoverActive.value) headerHoverActive.value = false;
+      try {
+        if (_headerHideTimeout) {
+          clearTimeout(_headerHideTimeout);
+          _headerHideTimeout = null;
+        }
+        _headerHideTimeout = setTimeout(() => {
+          try {
+            if (headerHoverActive.value) headerHoverActive.value = false;
+          } catch (err) {}
+          _headerHideTimeout = null;
+        }, HEADER_HIDE_DELAY);
+      } catch (err) {}
     }
   } catch (e) {}
 }
@@ -147,6 +192,12 @@ function onWindowMouseOut(e) {
     if (!to) {
       _mouseInsideWindow = false;
       if (headerHoverActive.value) headerHoverActive.value = false;
+      try {
+        if (_headerHideTimeout) {
+          clearTimeout(_headerHideTimeout);
+          _headerHideTimeout = null;
+        }
+      } catch (err) {}
     }
   } catch (e) {}
 }
@@ -168,7 +219,12 @@ function onWindowBlur() {
 
 // 鼠标移入/移出处理，参考 BottomToolbar 的 container mouseenter/leave
 function clearHeaderHideTimeout() {
-  // placeholder if later需要延迟隐藏
+  try {
+    if (_headerHideTimeout) {
+      clearTimeout(_headerHideTimeout);
+      _headerHideTimeout = null;
+    }
+  } catch (e) {}
 }
 
 function onHeaderMouseEnter(e) {
@@ -185,8 +241,21 @@ function onHeaderMouseLeave(e) {
     if (to) {
       if (_topbarEl && (_topbarEl === to || _topbarEl.contains(to))) return;
       if (_hzEl && (_hzEl === to || _hzEl.contains(to))) return;
+      if (_tabbarEl && (_tabbarEl === to || _tabbarEl.contains(to))) return;
     }
-    if (headerHoverActive.value) headerHoverActive.value = false;
+    try {
+      if (_headerHideTimeout) {
+        clearTimeout(_headerHideTimeout);
+        _headerHideTimeout = null;
+      }
+      _headerHideTimeout = setTimeout(() => {
+        try {
+          if (headerHoverActive.value) headerHoverActive.value = false;
+        } catch (err) {}
+        _headerHideTimeout = null;
+        _lastNear = false;
+      }, HEADER_HIDE_DELAY);
+    } catch (err) {}
   } catch (e) {}
 }
 
@@ -203,8 +272,21 @@ function onTopbarMouseLeave(e) {
     if (to) {
       if (_hzEl && (_hzEl === to || _hzEl.contains(to))) return;
       if (_topbarEl && (_topbarEl === to || _topbarEl.contains(to))) return;
+      if (_tabbarEl && (_tabbarEl === to || _tabbarEl.contains(to))) return;
     }
-    if (headerHoverActive.value) headerHoverActive.value = false;
+    try {
+      if (_headerHideTimeout) {
+        clearTimeout(_headerHideTimeout);
+        _headerHideTimeout = null;
+      }
+      _headerHideTimeout = setTimeout(() => {
+        try {
+          if (headerHoverActive.value) headerHoverActive.value = false;
+        } catch (err) {}
+        _headerHideTimeout = null;
+        _lastNear = false;
+      }, HEADER_HIDE_DELAY);
+    } catch (err) {}
   } catch (e) {}
 }
 
@@ -407,7 +489,6 @@ function togglePin() {
 
 function handleTransparencyInput(e) {
   const v = Number(e.target.value || 0);
-  console.log('[renderer] handleTransparencyInput', v, { hasSetTransparency: !!desktopApi?.setTransparency, hasUpdateSettings: !!desktopApi?.updateSettings });
   if (desktopApi?.log) {
     try {
       desktopApi.log(`[renderer] handleTransparencyInput ${v} hasSetTransparency=${!!desktopApi?.setTransparency}`);
@@ -422,9 +503,7 @@ function handleTransparencyInput(e) {
   if (desktopApi?.updateSettings) {
     desktopApi
       .updateSettings({ ...settings })
-      .then((ns) => {
-        console.log('[renderer] updateSettings result', ns);
-      })
+      .then((ns) => {})
       .catch((err) => {
         console.warn('[renderer] updateSettings failed', err);
       });
@@ -439,7 +518,6 @@ async function testSetTransparency() {
 
   try {
     const res = await desktopApi.setTransparency(50);
-    console.log('[renderer] testSetTransparency result', res);
     if (desktopApi?.log) {
       try {
         desktopApi.log(`[renderer] testSetTransparency result ${JSON.stringify(res)}`);
@@ -468,7 +546,7 @@ function goHome() {
 
 onMounted(() => {
   initializeDesktopApp();
-  console.log('[renderer] desktopApi present', !!desktopApi, { setTransparency: !!desktopApi?.setTransparency, updateSettings: !!desktopApi?.updateSettings, log: !!desktopApi?.log });
+
   window.addEventListener('keydown', handleKeydown);
   // 全局 pointermove 监听：用于 hover 标题栏逻辑（与底部工具栏一致）
   try {
@@ -480,6 +558,14 @@ onMounted(() => {
       if (hz) _resizeObserver.observe(hz);
       if (tb) _resizeObserver.observe(tb);
     }
+    // 监听 tabbar 的进入/离开以便在标签栏区域也触发 headerHoverActive
+    try {
+      _tabbarEl = document && document.querySelector ? document.querySelector('.tabbar') : null;
+      if (_tabbarEl) {
+        _tabbarEl.addEventListener('mouseenter', onTopbarMouseEnter);
+        _tabbarEl.addEventListener('mouseleave', onTopbarMouseLeave);
+      }
+    } catch (e) {}
     _pmHandler = _onPointerMoveForHeader;
     window.addEventListener('pointermove', _pmHandler);
     // pointerdown 也用于触发进入检测（在 webview 上也更可靠）
@@ -526,6 +612,15 @@ onBeforeUnmount(() => {
       } catch (e) {}
       _resizeObserver = null;
     }
+  } catch (e) {}
+  try {
+    if (_tabbarEl) {
+      try {
+        _tabbarEl.removeEventListener('mouseenter', onTopbarMouseEnter);
+        _tabbarEl.removeEventListener('mouseleave', onTopbarMouseLeave);
+      } catch (e) {}
+    }
+    _tabbarEl = null;
   } catch (e) {}
   removeOpenSettingsListener?.();
   removeOpenSettingsListener = null;

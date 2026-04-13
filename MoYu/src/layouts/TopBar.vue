@@ -17,7 +17,7 @@ const props = defineProps({
 </script>
 
 <template>
-  <header class="topbar drag-region">
+  <header class="topbar">
     <div class="brand-group">
       <div class="brand-block">
         <BaseButton
@@ -30,7 +30,7 @@ const props = defineProps({
     </div>
 
     <div
-      class="title-drag"
+      class="title-drag drag-region"
       aria-hidden="true"></div>
 
     <div class="window-controls no-drag">
