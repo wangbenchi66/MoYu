@@ -61,6 +61,9 @@ try {
     // ignore
 }
 
+/**
+ * 将最近访问列表持久化到 localStorage
+ */
 function persistRecentVisits() {
     try {
         localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentVisits.value.slice(0, RECENT_MAX)))
@@ -275,6 +278,10 @@ const immediateSyncKeys = new Set([
  * @param {*} rawUrl 
  * @returns 
  */
+/**
+ * 对用户输入的 URL 进行规范化处理（支持完整 URL、IP、域名与搜索关键词）
+ * 参数: rawUrl - 原始输入字符串
+ */
 function normalizeUrl(rawUrl) {
     const trimmed = rawUrl.trim()
     if (!trimmed) {
@@ -301,6 +308,10 @@ function normalizeUrl(rawUrl) {
 
 }
 
+/**
+ * 从 URL 中提取主机名作为标题，失败时返回默认标题
+ * 参数: url - 页面 URL
+ */
 function getTitleFromUrl(url) {
     if (url === 'about:blank') {
         return '工作台'
@@ -315,11 +326,18 @@ function getTitleFromUrl(url) {
 
 /** getSiteTag removed — recommendedSites now only store `name` and `url`. */
 
+/**
+ * 将内部 URL 转换为输入框展示形式（about:blank -> ''）
+ * 参数: url - 原始 URL
+ */
 function displayInputUrlForUI(url) {
     return url === 'about:blank' ? '' : url
 }
 
 // 生成不会与现有 tabs 冲突的唯一 id
+/**
+ * 生成不会与现有 tabs 冲突的唯一 ID
+ */
 function generateUniqueTabId() {
     let id
     let attempts = 0
@@ -334,6 +352,9 @@ function generateUniqueTabId() {
     return id
 }
 
+/**
+ * 立即向主进程同步当前设置（若支持）
+ */
 function syncSettingsNow() {
     if (!desktopApi?.updateSettings) {
         return Promise.resolve()
@@ -346,11 +367,18 @@ function syncSettingsNow() {
     })
 }
 
+/**
+ * 安排延迟同步设置（防抖）
+ */
 function scheduleSettingsSync() {
     window.clearTimeout(syncTimer)
     syncTimer = window.setTimeout(syncSettingsNow, 120)
 }
 
+/**
+ * 更新本地设置并根据键触发必要的副作用与同步
+ * 参数: key - 设置键名；value - 要写入的值
+ */
 function patchSetting(key, value) {
     if (key === 'transparency') {
         const nextVal = Math.max(0, Math.min(85, Number(value) || 0))
@@ -434,10 +462,18 @@ function patchSetting(key, value) {
     scheduleSettingsSync()
 }
 
+/**
+ * 切换布尔类型的设置（代理到 patchSetting）
+ * 参数: key - 设置键名
+ */
 function toggleSetting(key) {
     patchSetting(key, !settings[key])
 }
 
+/**
+ * 将访问记录添加到最近访问列表并持久化
+ * 参数: entry - 记录对象（包含 title/url 等）
+ */
 function pushRecentVisit(entry) {
     // 将新访问放到最前面，允许重复地址重复记录，记录时间，保留最新 RECENT_MAX 条
     try {
@@ -454,6 +490,9 @@ function pushRecentVisit(entry) {
     }
 }
 
+/**
+ * 增加最近访问的可见条数以支持滚动加载
+ */
 function loadMoreRecentVisits() {
     try {
         if (recentVisibleCount.value < RECENT_MAX) {
@@ -462,10 +501,17 @@ function loadMoreRecentVisits() {
     } catch (e) { }
 }
 
+/**
+ * 重置最近访问的可见数量到初始页大小
+ */
 function resetRecentVisible() {
     recentVisibleCount.value = RECENT_PAGE_SIZE
 }
 
+/**
+ * 打开一个 tab（保证 id 唯一），并将其设为活动 tab
+ * 参数: tab - tab 对象
+ */
 function openTab(tab) {
     // 确保插入的 tab.id 唯一，避免 v-for key 冲突导致 DOM 重用/错误行为
     const next = Object.assign({}, tab)
@@ -486,6 +532,10 @@ function openTab(tab) {
     activeTabId.value = next.id
 }
 
+/**
+ * 创建一个页面 tab（处理工作台复用与最近访问记录）
+ * 参数: url - 页面地址；options - 可选参数（title/subtitle/kind 等）
+ */
 function createPageTab(url, options = {}) {
     const normalizedUrl = normalizeUrl(url)
     const nextId = Date.now() + Math.floor(Math.random() * 1000)
@@ -525,6 +575,10 @@ function createPageTab(url, options = {}) {
     statusMessage.value = `已打开 ${title}`
 }
 
+/**
+ * 创建本地文本类型的 tab 并加入最近访问
+ * 参数: fileName, content, documentId
+ */
 function createLocalTextTab(fileName, content, documentId) {
     const nextId = Date.now() + Math.floor(Math.random() * 1000)
 
@@ -543,16 +597,26 @@ function createLocalTextTab(fileName, content, documentId) {
     statusMessage.value = `已打开本地文档 ${fileName}`
 }
 
+/**
+ * 使用输入框的 URL 打开页面
+ */
 function handleOpenUrl() {
     createPageTab(urlInput.value)
 }
 
+/**
+ * 新建一个工作台页面（about:blank）
+ */
 function addNewTab() {
     // 使用 createPageTab 来复用已存在的工作台（避免重复创建）
     createPageTab('about:blank', { kind: 'dashboard' })
     urlInput.value = ''
 }
 
+/**
+ * 选择指定 tab 并同步 URL 到输入框
+ * 参数: tabId - 要激活的 tab ID
+ */
 function selectTab(tabId) {
     activeTabId.value = tabId
     const currentTab = tabs.value.find((tab) => tab.id === tabId)
@@ -562,6 +626,10 @@ function selectTab(tabId) {
 }
 
 // 更新指定 tab 的元数据（标题 / 副标题 / url）
+/**
+ * 更新指定 tab 的元数据（标题 / 副标题 / url）
+ * 参数: tabId, meta
+ */
 function updateTabMetadata(tabId, meta = {}) {
     const idx = tabs.value.findIndex((t) => t.id === tabId)
     if (idx === -1) return
@@ -572,6 +640,10 @@ function updateTabMetadata(tabId, meta = {}) {
     if (meta.pinned !== undefined) tab.pinned = !!meta.pinned
 }
 
+/**
+ * 关闭指定的 tab，回收 objectUrl 并调整活动 tab
+ * 参数: tabId - 要关闭的 tab ID
+ */
 function closeTab(tabId) {
     const closingTab = tabs.value.find((tab) => tab.id === tabId)
     if (closingTab?.objectUrl) {
@@ -592,6 +664,10 @@ function closeTab(tabId) {
     }
 }
 
+/**
+ * 关闭指定 tab 左侧的所有 tab
+ * 参数: tabId - 参考的 tab ID
+ */
 function closeTabsToLeft(tabId) {
     try {
         const idx = tabs.value.findIndex((t) => t.id === tabId)
@@ -608,6 +684,10 @@ function closeTabsToLeft(tabId) {
     } catch (e) { }
 }
 
+/**
+ * 关闭指定 tab 右侧的所有 tab
+ * 参数: tabId - 参考的 tab ID
+ */
 function closeTabsToRight(tabId) {
     try {
         const idx = tabs.value.findIndex((t) => t.id === tabId)
@@ -624,6 +704,9 @@ function closeTabsToRight(tabId) {
     } catch (e) { }
 }
 
+/**
+ * 关闭所有 tab 并恢复默认工作台状态
+ */
 function closeAllTabs() {
     try {
         // 回收所有对象 URL
@@ -638,11 +721,19 @@ function closeAllTabs() {
 
 
 
+/**
+ * 打开推荐站点
+ * 参数: site - 推荐站点对象
+ */
 function useRecommendedSite(site) {
     urlInput.value = site.url
     createPageTab(site.url, { title: site.name, subtitle: getTitleFromUrl(site.url) })
 }
 
+/**
+ * 打开最近访问项（支持文件与站点）
+ * 参数: item - 最近访问记录对象
+ */
 function openRecentVisit(item) {
     if ((item.type ?? 'site') === 'file') {
         const documentItem = localDocuments.value.find((doc) => `local://${doc.fileName}` === item.url || doc.url === item.url)
@@ -655,6 +746,10 @@ function openRecentVisit(item) {
     createPageTab(item.url, { title: item.title })
 }
 
+/**
+ * 处理本地文件上传并创建相应的 tab
+ * 参数: fileList - 文件列表
+ */
 async function uploadLocalFiles(fileList) {
     const files = Array.from(fileList ?? [])
     if (!files.length) {
@@ -702,6 +797,10 @@ async function uploadLocalFiles(fileList) {
     localDocuments.value = localDocuments.value.slice(0, 12)
 }
 
+/**
+ * 打开本地文档（文本或其他），并创建 tab
+ * 参数: documentItem - 本地文档对象
+ */
 function openLocalDocument(documentItem) {
     if (documentItem.type === 'local-text') {
         createLocalTextTab(documentItem.fileName, documentItem.content, documentItem.id)
@@ -718,6 +817,10 @@ function openLocalDocument(documentItem) {
     })
 }
 
+/**
+ * 删除本地文档并回收对象 URL，同时移除相关 tab
+ * 参数: documentId - 文档 ID
+ */
 function removeLocalDocument(documentId) {
     const documentItem = localDocuments.value.find((item) => item.id === documentId)
     if (documentItem?.objectUrl) {
@@ -735,6 +838,9 @@ function removeLocalDocument(documentId) {
     }
 }
 
+/**
+ * 将推荐站点持久化到 localStorage 并尝试同步到主进程
+ */
 function persistRecommendedSites() {
     try {
         localStorage.setItem(RECOMMENDED_STORAGE_KEY, JSON.stringify(recommendedSites.value))
@@ -749,6 +855,10 @@ function persistRecommendedSites() {
     }
 }
 
+/**
+ * 添加一个推荐站点（去重并持久化）
+ * 参数: site - 包含 url/name 的对象
+ */
 function addRecommendedSite(site) {
     const normalizedUrl = normalizeUrl((site.url || '').trim())
     const name = (site.name || '').trim() || getTitleFromUrl(normalizedUrl)
@@ -782,6 +892,10 @@ function addRecommendedSite(site) {
     return next
 }
 
+/**
+ * 编辑指定的推荐站点（禁止修改 system 站点）
+ * 参数: id - 站点 ID；site - 新站点数据
+ */
 function editRecommendedSite(id, site) {
     const idx = recommendedSites.value.findIndex((s) => s.id === id)
     if (idx === -1) return
@@ -805,6 +919,10 @@ function editRecommendedSite(id, site) {
     persistRecommendedSites()
 }
 
+/**
+ * 移除指定的推荐站点（禁止删除 system 站点）
+ * 参数: id - 站点 ID
+ */
 function removeRecommendedSite(id) {
     const idx = recommendedSites.value.findIndex((s) => s.id === id)
     if (idx === -1) return
@@ -816,6 +934,9 @@ function removeRecommendedSite(id) {
     persistRecommendedSites()
 }
 
+/**
+ * 请求最小化窗口（通过 desktop API）
+ */
 function handleMinimize() {
     if (!desktopApi?.minimizeWindow) {
         statusMessage.value = '当前环境不支持最小化窗口'
@@ -827,6 +948,9 @@ function handleMinimize() {
     })
 }
 
+/**
+ * 请求最大化或还原窗口（通过 desktop API）
+ */
 function handleMaximize() {
     if (!desktopApi?.maximizeWindow) {
         statusMessage.value = '当前环境不支持最大化窗口'
@@ -838,6 +962,9 @@ function handleMaximize() {
     })
 }
 
+/**
+ * 请求关闭窗口（优先使用 closeWindow 保留主进程 close 事件语义）
+ */
 function handleClose() {
     if (!desktopApi?.quitWindow && !desktopApi?.closeWindow) {
         statusMessage.value = '当前环境不支持关闭窗口'
@@ -852,6 +979,9 @@ function handleClose() {
     })
 }
 
+/**
+ * 请求打开独立的设置窗口（若支持）
+ */
 function openSettingsWindow() {
     // openSettingsWindow 保留实现但不再作为导出（设置通过内置 modal 控制）
     if (!desktopApi?.openSettingsWindow) {
@@ -864,6 +994,9 @@ function openSettingsWindow() {
     })
 }
 
+/**
+ * 初始化渲染端的桌面应用环境，加载设置与规则提供器
+ */
 function initializeDesktopApp() {
     if (initialized) {
         return
@@ -897,6 +1030,9 @@ function initializeDesktopApp() {
     }
 }
 
+/**
+ * 清理渲染端的桌面应用资源与监听器
+ */
 function disposeDesktopApp() {
     window.clearTimeout(syncTimer)
     removeSettingsListener?.()

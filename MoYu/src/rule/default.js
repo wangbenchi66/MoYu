@@ -5,6 +5,10 @@
 // 推荐导出形式：export default function main(helper) { ... }
 // helper 提供：runWebviewCss(idSuffix, css), runWebviewJS(js), webview, settings, activeTab, rule
 
+/**
+ * 默认全局规则入口（针对所有站点生效）
+ * 参数: helper - 提供 runWebviewCss/runWebviewJS/webview/settings/activeTab 等工具
+ */
 export default function main(helper) {
     const runCss = helper && helper.runWebviewCss;
     const runJs = helper && helper.runWebviewJS;

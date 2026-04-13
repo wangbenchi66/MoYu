@@ -24,14 +24,25 @@ const DEFAULT_HEIGHT = 860
 const MIN_SAFE_WIDTH = 360
 const MIN_SAFE_HEIGHT = 240
 
+/**
+ * 获取设置文件的完整路径
+ */
 function getSettingsFilePath() {
     return path.join(app.getPath('userData'), 'glass-reader-settings.json')
 }
 
+/**
+ * 将数值限制在指定范围内
+ * 参数: value, min, max
+ */
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value))
 }
 
+/**
+ * 校验并规范化颜色字符串，若无效返回默认颜色
+ * 参数: color - 16 进制颜色字符串，例如 #rrggbb
+ */
 function normalizeColor(color) {
     const DEFAULT_HEADER_TINT = '#f5f5f7'
     if (typeof color !== 'string') {
@@ -41,6 +52,10 @@ function normalizeColor(color) {
     return /^#[0-9a-fA-F]{6}$/.test(color) ? color : DEFAULT_HEADER_TINT
 }
 
+/**
+ * 规范化阅读器文字颜色，若无效返回默认颜色
+ * 参数: color - 16 进制颜色字符串
+ */
 function normalizeReaderColor(color) {
     if (typeof color !== 'string') {
         return defaultSettings.readerTextColor
@@ -49,6 +64,10 @@ function normalizeReaderColor(color) {
     return /^#[0-9a-fA-F]{6}$/.test(color) ? color : defaultSettings.readerTextColor
 }
 
+/**
+ * 合并并规范化设置对象（包含默认值和范围限制）
+ * 参数: partial - 部分设置对象
+ */
 function normalizeSettings(partial = {}) {
     return {
         ...defaultSettings,
@@ -90,6 +109,9 @@ function normalizeSettings(partial = {}) {
     }
 }
 
+/**
+ * 从磁盘加载持久化设置（仅保留快捷键相关项）
+ */
 function loadSettings() {
     try {
         // 读取持久化设置，但仅保留快捷键相关项，其他全部使用默认值。
@@ -179,6 +201,9 @@ ipcMain.handle('ui:set-ignore-mouse-events', (_, ignore) => {
     return { applied: true }
 })
 
+/**
+ * 将当前设置写入磁盘持久化文件
+ */
 function saveSettings() {
     try {
         fs.writeFileSync(getSettingsFilePath(), JSON.stringify(currentSettings, null, 2), 'utf-8')
@@ -187,12 +212,18 @@ function saveSettings() {
     }
 }
 
+/**
+ * 将当前设置广播到渲染进程
+ */
 function broadcastSettings() {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('settings:changed', currentSettings)
     }
 }
 
+/**
+ * 记录当前可见窗口的边界（用于自动隐藏逻辑）
+ */
 function rememberWindowBounds() {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return
@@ -201,6 +232,10 @@ function rememberWindowBounds() {
     lastVisibleBounds = mainWindow.getBounds()
 }
 
+/**
+ * 判断点是否在给定边界内（可带 margin）
+ * 参数: point, bounds, margin
+ */
 function isPointInsideBounds(point, bounds, margin = 0) {
     return point.x >= bounds.x - margin
         && point.x <= bounds.x + bounds.width + margin
@@ -208,6 +243,9 @@ function isPointInsideBounds(point, bounds, margin = 0) {
         && point.y <= bounds.y + bounds.height + margin
 }
 
+/**
+ * 隐藏主窗口并刷新托盘菜单
+ */
 function hideMainWindow() {
     if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) {
         return
@@ -218,6 +256,10 @@ function hideMainWindow() {
     refreshTrayMenu()
 }
 
+/**
+ * 显示主窗口，可选择是否获取焦点
+ * 参数: focus - 是否获取焦点（默认 true）
+ */
 function showMainWindow(focus = true) {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return
@@ -242,6 +284,9 @@ function showMainWindow(focus = true) {
     refreshTrayMenu()
 }
 
+/**
+ * 停止自动隐藏窗口的轮询监控
+ */
 function stopAutoHideMonitor() {
     if (autoHideMonitor) {
         clearInterval(autoHideMonitor)
@@ -249,6 +294,9 @@ function stopAutoHideMonitor() {
     }
 }
 
+/**
+ * 刷新并启动/停止自动隐藏窗口的监控轮询
+ */
 function refreshAutoHideMonitor() {
     stopAutoHideMonitor()
 
@@ -280,6 +328,9 @@ function refreshAutoHideMonitor() {
     }, 180)
 }
 
+/**
+ * 打开设置面板（确保主窗口存在并显示）
+ */
 function openSettingsPanel() {
     if (!mainWindow || mainWindow.isDestroyed()) {
         createWindow()
@@ -293,6 +344,10 @@ function openSettingsPanel() {
     mainWindow.webContents.send('ui:open-settings')
 }
 
+/**
+ * 将当前设置应用到指定窗口（透明度、置顶、忽略鼠标等）
+ * 参数: win - BrowserWindow 实例
+ */
 function applyWindowSettings(win) {
     win.setSkipTaskbar(!currentSettings.showInTaskbar)
     win.setAlwaysOnTop(currentSettings.alwaysOnTop, 'screen-saver')
@@ -319,6 +374,9 @@ function applyWindowSettings(win) {
     }
 }
 
+/**
+ * 切换主窗口的显示/隐藏状态
+ */
 function toggleMainWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return
@@ -332,6 +390,10 @@ function toggleMainWindow() {
     showMainWindow(true)
 }
 
+/**
+ * 构建主窗口要加载的 URL（支持 dev server 或 file://）
+ * 参数: hash - 路由哈希，默认为 '/'
+ */
 function getWindowUrl(hash = '/') {
     const normalizedHash = hash.startsWith('/') ? hash : `/${hash}`
     if (isDev && isDevServerRun) {
@@ -342,6 +404,9 @@ function getWindowUrl(hash = '/') {
     return `file://${indexPath.replace(/\\/g, '/')}#${normalizedHash}`
 }
 
+/**
+ * 根据配置创建托盘并绑定菜单与事件
+ */
 function createTray() {
     if (tray) {
         return
@@ -381,6 +446,9 @@ function createTray() {
     tray.on('double-click', () => toggleMainWindow())
 }
 
+/**
+ * 刷新托盘菜单（根据当前设置重建）
+ */
 function refreshTrayMenu() {
     if (!tray) {
         return
@@ -389,6 +457,10 @@ function refreshTrayMenu() {
     tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate()))
 }
 
+/**
+ * 更新透明度设置并应用到窗口
+ * 参数: nextTransparency - 下一个透明度值（0-100）
+ */
 function updateTransparency(nextTransparency) {
     currentSettings = normalizeSettings({
         ...currentSettings,
@@ -505,6 +577,9 @@ function buildTrayMenuTemplate() {
     ]
 }
 
+/**
+ * 注册全局快捷键（目前仅注册老板键 bossKey 为全局，其它快捷键在渲染进程中处理）
+ */
 function registerGlobalShortcuts() {
     globalShortcut.unregisterAll()
     // 仅将老板键注册为全局快捷键，其它快捷键应仅在应用聚焦时生效（由渲染进程处理）

@@ -185,6 +185,10 @@ function _onPointerMoveForHeader(e) {
 // - 当 hoverHeaderMode 开启时会触发 headerHoverActive 的开关
 // - 仅触发 UI 状态，不直接修改 DOM
 
+/**
+ * 窗口鼠标移出处理（用于热区与悬停回退）
+ * 参数: e - 鼠标事件对象
+ */
 function onWindowMouseOut(e) {
   try {
     // 当鼠标移出窗口（relatedTarget 为 null）时立即隐藏
@@ -202,12 +206,18 @@ function onWindowMouseOut(e) {
   } catch (e) {}
 }
 
+/**
+ * 窗口鼠标移入处理（标记鼠标在窗口内）
+ */
 function onWindowMouseOver() {
   try {
     _mouseInsideWindow = true;
   } catch (e) {}
 }
 
+/**
+ * 窗口失焦处理（用于关闭悬停标题栏等）
+ */
 function onWindowBlur() {
   try {
     if (headerHoverActive.value) headerHoverActive.value = false;
@@ -218,6 +228,9 @@ function onWindowBlur() {
 // - 用于关闭 hoverHeaderMode 的显示状态，避免在失焦时仍保持悬停显示
 
 // 鼠标移入/移出处理，参考 BottomToolbar 的 container mouseenter/leave
+/**
+ * 清理标题隐藏的延时计时器
+ */
 function clearHeaderHideTimeout() {
   try {
     if (_headerHideTimeout) {
@@ -227,6 +240,10 @@ function clearHeaderHideTimeout() {
   } catch (e) {}
 }
 
+/**
+ * 鼠标进入标题区时的处理
+ * 参数: e - 鼠标事件对象
+ */
 function onHeaderMouseEnter(e) {
   try {
     clearHeaderHideTimeout();
@@ -234,6 +251,10 @@ function onHeaderMouseEnter(e) {
   } catch (e) {}
 }
 
+/**
+ * 鼠标离开标题区时的处理（延迟隐藏）
+ * 参数: e - 鼠标事件对象
+ */
 function onHeaderMouseLeave(e) {
   try {
     const to = e && e.relatedTarget;
@@ -259,6 +280,10 @@ function onHeaderMouseLeave(e) {
   } catch (e) {}
 }
 
+/**
+ * 鼠标进入顶部栏时的处理
+ * 参数: e - 鼠标事件对象
+ */
 function onTopbarMouseEnter(e) {
   try {
     clearHeaderHideTimeout();
@@ -266,6 +291,10 @@ function onTopbarMouseEnter(e) {
   } catch (e) {}
 }
 
+/**
+ * 鼠标离开顶部栏时的处理（延迟隐藏）
+ * 参数: e - 鼠标事件对象
+ */
 function onTopbarMouseLeave(e) {
   try {
     const to = e && e.relatedTarget;
@@ -290,6 +319,10 @@ function onTopbarMouseLeave(e) {
   } catch (e) {}
 }
 
+/**
+ * 将键盘事件格式化为 Accelerator 字符串（示例："Ctrl+Alt+T"）
+ * 参数: e - 键盘事件对象
+ */
 function formatAcceleratorFromEvent(e) {
   // 将原生键事件格式化为可展示与可比较的“Accelerator”字符串
   // 返回示例: "Ctrl+Alt+T" 或 "Shift+="
@@ -326,6 +359,10 @@ function formatAcceleratorFromEvent(e) {
   return parts.join('+');
 }
 
+/**
+ * 格式化标签标题，超长则截断并追加省略号
+ * 参数: title - 原始标题字符串
+ */
 function formatTabTitle(title) {
   const s = (title ?? '').toString().trim();
   const limit = 10; // 超过 10 个字符则截断
@@ -333,6 +370,10 @@ function formatTabTitle(title) {
   return s.length <= limit ? s : s.slice(0, limit) + '…';
 }
 
+/**
+ * 捕获快捷键编辑期间的 keydown，用于读取按键并转换为 Accelerator
+ * 参数: e - 键盘事件对象
+ */
 function _onCaptureKeydown(e) {
   // 用于快捷键编辑器：拦截一次按键并将其转为规范化的 Accelerator 存放到 capturedAccel
   e.preventDefault();
@@ -341,6 +382,10 @@ function _onCaptureKeydown(e) {
   capturedAccel.value = acc;
 }
 
+/**
+ * 开始快捷键编辑模式并监听按键
+ * 参数: key - 要编辑的设置键名
+ */
 function startEditShortcut(key) {
   // 进入指定快捷键的编辑模式：开始监听 keydown 捕获下一次按键
   editingShortcut.value = key;
@@ -348,6 +393,10 @@ function startEditShortcut(key) {
   window.addEventListener('keydown', _onCaptureKeydown);
 }
 
+/**
+ * 确认并保存编辑的快捷键
+ * 参数: key - 被编辑的设置键名
+ */
 function confirmShortcut(key) {
   // 结束编辑并保存：停止监听并将捕获到的 Accelerator 写入设置
   window.removeEventListener('keydown', _onCaptureKeydown);
@@ -363,6 +412,9 @@ function confirmShortcut(key) {
   capturedAccel.value = '';
 }
 
+/**
+ * 取消快捷键编辑并清理状态
+ */
 function cancelShortcut() {
   // 取消快捷键编辑：清理状态
   window.removeEventListener('keydown', _onCaptureKeydown);
@@ -370,6 +422,10 @@ function cancelShortcut() {
   capturedAccel.value = '';
 }
 
+/**
+ * 清除当前捕获到的快捷键并写入空设置
+ * 参数: key - 对应设置键名
+ */
 function clearCaptured(key) {
   if (editingShortcut.value !== key) return;
   // 清除已配置的快捷键（将对应设置设为空）
@@ -386,6 +442,9 @@ function clearCaptured(key) {
   capturedAccel.value = '';
 }
 
+/**
+ * 打开设置模态框并确保窗口可交互
+ */
 function openSettingsModal() {
   // 当打开设置时，临时确保窗口可接收鼠标事件，避免被鼠标穿透挡住设置交互
   isSettingsOpen.value = true;
@@ -396,6 +455,9 @@ function openSettingsModal() {
   }
 }
 
+/**
+ * 恢复默认设置（仅开关与快捷键），并提示二次确认
+ */
 async function restoreDefaults() {
   try {
     await ElMessageBox.confirm('恢复默认配置将重置各种开关与快捷键为默认值（不会清空浏览器缓存）。是否继续？', '恢复默认设置', {
@@ -456,6 +518,9 @@ async function restoreDefaults() {
   }
 }
 
+/**
+ * 关闭设置模态并恢复 clickThroughMode 状态
+ */
 function closeSettingsModal() {
   isSettingsOpen.value = false;
   // 关闭设置后，恢复当前持久设置中的 clickThroughMode 状态
@@ -473,6 +538,10 @@ function closeSettingsModal() {
   }
 }
 
+/**
+ * 处理全局键盘事件（如 Esc 关闭设置或取消编辑）
+ * 参数: event - 键盘事件对象
+ */
 function handleKeydown(event) {
   if (event.key === 'Escape' && isSettingsOpen.value) {
     if (editingShortcut.value) {
@@ -483,10 +552,17 @@ function handleKeydown(event) {
   }
 }
 
+/**
+ * 切换窗口置顶设置（alwaysOnTop）
+ */
 function togglePin() {
   patchSetting('alwaysOnTop', !settings.alwaysOnTop);
 }
 
+/**
+ * 处理透明度滑块输入并同步到主进程
+ * 参数: e - 输入事件对象
+ */
 function handleTransparencyInput(e) {
   const v = Number(e.target.value || 0);
   if (desktopApi?.log) {
@@ -510,6 +586,9 @@ function handleTransparencyInput(e) {
   }
 }
 
+/**
+ * 测试性地设置透明度（用于调试）
+ */
 async function testSetTransparency() {
   if (!desktopApi?.setTransparency) {
     console.warn('[renderer] desktopApi.setTransparency not available');
@@ -528,11 +607,17 @@ async function testSetTransparency() {
   }
 }
 
+/**
+ * 打开默认地址到输入框并触发导航
+ */
 function openDefaultUrl() {
   urlInput.value = settings.defaultUrl === 'about:blank' ? '' : settings.defaultUrl;
   handleOpenUrl();
 }
 
+/**
+ * 跳转到仪表盘或创建空白仪表盘页
+ */
 function goHome() {
   try {
     const dashboard = tabs.value.find((t) => t && (t.kind === 'dashboard' || t.url === 'about:blank'));
@@ -634,6 +719,10 @@ onBeforeUnmount(() => {
  * 使用 `formatAcceleratorFromEvent` 将按键事件序列化为类似 "Ctrl+Alt+T" 的字符串，
  * 然后与 `settings` 中保存的快捷键做匹配。注意：老板键 (`bossKey`) 保持由主进程作为全局快捷键处理，
  * 因此这里会忽略与 `bossKey` 相同的组合，避免重复触发。
+ */
+/**
+ * 本地快捷键处理器（仅在窗口聚焦或鼠标在窗口内时生效）
+ * 参数: e - 键盘事件对象
  */
 function localShortcutHandler(e) {
   try {

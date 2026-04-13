@@ -81,6 +81,9 @@ try {
     staticSiteRules = [];
 }
 
+/**
+ * 从 localStorage 加载用户持久化的站点规则
+ */
 function loadRules() {
     if (_loaded) return
     _loaded = true
@@ -95,6 +98,9 @@ function loadRules() {
     }
 }
 
+/**
+ * 将当前规则写入 localStorage 持久化
+ */
 function persistRules() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(rules))
@@ -103,12 +109,19 @@ function persistRules() {
     }
 }
 
+/**
+ * 返回合并后的规则列表（静态默认 -> 静态站点 -> 用户规则）
+ */
 function getRules() {
     loadRules()
     // 合并静态默认规则 -> 静态站点规则 -> 用户持久化规则（用户规则优先级最高）
     return staticDefaults.concat(staticSiteRules).concat(rules).slice()
 }
 
+/**
+ * 判断给定 URL 是否匹配规则（支持函数、正则、通配符与多种匹配类型）
+ * 参数: rule - 规则对象；rawUrl - 要匹配的原始 URL
+ */
 function matchesRule(rule, rawUrl) {
     if (!rule) return false;
     if (!rawUrl) return false;
@@ -200,6 +213,10 @@ function matchesRule(rule, rawUrl) {
     }
 }
 
+/**
+ * 根据 URL 返回匹配的规则集合（包含静态与用户规则）
+ * 参数: rawUrl - 要匹配的 URL
+ */
 function getRulesForUrl(rawUrl) {
     loadRules()
     try {
@@ -215,6 +232,10 @@ function getRulesForUrl(rawUrl) {
     }
 }
 
+/**
+ * 添加一条用户规则并持久化
+ * 参数: partial - 规则的部分字段
+ */
 function addRule(partial) {
     loadRules()
     const id = Date.now() + Math.floor(Math.random() * 1000)
@@ -234,6 +255,10 @@ function addRule(partial) {
     return rule
 }
 
+/**
+ * 编辑指定的用户规则并持久化
+ * 参数: id - 规则 ID；partial - 更新字段
+ */
 function editRule(id, partial) {
     loadRules()
     const idx = rules.findIndex(r => r.id === id)
@@ -243,6 +268,10 @@ function editRule(id, partial) {
     return rules[idx]
 }
 
+/**
+ * 删除指定的用户规则并持久化
+ * 参数: id - 规则 ID
+ */
 function removeRule(id) {
     loadRules()
     const idx = rules.findIndex(r => r.id === id)

@@ -3,6 +3,9 @@ const STORAGE_KEY = 'glass_reader_settings_rules'
 let rules = []
 let _loaded = false
 
+/**
+ * 从 localStorage 加载 settings 规则
+ */
 function loadRules() {
     if (_loaded) return
     _loaded = true
@@ -17,6 +20,9 @@ function loadRules() {
     }
 }
 
+/**
+ * 将 settings 规则持久化到 localStorage
+ */
 function persistRules() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(rules))
@@ -25,11 +31,18 @@ function persistRules() {
     }
 }
 
+/**
+ * 获取当前的 settings 规则列表
+ */
 function getRules() {
     loadRules()
     return rules.slice()
 }
 
+/**
+ * 判断 URL 是否匹配 settings 规则
+ * 参数: rule - 规则对象；rawUrl - 待匹配的 URL
+ */
 function matchesRule(rule, rawUrl) {
     if (!rule || !rule.pattern) return false
     if (!rawUrl) return false
@@ -62,6 +75,10 @@ function matchesRule(rule, rawUrl) {
     }
 }
 
+/**
+ * 根据 URL 返回匹配的 settings 规则
+ * 参数: rawUrl - 待匹配的 URL
+ */
 function getRulesForUrl(rawUrl) {
     loadRules()
     try {
@@ -71,6 +88,10 @@ function getRulesForUrl(rawUrl) {
     }
 }
 
+/**
+ * 添加 settings 规则并持久化
+ * 参数: partial - 规则的部分字段
+ */
 function addRule(partial) {
     loadRules()
     const id = Date.now() + Math.floor(Math.random() * 1000)
@@ -87,6 +108,10 @@ function addRule(partial) {
     return rule
 }
 
+/**
+ * 编辑 settings 规则并持久化
+ * 参数: id - 规则 ID；partial - 更新字段
+ */
 function editRule(id, partial) {
     loadRules()
     const idx = rules.findIndex(r => r.id === id)
@@ -96,6 +121,10 @@ function editRule(id, partial) {
     return rules[idx]
 }
 
+/**
+ * 删除 settings 规则并持久化
+ * 参数: id - 规则 ID
+ */
 function removeRule(id) {
     loadRules()
     const idx = rules.findIndex(r => r.id === id)
