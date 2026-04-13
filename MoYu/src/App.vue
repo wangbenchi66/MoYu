@@ -74,21 +74,111 @@ const toolbarProps = computed(() => {
   };
 });
 
-function _onMouseMoveForHeader(e) {
+// 动态热区 + pointermove 实现，行为与 BottomToolbar 类似：移入显示，移出立即隐藏
+const hotzoneHeight = ref(28);
+let _resizeObserver = null;
+let _pmHandler = null;
+let _lastNear = false;
+// 缓存常用 DOM 元素，避免在频繁事件中反复查询
+let _topbarEl = null;
+let _hzEl = null;
+
+/**
+ * 更新热区高度并缓存相关 DOM 元素
+ * 说明：读取 `.header-hotzone` 的高度并保存在 `hotzoneHeight` 中，
+ *      同时缓存 `.topbar` / `.header-hotzone` 元素引用以供事件处理使用，
+ *      避免高频事件中反复执行 `querySelector`。
+ */
+function updateHotzoneFromDOM() {
+  try {
+    _hzEl = document && document.querySelector ? document.querySelector('.header-hotzone') : null;
+    _topbarEl = document && document.querySelector ? document.querySelector('.topbar') : null;
+    if (!_hzEl) return;
+    const rect = _hzEl.getBoundingClientRect();
+    const h = rect && rect.height ? rect.height : _hzEl.offsetHeight || 0;
+    // 加少量缓冲，包含 title-drag 区域
+    hotzoneHeight.value = Math.max(24, Math.round(h + 8));
+  } catch (e) {}
+}
+
+/**
+ * 全局 pointermove 处理器
+ * - 当开启 `hoverHeaderMode` 时，根据鼠标 Y 坐标判断是否进入热区
+ * - 进入热区立即将 `headerHoverActive` 置为 true，离开立即置为 false
+ * - 使用 `hotzoneHeight`（由 `updateHotzoneFromDOM` 动态计算）
+ */
+function _onPointerMoveForHeader(e) {
   try {
     if (!settings.hoverHeaderMode) {
       if (headerHoverActive.value) headerHoverActive.value = false;
       return;
     }
     const y = e && typeof e.clientY === 'number' ? e.clientY : 0;
-    // 当光标靠近窗口顶部时激活；增加迟滞以避免闪烁
-    const THRESHOLD = 80; // 触发高度
-    const HYSTERESIS = 24; // 取消触发的附加距离，避免抖动
-    if (y <= THRESHOLD) {
+    const near = y <= (hotzoneHeight.value || 28);
+    if (near && !_lastNear) {
+      _lastNear = true;
       if (!headerHoverActive.value) headerHoverActive.value = true;
-    } else if (headerHoverActive.value && y > THRESHOLD + HYSTERESIS) {
-      headerHoverActive.value = false;
+    } else if (!near && _lastNear) {
+      _lastNear = false;
+      // 立即隐藏（与底部工具栏的 container mouseleave 行为一致）
+      if (headerHoverActive.value) headerHoverActive.value = false;
     }
+  } catch (e) {}
+}
+
+function onWindowMouseOut(e) {
+  try {
+    // 当鼠标移出窗口（relatedTarget 为 null）时立即隐藏
+    const to = e && e.relatedTarget;
+    if (!to && headerHoverActive.value) headerHoverActive.value = false;
+  } catch (e) {}
+}
+
+function onWindowBlur() {
+  try {
+    if (headerHoverActive.value) headerHoverActive.value = false;
+  } catch (e) {}
+}
+
+// 鼠标移入/移出处理，参考 BottomToolbar 的 container mouseenter/leave
+function clearHeaderHideTimeout() {
+  // placeholder if later需要延迟隐藏
+}
+
+function onHeaderMouseEnter(e) {
+  try {
+    clearHeaderHideTimeout();
+    if (!headerHoverActive.value) headerHoverActive.value = true;
+  } catch (e) {}
+}
+
+function onHeaderMouseLeave(e) {
+  try {
+    const to = e && e.relatedTarget;
+    // 如果移动目标仍在 topbar 或 header-hotzone 内，则不隐藏
+    if (to) {
+      if (_topbarEl && (_topbarEl === to || _topbarEl.contains(to))) return;
+      if (_hzEl && (_hzEl === to || _hzEl.contains(to))) return;
+    }
+    if (headerHoverActive.value) headerHoverActive.value = false;
+  } catch (e) {}
+}
+
+function onTopbarMouseEnter(e) {
+  try {
+    clearHeaderHideTimeout();
+    if (!headerHoverActive.value) headerHoverActive.value = true;
+  } catch (e) {}
+}
+
+function onTopbarMouseLeave(e) {
+  try {
+    const to = e && e.relatedTarget;
+    if (to) {
+      if (_hzEl && (_hzEl === to || _hzEl.contains(to))) return;
+      if (_topbarEl && (_topbarEl === to || _topbarEl.contains(to))) return;
+    }
+    if (headerHoverActive.value) headerHoverActive.value = false;
   } catch (e) {}
 }
 
@@ -332,9 +422,23 @@ onMounted(() => {
   initializeDesktopApp();
   console.log('[renderer] desktopApi present', !!desktopApi, { setTransparency: !!desktopApi?.setTransparency, updateSettings: !!desktopApi?.updateSettings, log: !!desktopApi?.log });
   window.addEventListener('keydown', handleKeydown);
-  // 全局鼠标移动监听：用于 hover 标题栏逻辑
+  // 全局 pointermove 监听：用于 hover 标题栏逻辑（与底部工具栏一致）
   try {
-    window.addEventListener('mousemove', _onMouseMoveForHeader);
+    updateHotzoneFromDOM();
+    if (typeof ResizeObserver !== 'undefined') {
+      _resizeObserver = new ResizeObserver(updateHotzoneFromDOM);
+      const hz = document && document.querySelector ? document.querySelector('.header-hotzone') : null;
+      const tb = document && document.querySelector ? document.querySelector('.topbar') : null;
+      if (hz) _resizeObserver.observe(hz);
+      if (tb) _resizeObserver.observe(tb);
+    }
+    _pmHandler = _onPointerMoveForHeader;
+    window.addEventListener('pointermove', _pmHandler);
+    // pointerdown 也用于触发进入检测（在 webview 上也更可靠）
+    window.addEventListener('pointerdown', _pmHandler);
+    // 窗口移出/失焦的回退处理
+    window.addEventListener('mouseout', onWindowMouseOut);
+    window.addEventListener('blur', onWindowBlur);
   } catch (e) {}
 
   if (desktopApi?.onOpenSettingsRequest) {
@@ -349,7 +453,23 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('keydown', _onCaptureKeydown);
   try {
-    window.removeEventListener('mousemove', _onMouseMoveForHeader);
+    if (_pmHandler) {
+      window.removeEventListener('pointermove', _pmHandler);
+      window.removeEventListener('pointerdown', _pmHandler);
+      _pmHandler = null;
+    }
+  } catch (e) {}
+  try {
+    window.removeEventListener('mouseout', onWindowMouseOut);
+    window.removeEventListener('blur', onWindowBlur);
+  } catch (e) {}
+  try {
+    if (_resizeObserver) {
+      try {
+        _resizeObserver.disconnect();
+      } catch (e) {}
+      _resizeObserver = null;
+    }
   } catch (e) {}
   removeOpenSettingsListener?.();
   removeOpenSettingsListener = null;
@@ -365,16 +485,35 @@ onBeforeUnmount(() => {
     <div
       v-if="settings.hoverHeaderMode"
       class="header-hotzone"
-      aria-hidden="true"></div>
-    <TopBar
-      :settings="settings"
-      :headerHoverActive="headerHoverActive"
-      :openSettingsModal="openSettingsModal"
-      :togglePin="togglePin"
-      :toggleSetting="toggleSetting"
-      :handleMinimize="handleMinimize"
-      :handleMaximize="handleMaximize"
-      :handleClose="handleClose" />
+      aria-hidden="true"
+      @mouseenter="onHeaderMouseEnter"
+      @mouseleave="onHeaderMouseLeave"></div>
+
+    <div
+      v-if="settings.hoverHeaderMode"
+      @mouseenter="onTopbarMouseEnter"
+      @mouseleave="onTopbarMouseLeave">
+      <TopBar
+        :settings="settings"
+        :headerHoverActive="headerHoverActive"
+        :openSettingsModal="openSettingsModal"
+        :togglePin="togglePin"
+        :toggleSetting="toggleSetting"
+        :handleMinimize="handleMinimize"
+        :handleMaximize="handleMaximize"
+        :handleClose="handleClose" />
+    </div>
+    <template v-else>
+      <TopBar
+        :settings="settings"
+        :headerHoverActive="headerHoverActive"
+        :openSettingsModal="openSettingsModal"
+        :togglePin="togglePin"
+        :toggleSetting="toggleSetting"
+        :handleMinimize="handleMinimize"
+        :handleMaximize="handleMaximize"
+        :handleClose="handleClose" />
+    </template>
 
     <TabBar
       v-if="settings.showTabBar"
