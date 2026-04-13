@@ -455,6 +455,17 @@ function openDefaultUrl() {
   handleOpenUrl();
 }
 
+function goHome() {
+  try {
+    const dashboard = tabs.value.find((t) => t && (t.kind === 'dashboard' || t.url === 'about:blank'));
+    if (dashboard) {
+      selectTab(dashboard.id);
+      return;
+    }
+    createPageTab('about:blank', { kind: 'dashboard' });
+  } catch (e) {}
+}
+
 onMounted(() => {
   initializeDesktopApp();
   console.log('[renderer] desktopApi present', !!desktopApi, { setTransparency: !!desktopApi?.setTransparency, updateSettings: !!desktopApi?.updateSettings, log: !!desktopApi?.log });
@@ -639,7 +650,8 @@ function localShortcutHandler(e) {
         :toggleSetting="toggleSetting"
         :handleMinimize="handleMinimize"
         :handleMaximize="handleMaximize"
-        :handleClose="handleClose" />
+        :handleClose="handleClose"
+        :goHome="goHome" />
     </div>
     <template v-else>
       <TopBar
@@ -650,7 +662,8 @@ function localShortcutHandler(e) {
         :toggleSetting="toggleSetting"
         :handleMinimize="handleMinimize"
         :handleMaximize="handleMaximize"
-        :handleClose="handleClose" />
+        :handleClose="handleClose"
+        :goHome="goHome" />
     </template>
 
     <TabBar

@@ -491,6 +491,18 @@ function createPageTab(url, options = {}) {
     const nextId = Date.now() + Math.floor(Math.random() * 1000)
     const title = options.title ?? getTitleFromUrl(normalizedUrl)
 
+    // 当是工作台页（about:blank / dashboard）时，复用已存在的工作台 tab 而不是重复创建
+    const isDashboard = (options.kind === 'dashboard') || (normalizedUrl === 'about:blank')
+    if (isDashboard) {
+        const existing = tabs.value.find((t) => (t && (t.kind === 'dashboard' || t.url === 'about:blank')))
+        if (existing) {
+            activeTabId.value = existing.id
+            urlInput.value = ''
+            statusMessage.value = '已切换到工作台'
+            return
+        }
+    }
+
     openTab({
         id: nextId,
         title: title === '工作台' ? '新' : title,
@@ -536,14 +548,8 @@ function handleOpenUrl() {
 }
 
 function addNewTab() {
-    const nextId = Date.now() + Math.floor(Math.random() * 1000)
-    openTab({
-        id: nextId,
-        title: '工作台',
-        url: 'about:blank',
-        subtitle: '新标签页',
-        kind: 'dashboard',
-    })
+    // 使用 createPageTab 来复用已存在的工作台（避免重复创建）
+    createPageTab('about:blank', { kind: 'dashboard' })
     urlInput.value = ''
 }
 
