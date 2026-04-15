@@ -17,6 +17,19 @@ let autoHideMonitor = null
 let lastVisibleBounds = null
 let currentSettings = { ...defaultSettings }
 
+// 不持久化的临时字段（例如窗口透明度、临时 UI 状态等）
+const nonPersistentKeys = new Set([
+    'transparency',
+    'autoHide',
+    'transparentBackground',
+    'hoverHeaderMode',
+    'pageTransparentMode',
+    'forcePageTransparent',
+    'clickThroughMode',
+    'alwaysOnTop',
+    'autoScrollEnabled',
+])
+
 // 窗口尺寸持久化（使用 electron-store）
 const store = new Store()
 const DEFAULT_WIDTH = 820
@@ -114,24 +127,20 @@ function normalizeSettings(partial = {}) {
  */
 function loadSettings() {
     try {
-        // 读取持久化设置，但仅保留快捷键相关项，其他全部使用默认值。
-        // 这样每次启动时除了快捷键外其他设置都回到默认。
+        // 读取持久化设置，并将用户自定义值合并到默认设置中进行规范化。
+        // 按用户要求：在退出/启动间持久化所有用户修改的值（而非仅快捷键）。
         const raw = fs.readFileSync(getSettingsFilePath(), 'utf-8')
         const parsed = JSON.parse(raw || '{}')
 
-        const preservedShortcuts = {
-            bossKey: parsed.bossKey ?? defaultSettings.bossKey,
-            decreaseTransparencyShortcut: parsed.decreaseTransparencyShortcut ?? defaultSettings.decreaseTransparencyShortcut,
-            increaseTransparencyShortcut: parsed.increaseTransparencyShortcut ?? defaultSettings.increaseTransparencyShortcut,
-            clickThroughShortcut: parsed.clickThroughShortcut ?? defaultSettings.clickThroughShortcut,
-            autoToggleShortcut: parsed.autoToggleShortcut ?? defaultSettings.autoToggleShortcut,
-            autoSpeedDownShortcut: parsed.autoSpeedDownShortcut ?? defaultSettings.autoSpeedDownShortcut,
-            autoSpeedUpShortcut: parsed.autoSpeedUpShortcut ?? defaultSettings.autoSpeedUpShortcut,
+        // 移除不应持久化的临时字段
+        for (const k of Object.keys(parsed)) {
+            if (nonPersistentKeys.has(k)) delete parsed[k]
         }
 
+        // 将磁盘上的所有（允许持久化的）字段视为用户自定义值，交由 normalizeSettings 校验并合并默认值。
         currentSettings = normalizeSettings({
             ...defaultSettings,
-            ...preservedShortcuts,
+            ...parsed,
         })
     } catch {
         currentSettings = { ...defaultSettings }
