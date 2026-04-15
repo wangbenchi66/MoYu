@@ -74,7 +74,7 @@ const defaultSettings = {
     forceReaderFont: false,
 
     // 工具栏停靠底部（true）或悬浮（false）
-    toolbarDocked: true,
+    toolbarDocked: false,
 
     // 是否强制替换网页文字颜色为 `readerTextColor`
     forceReaderTextColor: false,
@@ -105,19 +105,19 @@ const defaultSettings = {
     // 快捷键：切换鼠标穿透（示例 'Ctrl+Alt+T'）
     clickThroughShortcut: 'Ctrl+Alt+T',
 
-    // 自动滚动相关全局快捷键（已更改为带 Shift 的组合）
-    // autoToggleShortcut: 切换自动滚动（Shift+=）
-    // autoSpeedDownShortcut: 减慢自动滚动（Shift+[）
-    // autoSpeedUpShortcut: 加快自动滚动（Shift+]）
-    autoToggleShortcut: 'Shift+=',
-    autoSpeedDownShortcut: 'Shift+[',
-    autoSpeedUpShortcut: 'Shift+]',
+    // 自动滚动相关全局快捷键
+    // autoToggleShortcut: 切换自动滚动（=）
+    // autoSpeedDownShortcut: 减慢自动滚动（[）
+    // autoSpeedUpShortcut: 加快自动滚动（]）
+    autoToggleShortcut: '=',
+    autoSpeedDownShortcut: '[',
+    autoSpeedUpShortcut: ']',
 
     // 软件背景完全透明（使 shell / surface / page 都为透明）
     fullWindowTransparent: false,
 
     // 工具栏是否固定（固定=true 始终显示）
-    toolbarPinned: true,
+    toolbarPinned: false,
 
     // 工具栏是否可见（UI 状态控制）
     toolbarVisible: true,

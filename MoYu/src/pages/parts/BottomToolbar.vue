@@ -407,9 +407,9 @@ function onGlobalKeydown(e) {
       const editable = active.isContentEditable;
       if (tag === 'input' || tag === 'textarea' || editable) return;
     }
-    // 按键映射："=" 开/关，"[" 慢， "]" 快
+    // 按键映射："=" 开/关，"[" 慢， "]" 快（使用 Alt 修饰键）
     const k = e && e.key;
-    // 兼容 Shift 带来的符号（例如 Shift+'=' -> '+'）以及不同键盘布局
+    // 兼容修饰键带来的符号（例如 Shift+'=' -> '+'）以及不同键盘布局
     const match = (expected) => {
       if (!k || !expected) return false;
       if (k === expected) return true;
@@ -621,7 +621,7 @@ onBeforeUnmount(() => {
             @mouseleave="onPopMouseLeave">
             <div class="panel">
               <div class="panel-header">
-                <div class="panel-title">字号</div>
+                <div class="panel-title">字号缩放</div>
                 <div class="panel-actions">
                   <BaseButton
                     class="mini-reset-icon"

@@ -399,6 +399,13 @@ iframe {
   gap: 0;
 }
 
+/* 确保 Element UI / Element Plus 的全局消息位于最上层，避免被其他弹窗遮挡 */
+.el-message,
+.el-message__group,
+.el-message-box__wrapper {
+  z-index: 999999999 !important;
+}
+
 .settings-page {
   min-height: 0;
   height: 100%;

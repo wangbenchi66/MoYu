@@ -25,7 +25,7 @@ export default function main(helper) {
         //     try {
         //         if (window.__glassReaderGlobalInstalled) return true;
         //         window.__glassReaderGlobalInstalled = true;
-        //         // 例如：Ctrl+Shift+F 聚焦到第一个可输入框（示例用途）
+        //         // 例如：Ctrl+Alt+F 聚焦到第一个可输入框（示例用途）
         //         window.addEventListener('keydown', (e) => {
         //             try {
         //                 if (e.ctrlKey && e.shiftKey && e.key && e.key.toLowerCase() === 'f') {

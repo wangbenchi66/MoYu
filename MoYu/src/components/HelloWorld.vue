@@ -15,15 +15,15 @@ const count = ref(0);
         class="base"
         width="170"
         height="179"
-        alt="" />
+        ="" />
       <img
         :src="vueLogo"
         class="framework"
-        alt="Vue logo" />
+        ="Vue logo" />
       <img
         :src="viteLogo"
         class="vite"
-        alt="Vite logo" />
+        ="Vite logo" />
     </div>
     <div>
       <h1>Get started</h1>
@@ -56,7 +56,7 @@ const count = ref(0);
             <img
               class="logo"
               :src="viteLogo"
-              alt="" />
+              ="" />
             Explore Vite
           </a>
         </li>
@@ -67,7 +67,7 @@ const count = ref(0);
             <img
               class="button-icon"
               :src="vueLogo"
-              alt="" />
+              ="" />
             Learn more
           </a>
         </li>

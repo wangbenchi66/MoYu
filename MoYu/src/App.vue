@@ -325,7 +325,7 @@ function onTopbarMouseLeave(e) {
  */
 function formatAcceleratorFromEvent(e) {
   // 将原生键事件格式化为可展示与可比较的“Accelerator”字符串
-  // 返回示例: "Ctrl+Alt+T" 或 "Shift+="
+  // 返回示例: "Ctrl+Alt+T" 或 "="
   // 说明：用于在 UI 中展示快捷键及在代码中与设置项进行精确匹配。
   const isModifierOnly = (k) => ['Control', 'Shift', 'Alt', 'Meta'].includes(k);
   if (isModifierOnly(e.key)) {
@@ -335,7 +335,8 @@ function formatAcceleratorFromEvent(e) {
   const parts = [];
   if (e.ctrlKey) parts.push('Ctrl');
   if (e.altKey) parts.push('Alt');
-  if (e.shiftKey) parts.push('Shift');
+  // 不将 Shift 作为可配置的修饰键之一（禁止使用 Shift 作为快捷键修饰符）
+  // 仅保留 Ctrl/Alt/Meta 为修饰键
   if (e.metaKey) parts.push('Meta');
 
   const map = {
@@ -377,6 +378,15 @@ function formatTabTitle(title) {
 function _onCaptureKeydown(e) {
   // 用于快捷键编辑器：拦截一次按键并将其转为规范化的 Accelerator 存放到 capturedAccel
   e.preventDefault();
+  // 如果按下了 Shift 且不是用于生成可映射符号（+/{/}），则直接禁止使用 Shift 作为修饰键
+  const rawKey = e.key;
+  const shiftAllowedSymbols = ['+', '{', '}'];
+  if (e.shiftKey && !shiftAllowedSymbols.includes(rawKey)) {
+    try {
+      ElMessage({ message: '禁止将 Shift 用作快捷键修饰键，请使用 Alt/Ctrl/Meta。', type: 'warning' });
+    } catch (err) {}
+    return;
+  }
   const acc = formatAcceleratorFromEvent(e);
   if (!acc) return;
   capturedAccel.value = acc;
@@ -428,8 +438,15 @@ function cancelShortcut() {
  */
 function clearCaptured(key) {
   if (editingShortcut.value !== key) return;
-  // 清除已配置的快捷键（将对应设置设为空）
+  // 如果正在编辑该快捷键：仅清空捕获值并保持编辑状态不写入设置
   window.removeEventListener('keydown', _onCaptureKeydown);
+  if (editingShortcut.value === key) {
+    capturedAccel.value = '';
+    // 保持 editingShortcut 以便用户可以继续按键或点击保存
+    return;
+  }
+
+  // 非编辑态的清除：写入空设置（保留原行为）
   try {
     patchSetting(key, '');
     if (desktopApi?.log) {
