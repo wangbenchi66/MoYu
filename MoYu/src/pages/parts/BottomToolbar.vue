@@ -439,8 +439,7 @@ onMounted(() => {
   window.addEventListener('pointermove', _pmHandler);
   // pointerdown 可以更快响应触摸/点击场景
   window.addEventListener('pointerdown', _pmHandler);
-  // 全局快捷键用于自动滚动控制（使用 capture 以提高命中率）
-  window.addEventListener('keydown', onGlobalKeydown, true);
+  // 全局快捷键已由 App.vue 的 localShortcutHandler 统一处理，避免重复注册
   // 初次测量并监听大小变化以保持热区与工具栏高度一致
   updateHotzoneFromDOM();
   try {
@@ -493,9 +492,7 @@ onBeforeUnmount(() => {
     } catch (e) {}
     _pmHandler = null;
   }
-  try {
-    window.removeEventListener('keydown', onGlobalKeydown, true);
-  } catch (e) {}
+  // keydown 监听由 App.vue 管理，无需在此处移除
   try {
     if (_resizeObserver) {
       try {
