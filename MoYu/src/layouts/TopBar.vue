@@ -1,5 +1,5 @@
 <script setup>
-import { Connection, HomeFilled, Lock, Opportunity, Tools, Unlock } from '@element-plus/icons-vue';
+import { CloseBold, Connection, Hide, House, Lock, Minus, Opportunity, Pointer, Setting, Unlock } from '@element-plus/icons-vue';
 import { defineProps } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 
@@ -23,7 +23,7 @@ const props = defineProps({
         <BaseButton
           class="home-btn"
           @click="props.goHome">
-          <el-icon><HomeFilled /></el-icon>
+          <el-icon><House /></el-icon>
         </BaseButton>
         <strong>moyu</strong>
       </div>
@@ -37,48 +37,63 @@ const props = defineProps({
       <BaseButton
         class="control-btn settings-gear"
         aria-label="设置"
-        @click="props.openSettingsModal">
-        <el-icon><Tools /></el-icon>
+        title="设置"
+        @click="props.openSettingsModal"
+        ><el-icon><Setting /></el-icon>
+      </BaseButton>
+      <BaseButton
+        class="control-btn"
+        :class="{ active: props.settings.hoverHeaderMode }"
+        :title="!props.settings.hoverHeaderMode ? '悬停显示标题栏(开启)' : '悬停显示标题栏(关闭)'"
+        @click="() => props.toggleSetting && props.toggleSetting('hoverHeaderMode')">
+        <el-icon><Hide /></el-icon>
+      </BaseButton>
+      <BaseButton
+        class="control-btn"
+        :class="{ active: props.settings.autoHide }"
+        :title="!props.settings.autoHide ? '鼠标移出隐藏窗口(开启)' : '鼠标移出隐藏窗口(关闭)'"
+        @click="() => props.toggleSetting && props.toggleSetting('autoHide')">
+        <el-icon><Pointer /></el-icon>
       </BaseButton>
       <BaseButton
         class="control-btn soft-transparent-toggle"
         :class="{ active: props.settings.fullWindowTransparent }"
-        aria-label="软件背景透明"
+        :title="!props.settings.fullWindowTransparent ? '软件背景透明(开启)' : '软件背景透明(关闭)'"
         @click="() => props.toggleSetting && props.toggleSetting('fullWindowTransparent')">
         <el-icon><Opportunity /></el-icon>
       </BaseButton>
       <BaseButton
         class="control-btn page-transparent-toggle"
         :class="{ active: props.settings.pageTransparentMode }"
-        aria-label="网站背景透明"
+        :title="!props.settings.pageTransparentMode ? '网站背景透明(开启)' : '网站背景透明(关闭)'"
         @click="() => props.toggleSetting && props.toggleSetting('pageTransparentMode')">
         <el-icon><Connection /></el-icon>
       </BaseButton>
       <BaseButton
         class="control-btn pin-toggle"
         :class="{ active: props.settings.alwaysOnTop }"
-        aria-label="窗口置顶"
+        :title="!props.settings.alwaysOnTop ? '窗口置顶(开启)' : '窗口置顶(关闭)'"
         @click="props.togglePin">
         <el-icon v-if="props.settings.alwaysOnTop"><Lock /></el-icon>
         <el-icon v-else><Unlock /></el-icon>
       </BaseButton>
       <BaseButton
         class="control-btn"
-        aria-label="最小化"
+        title="最小化"
         @click="props.handleMinimize">
-        -
+        <el-icon><Minus /></el-icon>
       </BaseButton>
-      <BaseButton
+      <!-- <BaseButton
         class="control-btn"
-        aria-label="最大化"
+        title="最大化/还原"
         @click="props.handleMaximize">
         □
-      </BaseButton>
+      </BaseButton> -->
       <BaseButton
         class="control-btn close"
-        aria-label="关闭"
+        title="关闭"
         @click="props.handleClose">
-        x
+        <el-icon><CloseBold /></el-icon>
       </BaseButton>
     </div>
   </header>
