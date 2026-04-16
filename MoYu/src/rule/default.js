@@ -128,12 +128,19 @@ export default function main(helper) {
                             for (const name in normMap) {
                                 if (!normMap[name]) continue;
                                 if (token === normMap[name]) {
-                                    // 发送到宿主：通过 console.log（宿主会监听并解析）
-                                    try { console.log('GLASS_SHORTCUT:' + JSON.stringify({ action: name })); } catch (err) {}
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    return;
-                                }
+                                        // 发送到宿主：优先通过 postMessage，然后 fallback 到 console.log
+                                        const payload = { action: name };
+                                        try {
+                                            // 尝试 postMessage 到宿主（某些宿主会监听该通道）
+                                            if (window && window.top && window.top !== window && typeof window.top.postMessage === 'function') {
+                                                try { window.top.postMessage({ type: 'GLASS_SHORTCUT', payload }, '*'); } catch (err) {}
+                                            }
+                                        } catch (err) {}
+                                        try { console.log('GLASS_SHORTCUT:' + JSON.stringify(payload)); } catch (err) {}
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        return;
+                                    }
                             }
                         } catch (e) {}
                     }, true);
