@@ -1,5 +1,5 @@
 <script setup>
-import { CloseBold, Connection, Hide, House, Lock, Minus, Pointer, Setting, Switch, Unlock } from '@element-plus/icons-vue';
+import { CloseBold, Connection, Hide, House, Lock, Minus, Pointer, Setting, Stopwatch, Switch, Unlock } from '@element-plus/icons-vue';
 import { defineProps } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 
@@ -9,11 +9,23 @@ const props = defineProps({
   openSettingsModal: Function,
   togglePin: Function,
   toggleSetting: Function,
+  patchSetting: Function,
   handleMinimize: Function,
   handleMaximize: Function,
   handleClose: Function,
   goHome: Function
 });
+
+// 标题栏透明度快捷切换（在预设值间循环）
+const cycleTitlebarOpacity = () => {
+  try {
+    const presets = [15, 40, 60, 85];
+    const cur = Number(props.settings?.transparency ?? 85);
+    const idx = presets.indexOf(cur);
+    const next = presets[(idx + 1) % presets.length];
+    props.patchSetting && props.patchSetting('transparency', next);
+  } catch (e) {}
+};
 </script>
 
 <template>
@@ -40,6 +52,12 @@ const props = defineProps({
         title="设置"
         @click="props.openSettingsModal"
         ><el-icon><Setting /></el-icon>
+      </BaseButton>
+      <BaseButton
+        class="control-btn titlebar-opacity-toggle"
+        :title="`标题栏透明度：${props.settings.transparency ?? 85}%（点击切换）`"
+        @click="cycleTitlebarOpacity">
+        <el-icon><Stopwatch /></el-icon>
       </BaseButton>
       <BaseButton
         class="control-btn"
