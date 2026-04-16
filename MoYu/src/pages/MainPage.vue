@@ -232,7 +232,6 @@ function setWebviewRef(el, id) {
     webviewEventListeners[tid] = listeners;
   } catch (e) {}
 }
-
 function getWebview(tabId) {
   if (tabId === undefined || tabId === null) tabId = activeTabId.value;
   return webviewRefs[String(tabId)];
@@ -450,7 +449,8 @@ function runWebviewJS(script, tabId) {
     if (!w) return Promise.resolve();
     const tab = tabs.value.find((t) => String(t.id) === String(tid));
     if (!tab || tab.kind === 'dashboard' || tab.kind === 'local-text') return Promise.resolve();
-    if (!webviewReadyMap[String(tid)]) return Promise.resolve();
+    // allow executing if we have a webview element even when dom-ready flag isn't set yet
+    if (!webviewReadyMap[String(tid)] && !w) return Promise.resolve();
 
     // 简单去重：避免在极短时间内对同一 tab 执行相同脚本两次（通常由重复挂载/ready 导致）
     try {
@@ -657,7 +657,8 @@ function forceDisableBlankTargetsFor(tabId) {
 async function updateTabFromWebview(tabId) {
   const tid = tabId !== undefined && tabId !== null ? tabId : activeTabId.value;
   const w = getWebview(tid);
-  if (!w || !webviewReadyMap[String(tid)]) return;
+  // if we have a webview element, still try to read metadata even when dom-ready flag hasn't been set yet
+  if (!w) return;
   try {
     if (typeof w.executeJavaScript !== 'function') return;
     const script = `(function(){try{return {title:document.title||'',desc:(document.querySelector('meta[name="description"]')&&document.querySelector('meta[name="description"]').getAttribute('content'))||''}}catch(e){return {title:'',desc:''}}})();`;
@@ -736,7 +737,8 @@ async function runWebviewCss(styleId, css, tabId) {
     if (!w) return;
     const tab = tabs.value.find((t) => String(t.id) === String(tid));
     if (!tab || tab.kind === 'dashboard' || tab.kind === 'local-text') return;
-    if (!webviewReadyMap[String(tid)]) return;
+    // allow CSS injection when element exists even if dom-ready hasn't been recorded yet
+    if (!webviewReadyMap[String(tid)] && !w) return;
 
     try {
       const prevMap = insertedCssKeysByTab[String(tid)] || {};

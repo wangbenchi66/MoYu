@@ -1,5 +1,5 @@
 <script setup>
-import { CloseBold, Connection, Hide, House, Lock, Minus, Opportunity, Pointer, Setting, Unlock } from '@element-plus/icons-vue';
+import { CloseBold, Connection, Hide, House, Lock, Minus, Pointer, Setting, Switch, Unlock } from '@element-plus/icons-vue';
 import { defineProps } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 
@@ -60,7 +60,7 @@ const props = defineProps({
         :class="{ active: props.settings.fullWindowTransparent }"
         :title="!props.settings.fullWindowTransparent ? '软件背景透明(开启)' : '软件背景透明(关闭)'"
         @click="() => props.toggleSetting && props.toggleSetting('fullWindowTransparent')">
-        <el-icon><Opportunity /></el-icon>
+        <el-icon><Switch /></el-icon>
       </BaseButton>
       <BaseButton
         class="control-btn page-transparent-toggle"
