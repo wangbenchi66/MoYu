@@ -92,6 +92,57 @@ export default function main(helper) {
                 } catch (e) {}
             } catch (err) { }
         })(); `);
+
+        //同步注入我设置的快捷键
+        try {
+            const s = (helper && helper.settings) || {};
+            const map = {
+                bossKey: s.bossKey || '',
+                decreaseTransparencyShortcut: s.decreaseTransparencyShortcut || '',
+                increaseTransparencyShortcut: s.increaseTransparencyShortcut || '',
+                clickThroughShortcut: s.clickThroughShortcut || '',
+                autoToggleShortcut: s.autoToggleShortcut || '',
+                autoSpeedDownShortcut: s.autoSpeedDownShortcut || '',
+                autoSpeedUpShortcut: s.autoSpeedUpShortcut || ''
+            };
+
+            const keyScript = `(() => {
+                try {
+                    if (window.__glassReader_shortcuts_injected) return true;
+                    window.__glassReader_shortcuts_injected = true;
+                    const map = ${JSON.stringify(map)};
+                    function norm(k) { return String(k || '').toLowerCase().replace(/\s+/g, ''); }
+                    const normMap = {};
+                    for (const key in map) { normMap[key] = norm(map[key]); }
+
+                    document.addEventListener('keydown', (e) => {
+                        try {
+                            const parts = [];
+                            if (e.ctrlKey) parts.push('control');
+                            if (e.altKey) parts.push('alt');
+                            if (e.shiftKey) parts.push('shift');
+                            if (e.metaKey) parts.push('meta');
+                            parts.push((e.key || '').toLowerCase());
+                            const token = parts.join('+');
+
+                            for (const name in normMap) {
+                                if (!normMap[name]) continue;
+                                if (token === normMap[name]) {
+                                    // 发送到宿主：通过 console.log（宿主会监听并解析）
+                                    try { console.log('GLASS_SHORTCUT:' + JSON.stringify({ action: name })); } catch (err) {}
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    return;
+                                }
+                            }
+                        } catch (e) {}
+                    }, true);
+                } catch (e) {}
+                return true;
+            })();`;
+
+            runJs && runJs(keyScript);
+        } catch (e) { }
     } catch (e) {
         try { console.error('[rule:default] apply failed', e); } catch (err) { }
     }

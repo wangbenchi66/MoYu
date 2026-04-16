@@ -161,7 +161,59 @@ function setWebviewRef(el, id) {
     // 将较多输出的事件改为 debug 级别，开发时可在 DevTools 打开 Debug 过滤查看
     listeners['console-message'] = function (evt) {
       try {
-        console.debug('[webview.console]', evt && evt.message ? evt.message : evt);
+        const msg = evt && evt.message ? evt.message : '';
+        console.debug('[webview.console]', msg);
+
+        // 处理来自注入脚本的快捷键消息
+        try {
+          if (typeof msg === 'string' && msg.indexOf('GLASS_SHORTCUT:') === 0) {
+            const payload = msg.slice('GLASS_SHORTCUT:'.length);
+            try {
+              const obj = JSON.parse(payload);
+              if (obj && obj.action) {
+                // action 名称与 defaultSettings 中的键对应
+                switch (obj.action) {
+                  case 'autoToggleShortcut':
+                    // 切换自动滚动设置
+                    patchSetting('autoScrollEnabled', !settings.autoScrollEnabled);
+                    syncWebviewAutoScroll();
+                    break;
+                  case 'autoSpeedDownShortcut':
+                    patchSetting('autoScrollSpeed', Math.max(5, (settings.autoScrollSpeed || 22) - 5));
+                    syncWebviewAutoScroll(activeTabId.value);
+                    break;
+                  case 'autoSpeedUpShortcut':
+                    patchSetting('autoScrollSpeed', Math.min(80, (settings.autoScrollSpeed || 22) + 5));
+                    syncWebviewAutoScroll(activeTabId.value);
+                    break;
+                  case 'decreaseTransparencyShortcut':
+                    try {
+                      const next = Math.max(0, (Number(settings.transparency) || 0) - 5);
+                      patchSetting('transparency', next);
+                    } catch (e) {}
+                    break;
+                  case 'increaseTransparencyShortcut':
+                    try {
+                      const next2 = Math.min(85, (Number(settings.transparency) || 0) + 5);
+                      patchSetting('transparency', next2);
+                    } catch (e) {}
+                    break;
+                  case 'clickThroughShortcut':
+                    patchSetting('clickThroughMode', !settings.clickThroughMode);
+                    break;
+                  case 'bossKey':
+                    // bossKey 行为：隐藏/显示主窗口 — 通过触发一个自定义事件，App.vue 或主进程可监听
+                    try {
+                      window.dispatchEvent(new CustomEvent('glass:boss-toggle'));
+                    } catch (e) {}
+                    break;
+                  default:
+                    break;
+                }
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
       } catch (e) {}
     };
     listeners['ipc-message'] = function (evt) {
@@ -1464,6 +1516,27 @@ onMounted(() => {
   // 如果用户已启用，初始化绑定隐藏/失焦监听
   try {
     if (settings.pauseOnBlurHide) attachPauseListeners();
+  } catch (e) {}
+  // 将键盘事件转发到 active webview（使 webview 内的快捷键生效）
+  try {
+    const forwardKey = (ev) => {
+      try {
+        const w = getActiveWebview();
+        if (!w || typeof w.sendInputEvent !== 'function') return;
+        const buildModifiers = [];
+        if (ev.shiftKey) buildModifiers.push('shift');
+        if (ev.ctrlKey) buildModifiers.push('control');
+        if (ev.altKey) buildModifiers.push('alt');
+        if (ev.metaKey) buildModifiers.push('meta');
+
+        // send keydown/up events to webview
+        try {
+          w.sendInputEvent({ type: ev.type === 'keydown' ? 'keyDown' : 'keyUp', keyCode: ev.key, modifiers: buildModifiers });
+        } catch (e) {}
+      } catch (e) {}
+    };
+    window.addEventListener('keydown', forwardKey, true);
+    window.addEventListener('keyup', forwardKey, true);
   } catch (e) {}
 });
 </script>
