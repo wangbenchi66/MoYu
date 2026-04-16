@@ -43,6 +43,55 @@ export default function main(helper) {
 
         //全局广告移除示例：隐藏所有 class 包含 "ad" 的元素（仅示例，实际使用请针对特定站点优化选择器）
         //runJs && runJs(`(() => { document.querySelectorAll('[class*=ad]').forEach(n => { try { n.style.display = 'none'; } catch (e) { } }); })(); `);
+
+        // 全局禁止新窗口打开：移除 target，覆盖 window.open，拦截点击，统一在当前窗口打开
+        runJs && runJs(`(() => {
+            try {
+                // 移除已有的 target 属性
+                try { document.querySelectorAll('a[target="_blank"]').forEach(a => { a.removeAttribute('target'); }); } catch (e) {}
+
+                // 覆盖 window.open，使其在当前窗口导航而非打开新窗口
+                try {
+                    if (!window.__glassReader_window_open_overridden) {
+                        window.__glassReader_window_open_overridden = true;
+                        const _open = window.open;
+                        window.open = function(url, name, specs) {
+                            try {
+                                if (!url) return null;
+                                // 相对或绝对 URL 直接导航
+                                window.location.href = String(url);
+                                return window;
+                            } catch (e) {
+                                try { return _open.call(window, url, name, specs); } catch (err) { return null; }
+                            }
+                        };
+                    }
+                } catch (e) {}
+
+                // 事件委托：拦截含 target="_blank" 的点击或具备外部打开意图的链接
+                try {
+                    if (!window.__glassReader_click_handler_installed) {
+                        window.__glassReader_click_handler_installed = true;
+                        document.addEventListener('click', (ev) => {
+                            try {
+                                const el = ev.target && (ev.target.closest ? ev.target.closest('a') : null);
+                                if (!el || el.tagName !== 'A') return;
+                                const target = (el.getAttribute && el.getAttribute('target')) || el.target;
+                                const href = el.getAttribute && el.getAttribute('href');
+                                if (!href) return;
+
+                                // 若标记为在新窗口打开，阻止并在当前窗口打开
+                                if (String(target || '').toLowerCase() === '_blank') {
+                                    ev.preventDefault();
+                                    try { el.removeAttribute('target'); } catch (e) {}
+                                    window.location.href = href;
+                                }
+                            } catch (e) {}
+                        }, true);
+                    }
+                } catch (e) {}
+            } catch (err) { }
+        })(); `);
     } catch (e) {
         try { console.error('[rule:default] apply failed', e); } catch (err) { }
     }
