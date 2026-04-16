@@ -150,6 +150,8 @@ export default function main(helper) {
 
             runJs && runJs(keyScript);
         } catch (e) { }
+
+
     } catch (e) {
         try { console.error('[rule:default] apply failed', e); } catch (err) { }
     }

@@ -1412,6 +1412,40 @@ watch(
     applyLocalReaderStyles();
   }
 );
+
+// 修复：切换 tab 后若开启自动滚动，清理暂停标记并重新同步自动滚动
+watch(
+  () => activeTabId.value,
+  async (newId, oldId) => {
+    try {
+      // 重置本地阅读器的用户交互暂停标记，使鼠标点击不会永久阻止自动滚动
+      localUserInteractingAt = null;
+      // 停止并重新启动本地 auto-scroll（如果适用）以恢复状态
+      try {
+        stopLocalReaderAutoScroll();
+      } catch (e) {}
+      try {
+        syncLocalReaderAutoScroll();
+      } catch (e) {}
+
+      // 对 webview 注入脚本，清理页面内可能设置的自动滚动暂停标记并重新同步
+      try {
+        const clearPaused = `(() => {
+          try {
+            if (window.__glassReaderAutoScrollPaused) window.__glassReaderAutoScrollPaused = false;
+          } catch(e) {}
+          return true;
+        })();`;
+        // 只针对当前激活 tab 注入以避免影响其它 tab
+        runWebviewJS(clearPaused, newId);
+        // 重新同步注入（会根据 settings 决定是否重启 auto-scroll）
+        try {
+          syncWebviewAutoScroll(newId);
+        } catch (e) {}
+      } catch (e) {}
+    } catch (e) {}
+  }
+);
 watch(
   () => settings.forceReaderTextColor,
   (v) => {

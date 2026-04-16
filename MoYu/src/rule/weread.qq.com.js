@@ -70,31 +70,53 @@ export default function main(helper) {
         //     try { console.error('[weread.rule] runCss error', e); } catch (err) { }
         // }
 
-        // 参考 inject.js：注入页面函数以实现：切换下一章、监听选区、页面加载检测以及容器滚动监听
-        // 说明：此注入把一组函数挂载到页面 `window` 下，便于在页面内直接调用或从渲染器触发。
-        runJs && runJs(`(function(){
+        // 将一组辅助函数注入到页面全局，并自动安装自动翻页逻辑（更可靠）
+        runJs && runJs(`(function () {
             try {
                 if (window.__glassReaderInjected) return true;
                 window.__glassReaderInjected = true;
 
-                // 将函数暴露到页面全局（如已存在则不覆盖）
                 try { window.isPageLoading = window.isPageLoading || ${fnToStr(isPageLoading)}; } catch (e) {}
                 try { window.fireKeyEvent = window.fireKeyEvent || ${fnToStr(fireKeyEvent)}; } catch (e) {}
+                try { window.__performNextNow = window.__performNextNow || ${fnToStr(__performNextNow)}; } catch (e) {}
                 try { window.nextChapter = window.nextChapter || ${fnToStr(nextChapter)}; } catch (e) {}
                 try { window.installSelectionWatcher = window.installSelectionWatcher || ${fnToStr(installSelectionWatcher)}; } catch (e) {}
                 try { window.getSelectionState = window.getSelectionState || ${fnToStr(getSelectionState)}; } catch (e) {}
                 try { window.attachAutoNext = window.attachAutoNext || ${fnToStr(attachAutoNext)}; } catch (e) {}
 
-                // 自动启用
-                try { (window.installSelectionWatcher || function(){} )(); } catch (e) {}
-                try { (window.attachAutoNext || function(){} )(); } catch (e) {}
-
-                try { console.log('[glassreader] inject ok'); } catch (e) {}
-            } catch (e) {
-                try { console.error('[glassreader] inject error', e); } catch (e) {}
-            }
+                // 自动启用选区监听与自动翻页
+                try { (window.installSelectionWatcher || function() {})(); } catch (e) {}
+                try { (window.attachAutoNext || function() {})(); } catch (e) {}
+            } catch (e) {}
             return true;
         })();`);
+
+
+        // 参考 inject.js：注入页面函数以实现：切换下一章、监听选区、页面加载检测以及容器滚动监听
+        // 说明：此注入把一组函数挂载到页面 `window` 下，便于在页面内直接调用或从渲染器触发。
+        // runJs && runJs(`(function () {
+        //     try {
+        //         if (window.__glassReaderInjected) return true;
+        //         window.__glassReaderInjected = true;
+
+        //         // 将函数暴露到页面全局（如已存在则不覆盖）
+        //         try { window.isPageLoading = window.isPageLoading || ${fnToStr(isPageLoading)}; } catch (e) {}
+        //         try { window.fireKeyEvent = window.fireKeyEvent || ${fnToStr(fireKeyEvent)}; } catch (e) {}
+        //         try { window.nextChapter = window.nextChapter || ${fnToStr(nextChapter)}; } catch (e) {}
+        //         try { window.installSelectionWatcher = window.installSelectionWatcher || ${fnToStr(installSelectionWatcher)}; } catch (e) {}
+        //         try { window.getSelectionState = window.getSelectionState || ${fnToStr(getSelectionState)}; } catch (e) {}
+        //         try { window.attachAutoNext = window.attachAutoNext || ${fnToStr(attachAutoNext)}; } catch (e) {}
+
+        //         // 自动启用
+        //         try { (window.installSelectionWatcher || function(){} )(); } catch (e) {}
+        //         try { (window.attachAutoNext || function(){} )(); } catch (e) {}
+
+        //         try { console.log('[glassreader] inject ok'); } catch (e) {}
+        //     } catch (e) {
+        //         try { console.error('[glassreader] inject error', e); } catch (e) {}
+        //     }
+        //     return true;
+        // })();`);
 
     } catch (err) {
         try { console.error('[weread.rule] unexpected error', err); } catch (e) { }
@@ -199,7 +221,7 @@ function __performNextNow() {
 function nextChapter(opts) {
     try {
         if (window.__glassReaderNextPending) return false;
-        var delay = (opts && typeof opts.delayMs === 'number') ? opts.delayMs : (window.__glassReaderNextDelayMs || 3000);
+        var delay = (opts && typeof opts.delayMs === 'number') ? opts.delayMs : (window.__glassReaderNextDelayMs || 1000);
         if (delay && delay > 0) {
             window.__glassReaderNextPending = setTimeout(function () {
                 try { __performNextNow(); } catch (e) { }
