@@ -16,6 +16,8 @@ let isQuitting = false
 let autoHideMonitor = null
 let lastVisibleBounds = null
 let currentSettings = { ...defaultSettings }
+// 临时置顶计时器（用于 autoHide 自动显示时短暂将窗口置于顶层）
+let _tempTopTimer = null
 
 // 不持久化的临时字段（例如窗口透明度、临时 UI 状态等）
 const nonPersistentKeys = new Set([
@@ -269,7 +271,12 @@ function hideMainWindow() {
  * 显示主窗口，可选择是否获取焦点
  * 参数: focus - 是否获取焦点（默认 true）
  */
-function showMainWindow(focus = true) {
+/**
+ * 显示主窗口，可选择是否获取焦点；可传入 { tempTop: true } 实现短暂置顶
+ * 参数: focus - 是否获取焦点（默认 true）
+ *       opts.tempTop - 若为 true，则短暂将窗口置于顶层（不持久化 alwaysOnTop 设置）
+ */
+function showMainWindow(focus = true, opts = {}) {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return
     }
@@ -289,6 +296,30 @@ function showMainWindow(focus = true) {
     if (focus) {
         mainWindow.focus()
     }
+
+    // 如果要求短暂置顶：在显示时先临时置顶一小段时间，然后恢复到当前设置的 alwaysOnTop
+    try {
+        if (opts && opts.tempTop) {
+            // 清理之前的计时器
+            if (_tempTopTimer) {
+                clearTimeout(_tempTopTimer)
+                _tempTopTimer = null
+            }
+            try {
+                // 先将窗口临时置顶
+                mainWindow.setAlwaysOnTop(true, 'screen-saver')
+            } catch (e) {}
+            // 在短时间后恢复为用户配置的置顶状态
+            _tempTopTimer = setTimeout(() => {
+                try {
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.setAlwaysOnTop(currentSettings.alwaysOnTop, 'screen-saver')
+                    }
+                } catch (e) {}
+                _tempTopTimer = null
+            }, 800)
+        }
+    } catch (e) {}
 
     refreshTrayMenu()
 }
@@ -332,7 +363,8 @@ function refreshAutoHideMonitor() {
         }
 
         if (isPointInsideBounds(cursorPoint, trackedBounds, 6)) {
-            showMainWindow(false)
+            // 使用短暂置顶以确保在层级切换时能被用户看到（不持久化 alwaysOnTop）
+            showMainWindow(false, { tempTop: true })
         }
     }, 180)
 }
