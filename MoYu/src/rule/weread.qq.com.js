@@ -85,8 +85,9 @@ export default function main(helper) {
                 try { window.attachAutoNext = window.attachAutoNext || ${fnToStr(attachAutoNext)}; } catch (e) {}
 
                 // 自动启用选区监听与自动翻页
-                try { (window.installSelectionWatcher || function() {})(); } catch (e) {}
-                try { (window.attachAutoNext || function() {})(); } catch (e) {}
+                // 延迟安装选区监听器与自动翻页以确保页面自身脚本先执行完毕，避免被覆盖或冲突
+                try { setTimeout(function(){ try { (window.installSelectionWatcher || function() {})(); } catch (e) {} }, 600); } catch (e) {}
+                try { setTimeout(function(){ try { (window.attachAutoNext || function() {})(); } catch (e) {} }, 800); } catch (e) {}
             } catch (e) {}
             return true;
         })();`);
