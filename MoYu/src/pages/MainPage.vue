@@ -1274,6 +1274,16 @@ function handleWebviewDomReady(e) {
     syncLocalReaderAutoScroll();
   } catch (e) {}
 
+  // 如果开启手机模式，尝试注入 viewport meta（若页面没有的话）
+  try {
+    if (settings && settings.mobileMode) {
+      const vpScript = `(function(){try{if(!document.querySelector('meta[name="viewport"]')){var m=document.createElement('meta');m.name='viewport';m.content='width=device-width, initial-scale=1.0, maximum-scale=1.0';document.head.appendChild(m);}return true;}catch(e){return false;}})();`;
+      try {
+        runWebviewJS(vpScript, tabId);
+      } catch (e) {}
+    }
+  } catch (e) {}
+
   // 尝试读取并同步当前页面缩放比例（如果是激活 tab，则更新全局 siteZoom）
   try {
     if (w && typeof w.getZoomFactor === 'function') {
@@ -1443,6 +1453,33 @@ watch(
           syncWebviewAutoScroll(newId);
         } catch (e) {}
       } catch (e) {}
+    } catch (e) {}
+  }
+);
+
+// 监听手机模式：切换 userAgent 并对已挂载的 webview 触发 reload
+watch(
+  () => settings.mobileMode,
+  (v) => {
+    try {
+      userAgent.value = v
+        ? 'Mozilla/5.0 (Linux; Android 10; Mobile; rv:109.0) Gecko/109.0 Firefox/109.0'
+        : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36';
+
+      // 更新已挂载的 webview 属性并 reload，以确保新的 UA 生效
+      for (const tid in webviewRefs) {
+        try {
+          const w = webviewRefs[tid];
+          if (!w) continue;
+          try {
+            if (typeof w.setAttribute === 'function') w.setAttribute('useragent', userAgent.value);
+          } catch (e) {}
+          try {
+            if (typeof w.reload === 'function') w.reload();
+            else if (typeof w.loadURL === 'function') w.loadURL(w.getURL ? w.getURL() : w.src);
+          } catch (e) {}
+        } catch (e) {}
+      }
     } catch (e) {}
   }
 );

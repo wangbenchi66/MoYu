@@ -308,18 +308,18 @@ function showMainWindow(focus = true, opts = {}) {
             try {
                 // 先将窗口临时置顶
                 mainWindow.setAlwaysOnTop(true, 'screen-saver')
-            } catch (e) {}
+            } catch (e) { }
             // 在短时间后恢复为用户配置的置顶状态
             _tempTopTimer = setTimeout(() => {
                 try {
                     if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.setAlwaysOnTop(currentSettings.alwaysOnTop, 'screen-saver')
                     }
-                } catch (e) {}
+                } catch (e) { }
                 _tempTopTimer = null
             }, 800)
         }
-    } catch (e) {}
+    } catch (e) { }
 
     refreshTrayMenu()
 }
@@ -714,7 +714,7 @@ function createWindow() {
         width: initialW,
         height: initialH,
         minWidth: 280,
-        minHeight: 280,
+        minHeight: 200,
         frame: false,
         // 创建为透明窗口，页面透明区域将透出桌面（CSS 控制具体显示效果）
         transparent: true,
