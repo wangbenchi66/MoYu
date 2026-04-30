@@ -381,7 +381,7 @@ function scheduleSettingsSync() {
  */
 function patchSetting(key, value) {
     if (key === 'transparency') {
-        const nextVal = Math.max(0, Math.min(85, Number(value) || 0))
+        const nextVal = Math.max(0, Math.min(100, Number(value) || 0))
         settings[key] = nextVal
         console.log('[renderer] patchSetting transparency ->', nextVal, { hasSetTransparency: !!desktopApi?.setTransparency })
         if (desktopApi?.log) {
@@ -391,16 +391,17 @@ function patchSetting(key, value) {
         }
         // 优先调用主进程的快捷接口立即应用透明度，保证滑块有即时视觉反馈
         if (desktopApi?.setTransparency) {
-            // 发快速 IPC 以立即生效
             desktopApi.setTransparency(nextVal).then((nextSettings) => {
                 if (nextSettings && typeof nextSettings === 'object') {
-                    Object.assign(settings, nextSettings)
+                    // 不用主进程返回值覆盖 transparency，避免异步回调把本地状态回退
+                    const { transparency: _t, ...rest } = nextSettings
+                    Object.assign(settings, rest)
                 }
-                // 额外调用 updateSettings 以确保持久化和其它设置同步
                 if (desktopApi?.updateSettings) {
                     desktopApi.updateSettings({ ...settings }).then((ns) => {
                         if (ns && typeof ns === 'object') {
-                            Object.assign(settings, ns)
+                            const { transparency: _t2, ...rest2 } = ns
+                            Object.assign(settings, rest2)
                         }
                     }).catch(() => {
                         statusMessage.value = '设置同步失败，请重试'

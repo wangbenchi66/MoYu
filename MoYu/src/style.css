@@ -23,7 +23,7 @@
   --scrollbar-thumb-radius: 6px;
   --scrollbar-thumb-shadow: 0 6px 12px rgba(60,68,80,0.04);
   /* 顶部与标签栏尺寸：可通过变量微调以减小 UI 体积 */
-  --topbar-height: 32px;
+  --topbar-height: 28px;
   --topbar-padding-vertical: 6px;
   --topbar-padding-horizontal: 10px;
   --tab-height: 28px;
@@ -229,6 +229,14 @@ iframe {
   color: var(--primary);
   border-color: rgba(47, 120, 255, 0.34);
   background: rgba(47, 120, 255, 0.08);
+}
+
+/* 标题栏所有功能切换按钮的"已开启"状态 */
+.topbar .window-controls .control-btn.active {
+  color: var(--primary) !important;
+}
+.topbar .window-controls .control-btn.active .el-icon {
+  color: var(--primary) !important;
 }
 
 .brand-block {
@@ -1501,7 +1509,8 @@ iframe {
   transition: opacity 0.18s ease;
   opacity: 0;
   pointer-events: none;
-  /* 保持占位高度以避免布局跳动 */
+  /* 即使隐藏，标题栏区域仍可拖动窗口（native 级别，不依赖 pointer-events）*/
+  -webkit-app-region: drag;
 }
 
 /* topbar 可见时显示 */
@@ -1510,6 +1519,7 @@ iframe {
   opacity: 1;
   pointer-events: auto;
   z-index: 10000;
+  -webkit-app-region: no-drag; /* 可见时由内部 title-drag 区控制拖动 */
 }
 
 /* tabbar 可见时显示（紧贴 topbar） */

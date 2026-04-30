@@ -89,7 +89,7 @@ function normalizeSettings(partial = {}) {
     return {
         ...defaultSettings,
         ...partial,
-        transparency: clamp(Number(partial.transparency ?? defaultSettings.transparency), 0, 85),
+        transparency: clamp(Number(partial.transparency ?? defaultSettings.transparency), 0, 100),
         showInTaskbar: Boolean(partial.showInTaskbar ?? defaultSettings.showInTaskbar),
         autoHide: Boolean(partial.autoHide ?? defaultSettings.autoHide),
         showTabBar: Boolean(partial.showTabBar ?? defaultSettings.showTabBar),

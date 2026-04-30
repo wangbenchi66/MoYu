@@ -16,7 +16,7 @@ const defaultSettings = {
     autoHide: false,
 
     // 是否显示标签栏（标签页）
-    showTabBar: true,
+    showTabBar: false,
 
     // 无图模式：在网页中尽量隐藏或不加载图片资源
     noImageMode: false,

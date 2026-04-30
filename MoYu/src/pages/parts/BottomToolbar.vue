@@ -5,7 +5,7 @@
 // - 渲染底部工具栏、处理溢出和弹层位置
 // - 响应工具栏按钮（缩放、刷新、自动滚动、字号、无图等）并通过 patchSetting 更新设置
 // - 提供局部全局快捷键处理（onGlobalKeydown），仅在窗口/鼠标在窗内时生效，且避免与渲染进程重复处理
-import { ArrowLeft, ArrowRight, Close, Hide, Refresh, View, ZoomIn } from '@element-plus/icons-vue';
+import { ArrowLeft, ArrowRight, Brush, Close, DCaret, Hide, Menu, Picture, Refresh, TopRight, View, ZoomIn } from '@element-plus/icons-vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import BaseButton from '../../components/BaseButton.vue';
 
@@ -21,6 +21,7 @@ const props = defineProps({
   resetZoom: Function,
   toggleToolbarPinned: Function,
   disableToolbar: Function,
+  openExternal: Function,
   toolbarVisible: Boolean,
   toolbarPinned: Boolean,
   toolbarDisabled: Boolean,
@@ -578,7 +579,7 @@ onBeforeUnmount(() => {
             :class="{ on: props.settings.forceReaderTextColor }"
             @click="() => props.patchSetting('forceReaderTextColor', !props.settings.forceReaderTextColor)"
             title="文字颜色"
-            >A</BaseButton
+            ><el-icon><Brush /></el-icon></BaseButton
           >
 
           <div
@@ -662,7 +663,7 @@ onBeforeUnmount(() => {
           :class="{ on: props.settings.noImageMode }"
           @click="() => props.patchSetting('noImageMode', !props.settings.noImageMode)"
           :title="props.settings.noImageMode ? '显示图片' : '隐藏图片'"
-          >🖼</BaseButton
+          ><el-icon><Picture /></el-icon></BaseButton
         >
         <BaseButton
           class="icon-btn icon-only overflow-candidate"
@@ -671,7 +672,7 @@ onBeforeUnmount(() => {
           :class="{ on: props.settings.showScrollbars }"
           @click="() => props.patchSetting('showScrollbars', !props.settings.showScrollbars)"
           :title="props.settings.showScrollbars ? '隐藏滚动条' : '显示滚动条'"
-          >≡</BaseButton
+          ><el-icon><Menu /></el-icon></BaseButton
         >
 
         <div
@@ -685,7 +686,7 @@ onBeforeUnmount(() => {
             :class="{ on: props.settings.autoScrollEnabled }"
             @click="() => props.patchSetting('autoScrollEnabled', !props.settings.autoScrollEnabled)"
             :title="props.settings.autoScrollEnabled ? '关闭自动滚动' : '开启自动滚动'"
-            >⇳</BaseButton
+            ><el-icon><DCaret /></el-icon></BaseButton
           >
           <!-- 数值标签改为在弹出层与滑块同行显示（见下方 range-row 内的标签） -->
           <div
@@ -746,6 +747,14 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="toolbar-right">
+        <BaseButton
+          v-if="props.openExternal"
+          class="icon-btn icon-only"
+          title="在浏览器中打开"
+          @click="props.openExternal">
+          <el-icon><TopRight /></el-icon>
+        </BaseButton>
+
         <div class="toggle-with-pop">
           <BaseButton
             class="icon-btn"
@@ -840,12 +849,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* toolbar container (overlay/docked) */
+/* toolbar container — 右下角浮动胶囊，不铺满 */
 .bottom-toolbar-container.overlay {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 8px;
+  right: 16px;
+  left: auto;
+  bottom: 14px;
+  width: max-content;
+  max-width: calc(100% - 32px);
   /* 保证容器能接收 hover，并置于 webview 之上 */
   z-index: 10001;
   pointer-events: auto;
@@ -853,47 +864,53 @@ onBeforeUnmount(() => {
 
 .bottom-toolbar-container.docked {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 8px;
+  right: 16px;
+  left: auto;
+  bottom: 14px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
   z-index: 10001;
   pointer-events: auto;
 }
 
 .bottom-toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: 4px;
+  width: max-content;
+  max-width: 100%;
   box-sizing: border-box;
-  padding: 4px 0;
-  border-radius: 0;
+  padding: 4px 8px;
+  border-radius: 20px;
   overflow: visible;
-  /* 提升到较高层级，避免被 webview 或热区遮挡 */
   position: relative;
   z-index: 10002;
-  /* 使用 shell alpha 与标题栏一致，便于 fullWindowTransparent 生效 */
-  background: rgba(255, 255, 255, var(--shell-alpha, 1));
-  backdrop-filter: blur(8px);
-  box-shadow: 0 6px 18px rgba(16, 23, 32, 0.08);
+  /* 固定背景：不随 fullWindowTransparent / pageTransparentMode 消失，确保工具栏始终可见 */
+  background: rgba(240, 242, 247, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 20px rgba(16, 23, 32, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.7);
 }
 
-/* external 模式：将工具栏作为页面流的一部分渲染（位于父容器内，非 fixed/absolute） */
+/* external 模式（App.vue 外挂渲染） */
 .bottom-toolbar-container.external {
-  position: static;
+  position: absolute;
+  right: 16px;
   left: auto;
-  right: auto;
-  bottom: auto;
-  z-index: auto;
+  bottom: 14px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  z-index: 10001;
   pointer-events: auto;
 }
 
 .bottom-toolbar-container.external .bottom-toolbar {
   position: relative;
   z-index: 1;
-  background: rgba(255, 255, 255, var(--shell-alpha, 1));
-  box-shadow: 0 6px 18px rgba(16, 23, 32, 0.04);
+  background: rgba(240, 242, 247, 0.92);
+  box-shadow: 0 4px 16px rgba(16, 23, 32, 0.1);
 }
 
 .bottom-toolbar-container.external .toolbar-handle {
@@ -901,32 +918,38 @@ onBeforeUnmount(() => {
 }
 
 .bottom-toolbar.hidden {
-  transform: translateY(calc(100% + 8px));
+  transform: translateY(calc(100% + 20px));
   opacity: 0;
   pointer-events: none;
 }
 
-/* 悬浮手柄 */
+/* 悬浮手柄（右下角） */
 .toolbar-handle {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 0;
   bottom: 6px;
-  width: 64px;
-  height: 10px;
-  border-radius: 8px;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.04));
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   cursor: pointer;
-  /* 确保手柄始终在最上层，能被鼠标触达 */
   z-index: 10005;
-  box-shadow: 0 10px 24px rgba(16, 23, 32, 0.08);
-  transition:
-    transform 150ms ease,
-    opacity 150ms;
+  box-shadow: 0 4px 12px rgba(16, 23, 32, 0.12);
+  transition: transform 150ms ease, opacity 150ms, box-shadow 150ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.toolbar-handle::before {
+  content: '≡';
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.4);
+  line-height: 1;
 }
 .toolbar-handle:hover {
-  transform: translateX(-50%) translateY(-4px);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(16, 23, 32, 0.16);
   opacity: 1;
 }
 
@@ -936,7 +959,7 @@ onBeforeUnmount(() => {
   pointer-events: auto;
 }
 .bottom-toolbar-container.no-hover:hover .bottom-toolbar.hidden {
-  transform: translateY(calc(100% + 8px));
+  transform: translateY(calc(100% + 20px));
   opacity: 0;
   pointer-events: none;
 }
@@ -946,7 +969,7 @@ onBeforeUnmount(() => {
 .toolbar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
 }
 .zoom-label {
   min-width: 48px;

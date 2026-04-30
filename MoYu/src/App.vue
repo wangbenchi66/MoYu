@@ -24,6 +24,7 @@ const {
   rightToggleKeys,
   tabs,
   activeTabId,
+  activeTab,
   selectTab,
   closeTab,
   addNewTab,
@@ -69,6 +70,12 @@ const toolbarProps = computed(() => {
     resetZoom: mp && mp.resetZoom ? mp.resetZoom : () => {},
     toggleToolbarPinned: mp && mp.toggleToolbarPinned ? mp.toggleToolbarPinned : () => {},
     disableToolbar: mp && mp.disableToolbar ? mp.disableToolbar : () => {},
+    openExternal: () => {
+      try {
+        const url = activeTab.value?.url;
+        if (url) desktopApi?.openExternal(url);
+      } catch (e) {}
+    },
     toolbarVisible: eff ? (eff.visible ?? false) : settings.toolbarVisible,
     toolbarPinned: eff ? (eff.pinned ?? false) : settings.toolbarPinned,
     toolbarDisabled: eff ? (eff.disabled ?? false) : settings.toolbarDisabled,
@@ -839,7 +846,9 @@ function localShortcutHandler(e) {
         :handleMinimize="handleMinimize"
         :handleMaximize="handleMaximize"
         :handleClose="handleClose"
-        :goHome="goHome" />
+        :goHome="goHome"
+        :activeTab="activeTab"
+        :statusMessage="statusMessage" />
     </div>
     <template v-else>
       <TopBar
@@ -852,7 +861,9 @@ function localShortcutHandler(e) {
         :handleMinimize="handleMinimize"
         :handleMaximize="handleMaximize"
         :handleClose="handleClose"
-        :goHome="goHome" />
+        :goHome="goHome"
+        :activeTab="activeTab"
+        :statusMessage="statusMessage" />
     </template>
 
     <TabBar
@@ -900,7 +911,7 @@ function localShortcutHandler(e) {
               class="slider"
               type="range"
               min="0"
-              max="85"
+              max="100"
               @input="handleTransparencyInput($event)" />
           </section>
 
@@ -1046,54 +1057,91 @@ function localShortcutHandler(e) {
 </template>
 
 <style scoped>
-/* Settings modal: 更紧凑的内间距与控件高度，保持原有圆角与投影 */
+/* 设置面板：摸鱼风格，紧凑低调 */
 .settings-modal {
-  width: min(640px, 96%);
-  padding: 12px 14px;
+  width: min(480px, 94%);
+  padding: 8px 10px;
   box-sizing: border-box;
+  font-size: 12px;
 }
 .settings-modal .settings-header {
-  padding-bottom: 8px;
+  padding-bottom: 6px;
+}
+.settings-modal .settings-header h2 {
+  font-size: 13px !important;
+  margin: 0 0 2px !important;
+}
+.settings-modal .settings-header p {
+  font-size: 11px !important;
+  margin: 0 !important;
+  color: var(--muted);
 }
 .section-panel {
-  padding: 10px;
+  padding: 6px 8px;
+  margin-top: 6px !important;
+}
+.settings-modal :deep(.settings-block) {
+  margin-top: 6px;
+}
+.settings-modal :deep(.toggle-grid) {
+  margin-top: 6px;
+  gap: 6px;
+}
+.settings-modal :deep(.toggle-column) {
+  gap: 0;
+}
+.settings-modal :deep(.toggle-column .toggle-row),
+.settings-modal :deep(.toggle-column .el-button.toggle-row) {
+  margin-bottom: 2px !important;
+  margin-top: 0 !important;
+}
+.settings-modal :deep(.toggle-title + .toggle-row),
+.settings-modal :deep(.toggle-title + .el-button.toggle-row) {
+  margin-top: 4px !important;
+}
+.settings-modal :deep(.slider) {
+  margin-top: 6px;
 }
 .toggle-row {
-  min-height: 42px;
-  padding: 8px 10px;
+  min-height: 30px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.toggle-grid {
+  gap: 6px;
+}
+.toggle-title {
+  font-size: 11px;
+  margin-bottom: 4px;
 }
 .text-field {
-  height: 36px;
-  padding: 6px 8px;
+  height: 28px;
+  padding: 4px 6px;
+  font-size: 12px;
 }
-/* 新增：快捷键行布局 */
 .shortcut-grid {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 5px;
 }
 .shortcut-title {
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   font-weight: 600;
+  font-size: 11px;
 }
-/* 透明度显示在滑块区域 */
 .slider-value {
-  font-size: 13px;
+  font-size: 11px;
   color: var(--el-text-color-secondary);
 }
-/* 快捷键编辑区域在窄屏下换行显示，避免按钮挤在一起 */
-@media (max-width: 720px) {
+@media (max-width: 600px) {
   .settings-modal {
-    width: 94%;
-    padding: 10px;
-  }
-  .shortcut-grid {
-    gap: 8px;
+    width: 96%;
+    padding: 6px 8px;
   }
   .shortcut-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 6px;
+    gap: 4px;
   }
   .shortcut-row .shortcut-input {
     width: 100%;
