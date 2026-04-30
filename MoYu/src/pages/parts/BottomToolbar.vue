@@ -376,6 +376,36 @@ function toggleAutoScroll() {
   } catch (e) {}
 }
 
+// 滚轮操作：缩放
+function onZoomWheel(e) {
+  try {
+    e.preventDefault();
+    if (e.deltaY < 0) props.zoomIn && props.zoomIn();
+    else props.zoomOut && props.zoomOut();
+  } catch (e) {}
+}
+
+// 滚轮操作：字号缩放
+function onFontWheel(e) {
+  try {
+    e.preventDefault();
+    const cur = Number(props.settings.readerFontScale || 100);
+    const delta = e.deltaY < 0 ? 5 : -5;
+    onFontScaleInput(Math.max(80, Math.min(160, cur + delta)));
+  } catch (e) {}
+}
+
+// 滚轮操作：自动滚动速度（未开启时先开启）
+function onAutoScrollWheel(e) {
+  try {
+    e.preventDefault();
+    if (!props.settings.autoScrollEnabled) {
+      props.patchSetting('autoScrollEnabled', true);
+    }
+    adjustAutoSpeed(e.deltaY < 0 ? 3 : -3);
+  } catch (e) {}
+}
+
 function adjustAutoSpeed(delta) {
   try {
     // 仅在自动滚动已开启时调整速度
@@ -568,94 +598,37 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="toolbar-center">
-        <div
-          class="toggle-with-pop overflow-candidate"
-          data-id="color"
-          data-priority="4"
-          @mouseenter="() => showPop('color', props.settings.readerTextColor, 0, 1)"
-          @mouseleave="onToggleMouseLeave">
-          <BaseButton
-            class="icon-btn icon-only"
-            :class="{ on: props.settings.forceReaderTextColor }"
-            @click="() => props.patchSetting('forceReaderTextColor', !props.settings.forceReaderTextColor)"
-            title="文字颜色"
-            ><el-icon><Brush /></el-icon></BaseButton
-          >
-
-          <div
-            class="hover-pop"
-            :class="{ visible: popActiveKey === 'color' || draggingKey === 'color' }"
-            @mouseenter="onPopMouseEnter"
-            @mouseleave="onPopMouseLeave">
-            <div class="range-row">
-              <input
-                type="color"
-                :value="props.settings.readerTextColor"
-                @input="onReaderColorInput" />
-            </div>
-          </div>
-        </div>
-
-        <!-- 字号控制 -->
-        <div
-          class="toggle-with-pop overflow-candidate"
-          data-id="font"
-          data-priority="4"
-          @mouseenter="() => showPop('font', props.settings.readerFontScale, 80, 160)"
-          @mouseleave="onToggleMouseLeave">
+        <!-- 字号：点击开关，滚轮调大小，开启时显示当前倍率 -->
+        <div class="btn-with-badge overflow-candidate" data-id="font" data-priority="4">
           <BaseButton
             class="icon-btn icon-only"
             :class="{ on: props.settings.forceReaderFont }"
             @click="() => props.patchSetting('forceReaderFont', !props.settings.forceReaderFont)"
-            title="字号"
+            @wheel.prevent="onFontWheel"
+            :title="props.settings.forceReaderFont
+              ? `字号 ${Math.round(props.settings.readerFontScale)}%（滚轮调整，点击关闭）`
+              : '字号（点击开启，滚轮调整大小）'"
             >字</BaseButton
           >
-          <!-- 数值标签改为在弹出层与滑块同行显示（见下方 range-row 内的标签） -->
-
-          <div
-            class="hover-pop"
-            :class="{ visible: popActiveKey === 'font' || draggingKey === 'font' }"
-            @mouseenter="onPopMouseEnter"
-            @mouseleave="onPopMouseLeave">
-            <div class="panel">
-              <div class="panel-header">
-                <div class="panel-title">字号缩放</div>
-                <div class="panel-actions">
-                  <BaseButton
-                    class="mini-reset-icon"
-                    title="默认"
-                    @click="setFontDefault"
-                    >默认</BaseButton
-                  >
-                </div>
-              </div>
-              <div class="panel-body">
-                <div class="range-row">
-                  <el-slider
-                    ref="fontRangeRef"
-                    data-test="font-range"
-                    class="mini-range"
-                    :model-value="props.settings.readerFontScale"
-                    :min="80"
-                    :max="160"
-                    @input="onFontScaleInput"
-                    @change="onFontScaleInput"
-                    @update:modelValue="onFontScaleInput"
-                    @pointerdown="() => onRangePointerDown('font')" />
-                  <div
-                    class="range-anchor"
-                    title="回到默认"
-                    @click="setFontDefault"
-                    :style="{ left: computeLeftFromInput('font', 100, 80, 160) }"></div>
-                </div>
-                <div class="panel-row">
-                  <span>当前 {{ Math.round(props.settings.readerFontScale) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <span v-if="props.settings.forceReaderFont" class="val-badge">{{ Math.round(props.settings.readerFontScale) }}</span>
         </div>
 
+        <!-- 自动滚动：点击开关，滚轮调速，开启时显示速度 -->
+        <div class="btn-with-badge overflow-candidate" data-id="auto" data-priority="4">
+          <BaseButton
+            class="icon-btn icon-only"
+            :class="{ on: props.settings.autoScrollEnabled }"
+            @click="toggleAutoScroll"
+            @wheel.prevent="onAutoScrollWheel"
+            :title="props.settings.autoScrollEnabled
+              ? `自动滚动 速度${Math.round(props.settings.autoScrollSpeed)}（滚轮调速，点击关闭）`
+              : '自动滚动（点击开启，滚轮调速）'"
+            ><el-icon><DCaret /></el-icon></BaseButton
+          >
+          <span v-if="props.settings.autoScrollEnabled" class="val-badge">{{ Math.round(props.settings.autoScrollSpeed) }}</span>
+        </div>
+
+        <!-- 图片：切换隐藏/显示 -->
         <BaseButton
           class="icon-btn icon-only overflow-candidate"
           data-id="noImage"
@@ -665,85 +638,42 @@ onBeforeUnmount(() => {
           :title="props.settings.noImageMode ? '显示图片' : '隐藏图片'"
           ><el-icon><Picture /></el-icon></BaseButton
         >
+
+        <!-- 文字颜色（溢出优先级低） -->
+        <div
+          class="toggle-with-pop overflow-candidate"
+          data-id="color"
+          data-priority="5"
+          @mouseenter="() => showPop('color', props.settings.readerTextColor, 0, 1)"
+          @mouseleave="onToggleMouseLeave">
+          <BaseButton
+            class="icon-btn icon-only"
+            :class="{ on: props.settings.forceReaderTextColor }"
+            @click="() => props.patchSetting('forceReaderTextColor', !props.settings.forceReaderTextColor)"
+            title="文字颜色"
+            ><el-icon><Brush /></el-icon></BaseButton
+          >
+          <div
+            class="hover-pop"
+            :class="{ visible: popActiveKey === 'color' || draggingKey === 'color' }"
+            @mouseenter="onPopMouseEnter"
+            @mouseleave="onPopMouseLeave">
+            <div class="mini-pop-panel">
+              <input type="color" :value="props.settings.readerTextColor" @input="onReaderColorInput" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 滚动条（溢出优先级低） -->
         <BaseButton
           class="icon-btn icon-only overflow-candidate"
           data-id="showScrollbars"
-          data-priority="3"
+          data-priority="5"
           :class="{ on: props.settings.showScrollbars }"
           @click="() => props.patchSetting('showScrollbars', !props.settings.showScrollbars)"
           :title="props.settings.showScrollbars ? '隐藏滚动条' : '显示滚动条'"
           ><el-icon><Menu /></el-icon></BaseButton
         >
-
-        <div
-          class="toggle-with-pop overflow-candidate"
-          data-id="auto"
-          data-priority="4"
-          @mouseenter="() => showPop('auto', props.settings.autoScrollSpeed, 5, 80)"
-          @mouseleave="onToggleMouseLeave">
-          <BaseButton
-            class="icon-btn icon-only"
-            :class="{ on: props.settings.autoScrollEnabled }"
-            @click="() => props.patchSetting('autoScrollEnabled', !props.settings.autoScrollEnabled)"
-            :title="props.settings.autoScrollEnabled ? '关闭自动滚动' : '开启自动滚动'"
-            ><el-icon><DCaret /></el-icon></BaseButton
-          >
-          <!-- 数值标签改为在弹出层与滑块同行显示（见下方 range-row 内的标签） -->
-          <div
-            class="hover-pop"
-            :class="{ visible: popActiveKey === 'auto' || draggingKey === 'auto' }"
-            @mouseenter="onPopMouseEnter"
-            @mouseleave="onPopMouseLeave">
-            <div class="panel">
-              <div class="panel-header">
-                <div class="panel-title">自动滚动</div>
-                <div class="panel-actions">
-                  <BaseButton
-                    class="mini-reset-icon"
-                    title="重置"
-                    @click="setAutoDefault"
-                    >重置</BaseButton
-                  >
-                </div>
-              </div>
-              <div class="panel-body">
-                <div class="range-row">
-                  <el-slider
-                    ref="autoRangeRef"
-                    data-test="auto-range"
-                    class="mini-range"
-                    :model-value="props.settings.autoScrollSpeed"
-                    :min="5"
-                    :max="80"
-                    @input="onAutoScrollSpeedInput"
-                    @change="onAutoScrollSpeedInput"
-                    @update:modelValue="onAutoScrollSpeedInput"
-                    @pointerdown="() => onRangePointerDown('auto')" />
-                </div>
-                <div class="panel-row">
-                  <span>速度 {{ Math.round(props.settings.autoScrollSpeed) }}</span>
-                  <BaseButton
-                    class="mini-reset-icon"
-                    :class="{ on: props.settings.autoScrollEnabled }"
-                    title="开启"
-                    @click="() => props.patchSetting('autoScrollEnabled', true)"
-                    >开启</BaseButton
-                  >
-                  <BaseButton
-                    class="mini-reset-icon"
-                    :class="{ on: !props.settings.autoScrollEnabled }"
-                    title="关闭"
-                    @click="() => props.patchSetting('autoScrollEnabled', false)"
-                    >关闭</BaseButton
-                  >
-                </div>
-                <div class="panel-row">
-                  <small style="color: var(--text-muted, #888)">快捷键：<strong>=</strong> 开/关 · <strong>[</strong> 慢 · <strong>]</strong> 快</small>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div class="toolbar-right">
@@ -755,48 +685,15 @@ onBeforeUnmount(() => {
           <el-icon><TopRight /></el-icon>
         </BaseButton>
 
-        <div class="toggle-with-pop">
+        <!-- 缩放：显示当前百分比，点击重置，滚轮调整 -->
+        <div class="btn-with-badge">
           <BaseButton
-            class="icon-btn"
-            title="缩放"
-            @mouseenter="() => showPop('zoom', Math.round(props.siteZoom * 100))"
-            @mouseleave="hidePopIfNotDragging">
-            <el-icon><ZoomIn /></el-icon>
+            class="icon-btn zoom-val-btn"
+            :title="`缩放 ${Math.round(props.siteZoom * 100)}%（滚轮调整，点击重置）`"
+            @click="props.resetZoom"
+            @wheel.prevent="onZoomWheel">
+            <span class="zoom-val">{{ Math.round(props.siteZoom * 100) }}%</span>
           </BaseButton>
-          <div
-            class="hover-pop"
-            :class="{ visible: popActiveKey === 'zoom' }"
-            @mouseenter="onPopMouseEnter"
-            @mouseleave="onPopMouseLeave">
-            <div class="panel">
-              <div class="panel-header">
-                <div class="panel-title">页面缩放</div>
-                <div class="panel-actions">
-                  <BaseButton
-                    class="mini-reset-icon"
-                    title="重置"
-                    @click="props.resetZoom"
-                    >重置</BaseButton
-                  >
-                </div>
-              </div>
-              <div class="panel-body">
-                <div class="panel-row">
-                  <BaseButton
-                    class="mini-reset-icon"
-                    @click="props.zoomOut"
-                    >-</BaseButton
-                  >
-                  <span style="min-width: 60px; text-align: center; display: inline-block">{{ Math.round(props.siteZoom * 100) }}%</span>
-                  <BaseButton
-                    class="mini-reset-icon"
-                    @click="props.zoomIn"
-                    >+</BaseButton
-                  >
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <BaseButton
@@ -825,9 +722,7 @@ onBeforeUnmount(() => {
           data-priority="1"
           @click="props.toggleToolbarPinned"
           :title="props.settings.toolbarPinned ? '切换到移入显示/移出隐藏' : '切换到始终显示'">
-          <component
-            :is="props.settings.toolbarPinned ? View : Hide"
-            style="width: 18px; height: 18px" />
+          <el-icon><component :is="props.settings.toolbarPinned ? View : Hide" /></el-icon>
         </BaseButton>
 
         <BaseButton
@@ -839,9 +734,7 @@ onBeforeUnmount(() => {
             props.disableToolbar ? props.disableToolbar() : (props.patchSetting('toolbarDisabled', true), props.patchSetting('toolbarVisible', false), props.patchSetting('toolbarPinned', false))
           "
           title="关闭工具栏（不再移入显示）">
-          <component
-            :is="Close"
-            style="width: 18px; height: 18px" />
+          <el-icon><Close /></el-icon>
         </BaseButton>
       </div>
     </div>
@@ -1056,36 +949,103 @@ onBeforeUnmount(() => {
   height: 28px;
 }
 
+/* 带角标的按钮容器 */
+.btn-with-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 数值角标（字号/滚动速度） */
+.val-badge {
+  position: absolute;
+  top: 1px;
+  right: 0px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  background: #409eff;
+  color: #fff;
+  border-radius: 5px;
+  padding: 1px 2px;
+  pointer-events: none;
+  min-width: 10px;
+  text-align: center;
+}
+
+/* 缩放百分比按钮 */
+.zoom-val-btn {
+  min-width: 36px;
+  text-align: center;
+}
+
+/* 缩放数值文字 */
+.zoom-val {
+  font-size: 10px;
+  font-weight: 700;
+  color: inherit;
+  display: inline-block;
+  white-space: nowrap;
+  min-width: 28px;
+  text-align: center;
+}
+
+/* 颜色选择器小面板 */
+.mini-pop-panel {
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 8px 24px rgba(16, 23, 32, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.mini-pop-panel input[type='color'] {
+  width: 48px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: block;
+}
+
 /* icon/button visuals */
 .icon-btn {
   border: 0;
   background: transparent;
-  padding: 6px 8px;
-  border-radius: 0;
+  padding: 4px 6px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   transition:
     background 120ms ease,
     transform 120ms ease;
 }
+
+/* 统一图标尺寸 */
+.icon-btn .el-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.icon-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
 .icon-btn.on {
   background: rgba(64, 158, 255, 0.1);
   color: #409eff;
 }
 .close-toolbar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 6px;
-  border-radius: 2px;
+  color: rgba(0, 0, 0, 0.4);
   transition:
     background 150ms ease,
-    transform 120ms ease;
+    color 120ms ease;
 }
+
 .close-toolbar-btn:hover {
-  transform: translateY(-2px);
+  background: rgba(235, 84, 84, 0.1) !important;
+  color: #eb5454;
 }
 
 .mini-reset-icon {

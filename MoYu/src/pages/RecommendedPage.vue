@@ -274,7 +274,7 @@ function onMenuSelect(item) {
           :key="site.id"
           class="pill">
           <div class="pill-left">
-            <el-avatar size="36">{{ avatarText(site) }}</el-avatar>
+            <el-avatar size="24">{{ avatarText(site) }}</el-avatar>
           </div>
           <div
             class="pill-center"
@@ -355,7 +355,7 @@ function onMenuSelect(item) {
               @click.stop="openAddPopover"
               title="添加站点">
               <el-avatar
-                size="36"
+                size="24"
                 style="background: #fff; border: 1px dashed #dcdfe6; color: #409eff"
                 >+</el-avatar
               >
@@ -413,9 +413,9 @@ function onMenuSelect(item) {
           :title="item.url"
           @click="openRecentVisit(item)"
           @contextmenu.prevent.stop="showMenuForItem($event, item)">
-          <strong>{{ item.title }}</strong>
+          <strong class="item-title">{{ item.title }}</strong>
           <span class="url">{{ item.url }}</span>
-          <small style="display: block; color: var(--muted); font-size: 12px">{{ formatTime(item.time) }}</small>
+          <small class="item-time">{{ formatTime(item.time) }}</small>
         </BaseButton>
         <div
           ref="historyEndRef"
@@ -439,9 +439,9 @@ function onMenuSelect(item) {
 .recommended-page {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   background: var(--page-surface);
-  padding: 6px;
+  padding: 4px 6px;
 }
 
 .recommended-page.transparent-page {
@@ -484,8 +484,18 @@ function onMenuSelect(item) {
 .history,
 .quicklinks {
   background: var(--surface);
-  padding: 10px;
+  padding: 6px 8px;
   border-radius: 8px;
+}
+
+/* 节区标题：小而低调 */
+h2 {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin: 0 0 5px 2px;
 }
 .grid {
   display: flex;
@@ -514,41 +524,50 @@ function onMenuSelect(item) {
 .list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
 }
 .history-item {
   text-align: left;
-  padding: 6px;
-  border-radius: 6px;
+  padding: 3px 6px;
+  border-radius: 5px;
   border: 1px solid #f0f0f0;
   background: var(--surface);
   cursor: pointer;
+  font-size: 12px;
 }
 .url {
   display: block;
-  color: #666;
-  font-size: 12px;
+  color: #888;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .controls {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .mini-input {
-  padding: 6px 8px;
+  padding: 4px 8px;
   border-radius: 6px;
   border: 1px solid #ddd;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .nav-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .url-input {
   flex: 1;
-  padding: 6px 8px;
+  padding: 4px 8px;
   border-radius: 6px;
   border: 1px solid #ddd;
+  font-size: 12px;
 }
 .open-btn,
 .secondary-btn {
@@ -573,13 +592,13 @@ function onMenuSelect(item) {
 .pill {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 3px 8px 3px 4px;
   border-radius: 999px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(16, 23, 32, 0.04);
   border: 1px solid #f0f0f0;
-  min-width: 140px;
+  min-width: 110px;
 }
 .pill-left {
   flex: 0 0 auto;
@@ -589,27 +608,30 @@ function onMenuSelect(item) {
   cursor: pointer;
 }
 .pill-name {
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 .pill-sub {
-  font-size: 12px;
-  color: #8c8c8c;
+  font-size: 10px;
+  color: #aaa;
+  line-height: 1.2;
 }
 .pill-actions {
   flex: 0 0 auto;
   display: flex;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
 }
 .add-pill {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px;
+  padding: 3px;
   border-radius: 999px;
   background: linear-gradient(180deg, #fbfbfd, #fff);
   border: 1px dashed #dcdfe6;
-  min-width: 64px;
+  min-width: 40px;
 }
 
 .icon-btn {
@@ -676,6 +698,23 @@ function onMenuSelect(item) {
 
 .el-button.danger {
   color: #f56c6c;
+}
+
+.item-title {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.item-time {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  opacity: 0.7;
 }
 
 @media (max-width: 720px) {

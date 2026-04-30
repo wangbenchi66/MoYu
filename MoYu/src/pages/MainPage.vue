@@ -1109,24 +1109,14 @@ function onVisibilityChange() {
   } catch (e) {}
 }
 
-function onWindowBlur() {
-  try {
-    handleHideEvent();
-  } catch (e) {}
-}
-function onWindowFocus() {
-  try {
-    handleShowEvent();
-  } catch (e) {}
-}
-
 function attachPauseListeners() {
   if (_pauseListenerAttached) return;
   _pauseListenerAttached = true;
   try {
+    // 只监听 visibilitychange：老板键和 autoHide 都会调用 win.hide()，
+    // 可靠触发此事件。不监听 window.blur，因为 webview 获焦时也会触发
+    // blur，导致 _pausedByHide 被误设，进而让真正的 hide 事件被 guard 拦截。
     document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('blur', onWindowBlur);
-    window.addEventListener('focus', onWindowFocus);
   } catch (e) {}
 }
 
@@ -1135,8 +1125,6 @@ function detachPauseListeners() {
   _pauseListenerAttached = false;
   try {
     document.removeEventListener('visibilitychange', onVisibilityChange);
-    window.removeEventListener('blur', onWindowBlur);
-    window.removeEventListener('focus', onWindowFocus);
   } catch (e) {}
   _pausedByHide = false;
 }
