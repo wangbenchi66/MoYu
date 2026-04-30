@@ -70,6 +70,10 @@ function overflowLabel(id) {
         return props.settings.showScrollbars ? '隐藏滚动条' : '显示滚动条';
       case 'auto':
         return props.settings.autoScrollEnabled ? `自动滚动 ${Math.round(props.settings.autoScrollSpeed)}` : '自动滚动';
+      case 'zoom':
+        return `缩放 ${Math.round(Number(props.siteZoom) * 100)}%`;
+      case 'openExternal':
+        return '在浏览器中打开';
       case 'zoomOut':
         return '缩小';
       case 'zoomIn':
@@ -99,6 +103,8 @@ function onOverflowClick(id) {
       noImage: () => props.patchSetting('noImageMode', !props.settings.noImageMode),
       showScrollbars: () => props.patchSetting('showScrollbars', !props.settings.showScrollbars),
       auto: () => props.patchSetting('autoScrollEnabled', !props.settings.autoScrollEnabled),
+      zoom: () => props.resetZoom && props.resetZoom(),
+      openExternal: () => props.openExternal && props.openExternal(),
       zoomOut: () => props.zoomOut && props.zoomOut(),
       zoomIn: () => props.zoomIn && props.zoomIn(),
       resetZoom: () => props.resetZoom && props.resetZoom(),
@@ -390,7 +396,7 @@ function onFontWheel(e) {
   try {
     e.preventDefault();
     const cur = Number(props.settings.readerFontScale || 100);
-    const delta = e.deltaY < 0 ? 5 : -5;
+    const delta = e.deltaY < 0 ? 1 : -1;
     onFontScaleInput(Math.max(80, Math.min(160, cur + delta)));
   } catch (e) {}
 }
@@ -574,7 +580,7 @@ onBeforeUnmount(() => {
         <BaseButton
           class="icon-btn icon-only overflow-candidate"
           data-id="back"
-          data-priority="1"
+          data-priority="10"
           @click="props.webviewBack"
           title="后退"
           ><el-icon><ArrowLeft /></el-icon
@@ -582,7 +588,7 @@ onBeforeUnmount(() => {
         <BaseButton
           class="icon-btn icon-only overflow-candidate"
           data-id="forward"
-          data-priority="1"
+          data-priority="10"
           @click="props.webviewForward"
           title="前进"
           ><el-icon><ArrowRight /></el-icon
@@ -590,7 +596,7 @@ onBeforeUnmount(() => {
         <BaseButton
           class="icon-btn icon-only overflow-candidate"
           data-id="reload"
-          data-priority="1"
+          data-priority="10"
           @click="props.webviewReload"
           title="刷新"
           ><el-icon><Refresh /></el-icon
@@ -599,7 +605,7 @@ onBeforeUnmount(() => {
 
       <div class="toolbar-center">
         <!-- 字号：点击开关，滚轮调大小，开启时显示当前倍率 -->
-        <div class="btn-with-badge overflow-candidate" data-id="font" data-priority="4">
+        <div class="btn-with-badge overflow-candidate" data-id="font" data-priority="2">
           <BaseButton
             class="icon-btn icon-only"
             :class="{ on: props.settings.forceReaderFont }"
@@ -614,7 +620,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 自动滚动：点击开关，滚轮调速，开启时显示速度 -->
-        <div class="btn-with-badge overflow-candidate" data-id="auto" data-priority="4">
+        <div class="btn-with-badge overflow-candidate" data-id="auto" data-priority="2">
           <BaseButton
             class="icon-btn icon-only"
             :class="{ on: props.settings.autoScrollEnabled }"
@@ -632,7 +638,7 @@ onBeforeUnmount(() => {
         <BaseButton
           class="icon-btn icon-only overflow-candidate"
           data-id="noImage"
-          data-priority="3"
+          data-priority="2"
           :class="{ on: props.settings.noImageMode }"
           @click="() => props.patchSetting('noImageMode', !props.settings.noImageMode)"
           :title="props.settings.noImageMode ? '显示图片' : '隐藏图片'"
@@ -643,7 +649,7 @@ onBeforeUnmount(() => {
         <div
           class="toggle-with-pop overflow-candidate"
           data-id="color"
-          data-priority="5"
+          data-priority="10"
           @mouseenter="() => showPop('color', props.settings.readerTextColor, 0, 1)"
           @mouseleave="onToggleMouseLeave">
           <BaseButton
@@ -668,7 +674,7 @@ onBeforeUnmount(() => {
         <BaseButton
           class="icon-btn icon-only overflow-candidate"
           data-id="showScrollbars"
-          data-priority="5"
+          data-priority="2"
           :class="{ on: props.settings.showScrollbars }"
           @click="() => props.patchSetting('showScrollbars', !props.settings.showScrollbars)"
           :title="props.settings.showScrollbars ? '隐藏滚动条' : '显示滚动条'"
@@ -679,14 +685,16 @@ onBeforeUnmount(() => {
       <div class="toolbar-right">
         <BaseButton
           v-if="props.openExternal"
-          class="icon-btn icon-only"
+          class="icon-btn icon-only overflow-candidate"
+          data-id="openExternal"
+          data-priority="10"
           title="在浏览器中打开"
           @click="props.openExternal">
           <el-icon><TopRight /></el-icon>
         </BaseButton>
 
         <!-- 缩放：显示当前百分比，点击重置，滚轮调整 -->
-        <div class="btn-with-badge">
+        <div class="btn-with-badge overflow-candidate" data-id="zoom" data-priority="10">
           <BaseButton
             class="icon-btn zoom-val-btn"
             :title="`缩放 ${Math.round(props.siteZoom * 100)}%（滚轮调整，点击重置）`"
