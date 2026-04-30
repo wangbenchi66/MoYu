@@ -293,13 +293,7 @@ body::after {
 
 // 更强力的透明样式（保留图片/视频/canvas/svg）
 const transparentPageCssAggressive = `
-      }
-.hover-pop .mini-range {
-  width: 140px;
-}
-#root,
-#__next,
-  top: -34px;
+html, body, #app, #root, #__next, #__nuxt {
   background: transparent !important;
   background-color: transparent !important;
 }

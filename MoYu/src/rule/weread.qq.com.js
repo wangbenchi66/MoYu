@@ -88,6 +88,12 @@ export default function main(helper) {
                 // 延迟安装选区监听器与自动翻页以确保页面自身脚本先执行完毕，避免被覆盖或冲突
                 try { setTimeout(function(){ try { (window.installSelectionWatcher || function() {})(); } catch (e) {} }, 600); } catch (e) {}
                 try { setTimeout(function(){ try { (window.attachAutoNext || function() {})(); } catch (e) {} }, 800); } catch (e) {}
+                    try { window.attachWheelHandler = window.attachWheelHandler || ${fnToStr(attachWheelHandler)}; } catch (e) {}
+                    try { setTimeout(function(){ try { (window.attachWheelHandler || function() {})(); } catch (e) {} }, 900); } catch (e) {}
+                try { window.installSelectionAutoScrollPause = window.installSelectionAutoScrollPause || ${fnToStr(installSelectionAutoScrollPause)}; } catch (e) {}
+                    try { setTimeout(function(){ try { (window.installSelectionAutoScrollPause || function() {})(); } catch (e) {} }, 700); } catch (e) {}
+                try { window.installPopupVisibilityFix = window.installPopupVisibilityFix || ${fnToStr(installPopupVisibilityFix)}; } catch (e) {}
+                    try { setTimeout(function(){ try { (window.installPopupVisibilityFix || function() {})(); } catch (e) {} }, 500); } catch (e) {}
             } catch (e) {}
             return true;
         })();`);
@@ -361,5 +367,155 @@ function attachAutoNext() {
         });
         try { window.__glassReaderAutoNextTargets = targets; } catch (e) { }
         window.__glassReaderAutoNextAttached = true;
+    } catch (e) { }
+}
+
+/**
+ * 安装弹出层可见性修复：透明模式下，被全局 CSS 强制透明的高层浮动元素（选区工具栏等）
+ * 会被自动检测并恢复深色背景，确保微信读书划线菜单在透明模式下仍可见。
+ */
+function installPopupVisibilityFix() {
+    try {
+        if (window.__glassReaderPopupVis) return;
+        window.__glassReaderPopupVis = true;
+
+        function tryFix(el) {
+            try {
+                if (!el || el.nodeType !== 1 || el.__gPopFix) return;
+                var tag = (el.tagName || '').toUpperCase();
+                if (tag === 'HTML' || tag === 'BODY' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'IFRAME') return;
+                var cs = window.getComputedStyle(el);
+                var zi = parseInt(cs.zIndex) || 0;
+                if (zi < 100) return;
+                var pos = cs.position;
+                if (pos !== 'fixed' && pos !== 'absolute') return;
+                // 仅修复背景已被透明化的元素（透明模式开启时才会触发）
+                var bg = cs.backgroundColor;
+                if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return;
+                // 尺寸限制：选区工具栏尺寸适中，排除全屏遮罩
+                var w = el.offsetWidth;
+                var h = el.offsetHeight;
+                if (w < 80 || h < 20) return;
+                if (w > window.innerWidth * 0.9 || h > window.innerHeight * 0.6) return;
+
+                el.__gPopFix = true;
+                el.style.setProperty('background-color', 'rgba(28,28,30,.95)', 'important');
+                el.style.setProperty('box-shadow', '0 4px 24px rgba(0,0,0,.45)', 'important');
+            } catch (e) {}
+        }
+
+        var obs = new MutationObserver(function (muts) {
+            muts.forEach(function (m) {
+                if (!m.addedNodes) return;
+                m.addedNodes.forEach(function (n) {
+                    if (n.nodeType !== 1) return;
+                    // 延迟确保元素完成布局后再检测尺寸与 z-index
+                    setTimeout(function () {
+                        try { tryFix(n); } catch (e) {}
+                        try {
+                            for (var i = 0; i < (n.children || []).length; i++) {
+                                try { tryFix(n.children[i]); } catch (e) {}
+                            }
+                        } catch (e) {}
+                    }, 30);
+                });
+            });
+        });
+
+        obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    } catch (e) {}
+}
+
+/**
+ * 安装选区自动滚动暂停：有文字选中时持续刷新交互时间戳，阻止自动滚动打断选区。
+ */
+function installSelectionAutoScrollPause() {
+    try {
+        if (window.__glassReaderSelectionPauseInstalled) return;
+        window.__glassReaderSelectionPauseInstalled = true;
+
+        var pauseInterval = null;
+
+        function startPause() {
+            if (pauseInterval) return;
+            pauseInterval = setInterval(function () {
+                try { window.__glassReaderAutoScrollUserInteractionAt = performance.now(); } catch (e) {}
+            }, 80);
+        }
+
+        function stopPause() {
+            if (pauseInterval) {
+                clearInterval(pauseInterval);
+                pauseInterval = null;
+            }
+        }
+
+        function check() {
+            try {
+                var sel = window.getSelection ? window.getSelection() : null;
+                var hasText = sel && sel.toString().trim().length > 0;
+                if (hasText) { startPause(); } else { stopPause(); }
+            } catch (e) {}
+        }
+
+        document.addEventListener('selectionchange', function () { try { check(); } catch (e) {} }, false);
+        // mouseup 确保拖拽结束后能立即检测到最终选区状态
+        document.addEventListener('mouseup', function () { setTimeout(check, 20); }, false);
+    } catch (e) {}
+}
+
+/**
+ * 安装自定义鼠标滚动处理器：在捕获阶段拦截所有 wheel 事件，完全替换原有滚动行为。
+ * 默认缩放 0.4（即原始滚动距离的 40%）。
+ * 可通过 window.__glassReaderWheelScale 或事件动态调整：
+ * window.dispatchEvent(new CustomEvent('glassreader-set-wheel-scale', { detail: { scale: 0.5 } }));
+ */
+function attachWheelHandler() {
+    try {
+        if (window.__glassReaderWheelAttached) return;
+        window.__glassReaderWheelAttached = true;
+        window.__glassReaderWheelScale = window.__glassReaderWheelScale || 0.1;
+
+        // 允许通过事件动态修改缩放
+        try {
+            window.addEventListener('glassreader-set-wheel-scale', function (ev) {
+                try { var s = ev && ev.detail && typeof ev.detail.scale === 'number' ? ev.detail.scale : null; if (s !== null) window.__glassReaderWheelScale = s; } catch (e) { }
+            }, false);
+        } catch (e) { }
+
+        // 在捕获阶段拦截，确保在页面自身的 wheel 处理器之前执行
+        document.addEventListener('wheel', function (evt) {
+            try {
+                // 不干预 Ctrl/Meta 缩放手势
+                if (evt.ctrlKey || evt.metaKey) return;
+                var delta = evt.deltaY || 0;
+                if (Math.abs(delta) < 0.5) return;
+
+                // 完全阻断原生滚动与页面 wheel 事件
+                evt.preventDefault();
+                evt.stopPropagation();
+
+                var scale = (typeof window.__glassReaderWheelScale === 'number') ? window.__glassReaderWheelScale : 0.4;
+
+                // 从事件目标向上找最近的可滚动祖先
+                var scrollEl = null;
+                var node = evt.target;
+                while (node && node !== document.documentElement) {
+                    try {
+                        var st = getComputedStyle(node);
+                        if ((st.overflowY === 'auto' || st.overflowY === 'scroll') && node.scrollHeight > node.clientHeight) {
+                            scrollEl = node;
+                            break;
+                        }
+                    } catch (e) { }
+                    node = node.parentElement;
+                }
+                if (!scrollEl) {
+                    scrollEl = document.scrollingElement || document.documentElement || document.body;
+                }
+
+                scrollEl.scrollTop += delta * scale;
+            } catch (e) { }
+        }, { passive: false, capture: true });
     } catch (e) { }
 }

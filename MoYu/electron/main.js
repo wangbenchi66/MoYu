@@ -18,6 +18,8 @@ let lastVisibleBounds = null
 let currentSettings = { ...defaultSettings }
 // 临时置顶计时器（用于 autoHide 自动显示时短暂将窗口置于顶层）
 let _tempTopTimer = null
+// 老板键主动隐藏标志：为 true 时 autoHide 监控不自动显示窗口
+let bossKeyHidden = false
 
 // 不持久化的临时字段（例如窗口透明度、临时 UI 状态等）
 const nonPersistentKeys = new Set([
@@ -363,6 +365,8 @@ function refreshAutoHideMonitor() {
         }
 
         if (isPointInsideBounds(cursorPoint, trackedBounds, 6)) {
+            // 老板键主动隐藏时不自动显示
+            if (bossKeyHidden) return
             // 使用短暂置顶以确保在层级切换时能被用户看到（不持久化 alwaysOnTop）
             showMainWindow(false, { tempTop: true })
         }
@@ -424,10 +428,12 @@ function toggleMainWindow() {
     }
 
     if (mainWindow.isVisible()) {
+        bossKeyHidden = true
         hideMainWindow()
         return
     }
 
+    bossKeyHidden = false
     showMainWindow(true)
 }
 
