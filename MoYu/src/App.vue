@@ -397,7 +397,8 @@ function _onCaptureKeydown(e) {
  * 参数: key - 要编辑的设置键名
  */
 function startEditShortcut(key) {
-  // 进入指定快捷键的编辑模式：开始监听 keydown 捕获下一次按键
+  // 进入指定快捷键的编辑模式：先移除可能残留的旧监听器再重新注册，防止多次调用时监听器堆叠
+  window.removeEventListener('keydown', _onCaptureKeydown);
   editingShortcut.value = key;
   capturedAccel.value = settings[key] || '';
   window.addEventListener('keydown', _onCaptureKeydown);
@@ -437,26 +438,11 @@ function cancelShortcut() {
  * 参数: key - 对应设置键名
  */
 function clearCaptured(key) {
+  // 仅当正在编辑此快捷键时才响应：清空捕获值并保持编辑状态，不写入设置
   if (editingShortcut.value !== key) return;
-  // 如果正在编辑该快捷键：仅清空捕获值并保持编辑状态不写入设置
   window.removeEventListener('keydown', _onCaptureKeydown);
-  if (editingShortcut.value === key) {
-    capturedAccel.value = '';
-    // 保持 editingShortcut 以便用户可以继续按键或点击保存
-    return;
-  }
-
-  // 非编辑态的清除：写入空设置（保留原行为）
-  try {
-    patchSetting(key, '');
-    if (desktopApi?.log) {
-      try {
-        desktopApi.log(`[renderer] shortcut cleared ${key}`);
-      } catch (e) {}
-    }
-  } catch (e) {}
-  editingShortcut.value = null;
   capturedAccel.value = '';
+  // 保持 editingShortcut，让用户可以继续按键或点击确认
 }
 
 /**

@@ -898,6 +898,11 @@ iframe {
   background: transparent;
 }
 
+/* 仪表盘模式（非 webview）下，page-frame 跟随透明，否则 overlay-panel 透明时会穿透到白色背景 */
+.mode-transparent-page .page-frame:not(.is-webview) {
+  background: transparent !important;
+}
+
 /* 将 webview 叠放以避免使用 display:none 导致某些 Electron 版本重载 webview */
 .webview-wrap {
   position: relative;

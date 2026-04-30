@@ -18,11 +18,12 @@ const {
   removeRecommendedSite,
   recommendedSites,
   loadMoreRecentVisits,
-  hasMoreRecentVisits
+  hasMoreRecentVisits,
+  settings,
 } = useDesktopApp();
 
-// 直接获得 settings 以便根据 pageTransparentMode 切换样式
-const { settings } = useDesktopApp();
+// isTransparent：与 syncWebviewTransparency 保持一致——pageTransparentMode 或 fullWindowTransparent 任一开启即触发透明样式
+const isTransparent = computed(() => settings.pageTransparentMode || settings.fullWindowTransparent);
 
 // 添加弹出表单状态
 const addPopoverVisible = ref(false);
@@ -226,7 +227,7 @@ function onMenuSelect(item) {
 <template>
   <div
     class="recommended-page"
-    :class="{ 'transparent-page': settings.pageTransparentMode }">
+    :class="{ 'transparent-page': isTransparent }">
     <div class="nav-row panel no-drag">
       <input
         v-model="urlInput"
@@ -453,10 +454,18 @@ function onMenuSelect(item) {
 .recommended-page.transparent-page .metric-card,
 .recommended-page.transparent-page .pill,
 .recommended-page.transparent-page .history-item,
-.recommended-page.transparent-page .card {
+.recommended-page.transparent-page .card,
+.recommended-page.transparent-page .nav-row {
   background: transparent !important;
   box-shadow: none !important;
   border-color: transparent !important;
+}
+
+.recommended-page.transparent-page .url-input,
+.recommended-page.transparent-page .mini-input {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: inherit;
 }
 .metrics .metric-grid {
   display: flex;

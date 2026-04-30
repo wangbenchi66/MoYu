@@ -208,7 +208,7 @@ const themeVars = computed(() => {
             '--page-alpha': '1',
             '--reader-text-color': settings.readerTextColor,
             '--reader-font-scale': `${settings.readerFontScale}%`,
-            'bagerground': '#fff',
+            'background': '#fff',
         }
     }
 
@@ -520,15 +520,12 @@ function openTab(tab) {
     } else {
         // 若已存在相同 id，则重新分配并记录日志
         if (tabs.value.some((t) => t && t.id === next.id)) {
-            //try { console.warn('[tabs] duplicate id detected, reassigning', next.id) } catch (e) { }
-            console.log('存在重复的 tab.id，正在重新分配...', next.id)
+            try { console.warn('[tabs] 发现重复 tab.id，正在重新分配', next.id) } catch (e) { }
             next.id = generateUniqueTabId()
         }
     }
 
     tabs.value.push(next)
-    //输出所有tabs信息
-    console.log('All tabs:', tabs.value)
     activeTabId.value = next.id
 }
 
