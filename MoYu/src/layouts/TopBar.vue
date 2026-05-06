@@ -3,6 +3,9 @@ import { CloseBold, Hide, House, Lock, Minus, Monitor, Picture, Pointer, Setting
 import { onUnmounted, ref, watch } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 
+// 检测平台：Mac 上窗口控制习惯在左侧
+const isMac = typeof window !== 'undefined' && window.desktop?.platform === 'darwin';
+
 const props = defineProps({
   settings: Object,
   headerHoverActive: Boolean,
@@ -53,7 +56,23 @@ function dragAreaText() {
 </script>
 
 <template>
-  <header class="topbar">
+  <header class="topbar" :class="{ 'is-mac': isMac }">
+    <!-- Mac 专属：关闭/最小化在左侧（符合 macOS 交互习惯） -->
+    <div v-if="isMac" class="mac-winctrls no-drag">
+      <BaseButton
+        class="ctrl-btn close-btn"
+        title="关闭"
+        @click="props.handleClose">
+        <el-icon><CloseBold /></el-icon>
+      </BaseButton>
+      <BaseButton
+        class="ctrl-btn"
+        title="最小化"
+        @click="props.handleMinimize">
+        <el-icon><Minus /></el-icon>
+      </BaseButton>
+    </div>
+
     <!-- 品牌图标（仅 House，无文字） -->
     <div class="brand-group no-drag">
       <BaseButton class="home-btn" @click="props.goHome" title="首页">
@@ -125,7 +144,7 @@ function dragAreaText() {
         <span class="ctrl-sep"></span>
       </div>
 
-      <!-- 组3：窗口操作（始终可见） -->
+      <!-- 组3：窗口操作（始终可见；Mac 上最小化/关闭已在左侧，此处仅保留设置） -->
       <div class="ctrl-group grp-essential">
         <BaseButton
           class="ctrl-btn"
@@ -133,18 +152,20 @@ function dragAreaText() {
           @click="props.openSettingsModal">
           <el-icon><Setting /></el-icon>
         </BaseButton>
-        <BaseButton
-          class="ctrl-btn"
-          title="最小化"
-          @click="props.handleMinimize">
-          <el-icon><Minus /></el-icon>
-        </BaseButton>
-        <BaseButton
-          class="ctrl-btn close-btn"
-          title="关闭"
-          @click="props.handleClose">
-          <el-icon><CloseBold /></el-icon>
-        </BaseButton>
+        <template v-if="!isMac">
+          <BaseButton
+            class="ctrl-btn"
+            title="最小化"
+            @click="props.handleMinimize">
+            <el-icon><Minus /></el-icon>
+          </BaseButton>
+          <BaseButton
+            class="ctrl-btn close-btn"
+            title="关闭"
+            @click="props.handleClose">
+            <el-icon><CloseBold /></el-icon>
+          </BaseButton>
+        </template>
       </div>
     </div>
   </header>
@@ -314,6 +335,20 @@ function dragAreaText() {
   background: rgba(0, 0, 0, 0.1);
   margin: 0 3px;
   flex-shrink: 0;
+}
+
+/* Mac 左侧窗口控制组（关闭在最左，最小化次之） */
+.mac-winctrls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-right: 2px;
+}
+
+/* Mac 模式下 topbar 左侧稍微内缩，视觉上与右侧对称 */
+.topbar.is-mac {
+  padding-left: 2px;
 }
 
 /* 透明度数值标签 */
