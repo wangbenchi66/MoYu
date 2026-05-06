@@ -211,7 +211,7 @@ function _onPointerMove(e) {
     } else if (!near && _lastNear) {
       _lastNear = false;
       // 只有在没有拖拽或弹出时才自动隐藏
-      if (!draggingKey.value && !popActiveKey.value && !props.toolbarPinned) {
+      if (!draggingKey.value && !popActiveKey.value && !showOverflowMenu.value && !props.toolbarPinned) {
         clearHideTimeout();
         hideTimeout = setTimeout(() => {
           try {
@@ -315,6 +315,8 @@ function onContainerMouseLeave(e) {
       const hover = el.querySelector && el.querySelector('.hover-pop');
       if (hover && (hover === to || hover.contains(to))) return;
     }
+    // 离开容器时关闭溢出菜单
+    showOverflowMenu.value = false;
     // 只有在没有拖拽且没有弹出项时，立即隐藏工具栏
     if (!draggingKey.value && !popActiveKey.value) {
       if (hideTimeout) {
@@ -1110,7 +1112,7 @@ onBeforeUnmount(() => {
 .overflow-menu {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 8px);
+  bottom: 100%;
   background: var(--surface);
   box-shadow: 0 8px 24px rgba(16, 23, 32, 0.12);
   border-radius: 4px;
