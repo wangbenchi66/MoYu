@@ -1,6 +1,10 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, Tray } from 'electron'
+import { EventEmitter } from 'events'
 import Store from 'electron-store'
 import fs from 'node:fs'
+
+// 多 webview tab 时 Electron 内部 guest WebContents 会超出默认 10 个监听器上限
+EventEmitter.defaultMaxListeners = 100
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import defaultSettings from '../src/shared/defaultSettings.js'
@@ -741,6 +745,9 @@ function createWindow() {
 
     mainWindow = win
 
+    // 每个 webview tab 会在此 WebContents 上注册内部代理监听器，多 tab 时超出默认上限 10
+    win.webContents.setMaxListeners(100)
+
     console.log('[main] created BrowserWindow id=', win.id, 'webContentsId=', win.webContents.id)
 
     nativeTheme.themeSource = 'system'
@@ -786,6 +793,71 @@ function createWindow() {
 
     win.webContents.on('did-finish-load', () => {
         broadcastSettings()
+    })
+
+    // 拦截 webview 内 zhihu:// 和 /oia/ 中转跳转，防止白屏和系统弹窗
+    const _handledWvc = new WeakSet()
+
+    function isBlockedNavUrl(url) {
+        try {
+            if (!url || typeof url !== 'string') return false
+            // 非 http(s)/file/data/blob 协议（如 zhihu://）一律拦截
+            if (!/^(https?:|file:|data:|blob:)/i.test(url)) return true
+            // 知乎 OIA（Open In App）中转页：会导致白屏然后再触发 zhihu://
+            if (/zhihu\.com\/oia\//i.test(url)) return true
+            return false
+        } catch (e) { return false }
+    }
+
+    win.webContents.on('did-attach-webview', (_event, wc) => {
+        try {
+            if (_handledWvc.has(wc)) return
+            _handledWvc.add(wc)
+
+            // 拦截主框架发起的导航（location.href / location.assign 等）
+            wc.on('will-navigate', (navEvent, url) => {
+                try {
+                    if (isBlockedNavUrl(url)) {
+                        console.log('[nav] blocked will-navigate:', url)
+                        navEvent.preventDefault()
+                    }
+                } catch (e) {}
+            })
+
+            // 拦截服务端 302/301 重定向到 zhihu:// 或 /oia/ 的情况
+            wc.on('will-redirect', (navEvent, url) => {
+                try {
+                    if (isBlockedNavUrl(url)) {
+                        console.log('[nav] blocked will-redirect:', url)
+                        navEvent.preventDefault()
+                    }
+                } catch (e) {}
+            })
+
+            // 拦截所有 frame 的导航（包含 iframe，Electron 22+ 支持）
+            try {
+                wc.on('will-frame-navigate', (details) => {
+                    try {
+                        if (isBlockedNavUrl(details.url)) {
+                            console.log('[nav] blocked will-frame-navigate:', details.url)
+                            details.preventDefault()
+                        }
+                    } catch (e) {}
+                })
+            } catch (e) {}
+
+            // 拦截 window.open() 打开自定义协议链接
+            try {
+                wc.setWindowOpenHandler(({ url }) => {
+                    if (isBlockedNavUrl(url)) {
+                        console.log('[nav] blocked window.open:', url)
+                        return { action: 'deny' }
+                    }
+                    return { action: 'allow' }
+                })
+            } catch (e) {}
+
+        } catch (e) {}
     })
 
     win.on('closed', () => {
@@ -854,6 +926,7 @@ ipcMain.handle('settings:update', (_, partial) => {
 
 app.whenReady().then(() => {
     loadSettings()
+
     createWindow()
     createTray()
     registerGlobalShortcuts()

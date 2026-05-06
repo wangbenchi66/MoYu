@@ -20,6 +20,7 @@ const recommendedSites = ref([
     { id: 3, name: 'Bilibili', url: 'https://www.bilibili.com', system: true },
     { id: 4, name: '抖音', url: 'https://www.douyin.com', system: true },
     { id: 5, name: '小红书', url: 'https://www.xiaohongshu.com', system: true },
+    { id: 6, name: '知乎', url: 'https://www.zhihu.com', system: true },
 ])
 
 const RECOMMENDED_STORAGE_KEY = 'glass_reader_recommended_sites'
@@ -476,11 +477,16 @@ function toggleSetting(key) {
  * 参数: entry - 记录对象（包含 title/url 等）
  */
 function pushRecentVisit(entry) {
-    // 将新访问放到最前面，允许重复地址重复记录，记录时间，保留最新 RECENT_MAX 条
+    // 同 URL 只保留一条：移到顶部并更新时间戳，避免重复刷页导致列表堆积
     try {
         const now = new Date().toISOString()
         const rec = Object.assign({}, entry || {})
         if (!rec.time) rec.time = now
+        const url = rec.url || ''
+        // 移除已有的同 URL 条目
+        if (url) {
+            recentVisits.value = recentVisits.value.filter((v) => v.url !== url)
+        }
         recentVisits.value.unshift(rec)
         if (recentVisits.value.length > RECENT_MAX) {
             recentVisits.value = recentVisits.value.slice(0, RECENT_MAX)

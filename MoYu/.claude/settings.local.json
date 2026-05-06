@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(node -e \"const icons = require\\('@element-plus/icons-vue'\\); console.log\\(Object.keys\\(icons\\).filter\\(k => /Picture|Brush|Edit|DCaret|Expand|Menu|Scroll|Sort|Rank|Sort|Font|Palette|Slider|Monitor|Screen|Window|Transparent|Ghost/.test\\(k\\)\\).join\\('\\\\n'\\)\\)\")",
-      "Bash(node -e \"const icons = require\\('@element-plus/icons-vue'\\); console.log\\(Object.keys\\(icons\\).filter\\(k => /TopRight|Link|Share|Export|Position|Launch|Navigate/.test\\(k\\)\\).join\\('\\\\n'\\)\\)\")"
+      "Bash(node -e \"const icons = require\\('@element-plus/icons-vue'\\); console.log\\(Object.keys\\(icons\\).filter\\(k => /TopRight|Link|Share|Export|Position|Launch|Navigate/.test\\(k\\)\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./node_modules/electron/package.json'\\);console.log\\(p.version\\)\")",
+      "WebFetch(domain:greasyfork.org)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

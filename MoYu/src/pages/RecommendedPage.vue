@@ -498,9 +498,8 @@ h2 {
   margin: 0 0 5px 2px;
 }
 .grid {
-  display: flex;
+  display: grid;
   gap: 6px;
-  flex-wrap: wrap;
 }
 .card {
   display: flex;
@@ -585,9 +584,9 @@ h2 {
 
 /* 原型(pill) 风格（更紧凑） */
 .pills {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 6px;
-  flex-wrap: wrap;
 }
 .pill {
   display: flex;
@@ -598,7 +597,9 @@ h2 {
   background: #fff;
   box-shadow: 0 1px 2px rgba(16, 23, 32, 0.04);
   border: 1px solid #f0f0f0;
-  min-width: 110px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 .pill-left {
   flex: 0 0 auto;
@@ -611,6 +612,9 @@ h2 {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pill-sub {
   font-size: 10px;
@@ -631,7 +635,8 @@ h2 {
   border-radius: 999px;
   background: linear-gradient(180deg, #fbfbfd, #fff);
   border: 1px dashed #dcdfe6;
-  min-width: 40px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .icon-btn {
@@ -717,12 +722,35 @@ h2 {
   opacity: 0.7;
 }
 
-@media (max-width: 720px) {
+/* 宽窗口：更多列 */
+@media (min-width: 600px) {
   .pills {
-    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
-  .pill {
-    min-width: 100%;
+}
+
+/* 窄窗口：2列 */
+@media (max-width: 360px) {
+  .pills {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .nav-row {
+    flex-wrap: wrap;
+  }
+  .url-input {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+}
+
+/* 极窄（侧边条模式）：单列堆叠 */
+@media (max-width: 240px) {
+  .pills {
+    grid-template-columns: 1fr;
+  }
+  .nav-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>
