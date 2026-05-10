@@ -169,7 +169,7 @@ function clearHideTimeout() {
 function onContainerMouseEnter() {
   try {
     clearHideTimeout();
-    // 当进入容器时确保可见
+    if (props.toolbarDisabled) return;
     try {
       props.patchSetting('toolbarVisible', true);
     } catch (e) {}
