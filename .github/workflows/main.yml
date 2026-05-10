@@ -5,15 +5,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            arch: x64
-          - os: macos-latest
-            arch: universal
-
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -39,21 +31,14 @@ jobs:
         working-directory: MoYu
 
       - name: Build Electron app
-        shell: bash
-        run: |
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            npx electron-builder --win --x64 --publish never
-          else
-            npx electron-builder --mac --universal --publish never
-          fi
+        run: npx electron-builder --mac --universal --publish never
         working-directory: MoYu
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: MoYu-${{ matrix.os }}-v${{ steps.get_version.outputs.version }}-${{ matrix.arch }}
+          name: MoYu-macos-v${{ steps.get_version.outputs.version }}-universal
+          retention-days: 1
           path: |
-            MoYu/release/*.exe
-            MoYu/release/*.msi
             MoYu/release/*.dmg
             MoYu/release/*.pkg

@@ -13,26 +13,52 @@ import defaultSettings from '../shared/defaultSettings.js'
 
 const desktopApi = typeof window !== 'undefined' ? window.desktop : null
 
-const recommendedSites = ref([
-    //{ id: 1, name: '2', url: 'https://weread.qq.com', system: true },
-    { id: 1, name: '微信读书', url: 'https://weread.qq.com', system: true },
-    { id: 2, name: '番茄小说', url: 'https://fanqienovel.com', system: true },
-    { id: 3, name: 'Bilibili', url: 'https://www.bilibili.com', system: true },
-    { id: 4, name: '抖音', url: 'https://www.douyin.com', system: true },
-    { id: 5, name: '小红书', url: 'https://www.xiaohongshu.com', system: true },
-    { id: 6, name: '知乎', url: 'https://www.zhihu.com', system: true },
-])
+const DEFAULT_RECOMMENDED_SITES = [
+    { name: '微信读书', url: 'https://weread.qq.com', system: true },
+    { name: '番茄小说', url: 'https://fanqienovel.com', system: true },
+    { name: 'Bilibili', url: 'https://www.bilibili.com', system: true },
+    { name: '抖音', url: 'https://www.douyin.com', system: true },
+    { name: '小红书', url: 'https://www.xiaohongshu.com', system: true },
+    { name: '知乎', url: 'https://www.zhihu.com', system: true },
+]
+
+function buildDefaultRecommendedSites() {
+    return DEFAULT_RECOMMENDED_SITES.map((site, idx) => ({
+        id: idx + 1,
+        name: site.name,
+        url: site.url,
+        system: true,
+    }))
+}
+
+const recommendedSites = ref(buildDefaultRecommendedSites())
 
 const RECOMMENDED_STORAGE_KEY = 'glass_reader_recommended_sites'
 
-// 尝试从 localStorage 或者持久化设置中恢复推荐站点
+// 仅从 localStorage 恢复用户自定义站点；内置默认站点始终以当前代码为准
 try {
     const raw = localStorage.getItem(RECOMMENDED_STORAGE_KEY)
     if (raw) {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed) && parsed.length) {
-            // 保证每项都有 id
-            recommendedSites.value = parsed.map((it, idx) => ({ id: it.id ?? (Date.now() + idx), ...it }))
+            const defaults = buildDefaultRecommendedSites()
+            const existsInDefaults = (site) => defaults.some((d) => {
+                try {
+                    return d.url === site.url || (d.name && site.name && d.name.toLowerCase() === site.name.toLowerCase())
+                } catch {
+                    return false
+                }
+            })
+            const userSites = parsed
+                .filter((it) => it && !it.system && it.url)
+                .map((it, idx) => ({
+                    id: it.id ?? (Date.now() + idx),
+                    name: it.name || '',
+                    url: it.url,
+                    system: false,
+                }))
+                .filter((it) => !existsInDefaults(it))
+            recommendedSites.value = defaults.concat(userSites)
         }
     }
 } catch (e) {
@@ -843,19 +869,21 @@ function removeLocalDocument(documentId) {
 }
 
 /**
- * 将推荐站点持久化到 localStorage 并尝试同步到主进程
+ * 仅将用户自定义推荐站点持久化到 localStorage
  */
 function persistRecommendedSites() {
     try {
-        localStorage.setItem(RECOMMENDED_STORAGE_KEY, JSON.stringify(recommendedSites.value))
+        const customSites = recommendedSites.value
+            .filter((site) => !site.system)
+            .map((site) => ({
+                id: site.id,
+                name: site.name,
+                url: site.url,
+                system: false,
+            }))
+        localStorage.setItem(RECOMMENDED_STORAGE_KEY, JSON.stringify(customSites))
     } catch (e) {
         // ignore
-    }
-
-    if (desktopApi?.updateSettings) {
-        try {
-            desktopApi.updateSettings({ recommendedSites: recommendedSites.value }).catch(() => { })
-        } catch (e) { }
     }
 }
 
@@ -1012,9 +1040,6 @@ function initializeDesktopApp() {
         desktopApi.getSettings().then((nextSettings) => {
             Object.assign(settings, nextSettings)
             urlInput.value = displayInputUrlForUI(settings.defaultUrl ?? '')
-            if (Array.isArray(nextSettings.recommendedSites) && nextSettings.recommendedSites.length) {
-                recommendedSites.value = nextSettings.recommendedSites.map((it, idx) => ({ id: it.id ?? (Date.now() + idx), ...it }))
-            }
         })
     }
 

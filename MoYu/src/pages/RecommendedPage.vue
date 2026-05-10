@@ -92,6 +92,7 @@ function confirmDeleteSite(site) {
 
 const recommendedPreview = computed(() => recommendedSites.value.slice(0, 8));
 
+const addPillRef = ref(null);
 const fileInputRef = ref(null);
 const historyEndRef = ref(null);
 const loadingMore = ref(false);
@@ -101,7 +102,13 @@ function formatTime(t) {
     if (!t) return '';
     const d = new Date(t);
     if (isNaN(d.getTime())) return String(t);
-    return d.toLocaleString();
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    if (d.toDateString() === now.toDateString()) return time;
+    const date = `${d.getMonth() + 1}/${d.getDate()}`;
+    if (d.getFullYear() === now.getFullYear()) return `${date} ${time}`;
+    return `${d.getFullYear()}/${date}`;
   } catch (e) {
     return t || '';
   }
@@ -268,132 +275,78 @@ function onMenuSelect(item) {
 
     <section class="spotlight">
       <h2>推荐站点</h2>
-      <div class="grid pills">
+      <div class="pill-list">
         <div
           v-for="site in recommendedPreview"
           :key="site.id"
-          class="pill">
-          <div class="pill-left">
-            <el-avatar size="24">{{ avatarText(site) }}</el-avatar>
-          </div>
-          <div
-            class="pill-center"
-            @click="useRecommendedSite(site)">
-            <div class="pill-name">{{ site.name }}</div>
-            <div
-              class="pill-sub"
-              v-if="!site.system">
-              {{ getHost(site.url) }}
-            </div>
-          </div>
-          <div class="pill-actions">
+          class="pill"
+          @click="useRecommendedSite(site)">
+          <el-avatar size="24">{{ avatarText(site) }}</el-avatar>
+          <span class="pill-name">{{ site.name }}</span>
+          <div class="pill-actions" v-if="!site.system">
             <el-popover
-              v-if="!site.system"
               v-model:visible="ensureEditForm(site).visible"
               placement="bottom"
               width="320"
               trigger="manual">
               <template #reference>
-                <el-button
-                  type="text"
-                  size="mini"
-                  @click.stop="openEditPopover(site)"
-                  >编辑</el-button
-                >
+                <span class="pill-icon-btn" @click.stop="openEditPopover(site)" title="编辑">✎</span>
               </template>
-
               <div class="popover-form">
-                <el-form
-                  :model="ensureEditForm(site)"
-                  label-position="top">
+                <el-form :model="ensureEditForm(site)" label-position="top">
                   <el-form-item label="名称">
-                    <el-input
-                      v-model="ensureEditForm(site).name"
-                      size="small" />
+                    <el-input v-model="ensureEditForm(site).name" size="small" />
                   </el-form-item>
                   <el-form-item label="网址">
-                    <el-input
-                      v-model="ensureEditForm(site).url"
-                      size="small" />
+                    <el-input v-model="ensureEditForm(site).url" size="small" />
                   </el-form-item>
                   <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px">
-                    <el-button
-                      size="small"
-                      @click="cancelEdit(site)"
-                      >取消</el-button
-                    >
-                    <el-button
-                      type="primary"
-                      size="small"
-                      @click="saveEditSite(site)"
-                      >保存</el-button
-                    >
+                    <el-button size="small" @click="cancelEdit(site)">取消</el-button>
+                    <el-button type="primary" size="small" @click="saveEditSite(site)">保存</el-button>
                   </div>
                 </el-form>
               </div>
             </el-popover>
-
-            <el-button
-              v-if="!site.system"
-              type="text"
-              size="mini"
-              class="danger"
-              @click.stop="confirmDeleteSite(site)">
-              删除
-            </el-button>
+            <span class="pill-icon-btn danger" @click.stop="confirmDeleteSite(site)" title="删除">✕</span>
           </div>
         </div>
 
-        <el-popover
-          v-model:visible="addPopoverVisible"
-          placement="bottom"
-          width="320"
-          trigger="manual">
-          <template #reference>
-            <div
-              class="pill add-pill"
-              @click.stop="openAddPopover"
-              title="添加站点">
-              <el-avatar
-                size="24"
-                style="background: #fff; border: 1px dashed #dcdfe6; color: #409eff"
-                >+</el-avatar
-              >
-            </div>
-          </template>
-
-          <div class="popover-form">
-            <el-form
-              :model="addForm"
-              label-position="top">
-              <el-form-item label="名称">
-                <el-input
-                  v-model="addForm.name"
-                  size="small" />
-              </el-form-item>
-              <el-form-item label="网址">
-                <el-input
-                  v-model="addForm.url"
-                  size="small"
-                  placeholder="https://example.com" />
-              </el-form-item>
-              <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px">
-                <el-button
-                  size="small"
-                  @click="addPopoverVisible = false"
-                  >取消</el-button
-                >
-                <el-button
-                  type="primary"
-                  size="small"
-                  @click="doAddSite"
-                  >保存</el-button
-                >
-              </div>
-            </el-form>
-          </div>
-        </el-popover>
+        <div
+          ref="addPillRef"
+          class="pill add-pill"
+          @click.stop="openAddPopover"
+          title="添加站点">
+          <el-avatar
+            size="24"
+            style="background: #fff; border: 1px dashed #dcdfe6; color: #409eff">
+            +
+          </el-avatar>
+          <span class="pill-name" style="color: #409eff">添加站点</span>
+        </div>
       </div>
+
+      <el-popover
+        v-model:visible="addPopoverVisible"
+        :virtual-ref="addPillRef"
+        virtual-triggering
+        placement="bottom"
+        width="320"
+        trigger="manual">
+        <div class="popover-form">
+          <el-form :model="addForm" label-position="top">
+            <el-form-item label="名称">
+              <el-input v-model="addForm.name" size="small" />
+            </el-form-item>
+            <el-form-item label="网址">
+              <el-input v-model="addForm.url" size="small" placeholder="https://example.com" />
+            </el-form-item>
+            <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px">
+              <el-button size="small" @click="addPopoverVisible = false">取消</el-button>
+              <el-button type="primary" size="small" @click="doAddSite">保存</el-button>
+            </div>
+          </el-form>
+        </div>
+      </el-popover>
     </section>
 
     <section class="history">
@@ -413,9 +366,11 @@ function onMenuSelect(item) {
           :title="item.url"
           @click="openRecentVisit(item)"
           @contextmenu.prevent.stop="showMenuForItem($event, item)">
-          <strong class="item-title">{{ item.title }}</strong>
+          <div class="item-header">
+            <strong class="item-title">{{ item.title }}</strong>
+            <small class="item-time">{{ formatTime(item.time) }}</small>
+          </div>
           <span class="url">{{ item.url }}</span>
-          <small class="item-time">{{ formatTime(item.time) }}</small>
         </BaseButton>
         <div
           ref="historyEndRef"
@@ -442,6 +397,10 @@ function onMenuSelect(item) {
   gap: 4px;
   background: var(--page-surface);
   padding: 4px 6px;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .recommended-page.transparent-page {
@@ -486,6 +445,9 @@ function onMenuSelect(item) {
   background: var(--surface);
   padding: 6px 8px;
   border-radius: 8px;
+}
+.spotlight {
+  flex-shrink: 0;
 }
 
 /* 节区标题：小而低调 */
@@ -582,105 +544,50 @@ h2 {
   position: relative;
 }
 
-/* 原型(pill) 风格（更紧凑） */
-.pills {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 6px;
+/* 药丸自适应换行 */
+.pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
 }
 .pill {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px 3px 4px;
+  width: 128px;
+  padding: 4px 8px 4px 4px;
   border-radius: 999px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(16, 23, 32, 0.04);
   border: 1px solid #f0f0f0;
-  min-width: 0;
-  width: 100%;
+  cursor: pointer;
+  transition: box-shadow 0.12s ease;
+  position: relative;
   box-sizing: border-box;
 }
-.pill-left {
-  flex: 0 0 auto;
-}
-.pill-center {
-  flex: 1 1 auto;
-  cursor: pointer;
+.pill:hover {
+  box-shadow: 0 4px 12px rgba(16, 23, 32, 0.08);
 }
 .pill-name {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pill-sub {
-  font-size: 10px;
-  color: #aaa;
-  line-height: 1.2;
-}
 .pill-actions {
-  flex: 0 0 auto;
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  gap: 4px;
-  align-items: center;
-}
-.add-pill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 3px;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 999px;
-  background: linear-gradient(180deg, #fbfbfd, #fff);
-  border: 1px dashed #dcdfe6;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.icon-btn {
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid #ddd;
-  background: #fff;
-  cursor: pointer;
-  font-size: 12px;
-}
-.icon-btn.danger {
-  border-color: #f5c6c6;
-  background: #fff3f3;
-}
-.card-actions {
-  align-items: center;
-}
-
-/* 加号卡片样式（紧凑） */
-.add-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 110px;
-  height: 56px;
-  border: 1px dashed #d9d9d9;
-  background: linear-gradient(180deg, #fbfbfd, #fff);
-  border-radius: 8px;
-  cursor: pointer;
-}
-.add-inner {
-  font-size: 26px;
-  color: #409eff;
-  font-weight: 700;
-}
-
-/* 悬停时显示操作按钮 */
-.pill {
-  transition: box-shadow 0.12s ease;
-}
-.pill:hover {
-  box-shadow: 0 6px 18px rgba(16, 23, 32, 0.08);
-}
-.pill-actions {
+  padding: 0 2px;
   opacity: 0;
   transition: opacity 0.12s ease;
   pointer-events: none;
@@ -688,6 +595,35 @@ h2 {
 .pill:hover .pill-actions {
   opacity: 1;
   pointer-events: auto;
+}
+.pill-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  cursor: pointer;
+  color: #999;
+  transition: color 0.12s, background 0.12s;
+}
+.pill-icon-btn:hover {
+  color: #409eff;
+  background: rgba(64, 158, 255, 0.1);
+}
+.pill-icon-btn.danger:hover {
+  color: #f56c6c;
+  background: rgba(245, 108, 108, 0.1);
+}
+.add-pill {
+  border-style: dashed;
+  border-color: #dcdfe6;
+  background: linear-gradient(180deg, #fbfbfd, #fff);
+}
+.add-pill:hover {
+  border-color: #b3d8ff;
+  background: rgba(64, 158, 255, 0.04);
 }
 
 .popover-form {
@@ -705,35 +641,32 @@ h2 {
   color: #f56c6c;
 }
 
+.item-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
 .item-title {
-  display: block;
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
 }
 
 .item-time {
-  display: block;
+  flex-shrink: 0;
   color: var(--muted);
   font-size: 10px;
   opacity: 0.7;
+  white-space: nowrap;
 }
 
-/* 宽窗口：更多列 */
-@media (min-width: 600px) {
-  .pills {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  }
-}
-
-/* 窄窗口：2列 */
 @media (max-width: 360px) {
-  .pills {
-    grid-template-columns: repeat(2, 1fr);
-  }
   .nav-row {
     flex-wrap: wrap;
   }
@@ -743,11 +676,7 @@ h2 {
   }
 }
 
-/* 极窄（侧边条模式）：单列堆叠 */
 @media (max-width: 240px) {
-  .pills {
-    grid-template-columns: 1fr;
-  }
   .nav-row {
     flex-direction: column;
     align-items: stretch;
