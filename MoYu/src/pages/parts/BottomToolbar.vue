@@ -760,6 +760,7 @@ onBeforeUnmount(() => {
   bottom: 14px;
   width: max-content;
   max-width: calc(100% - 32px);
+  min-height: 36px;
   /* 保证容器能接收 hover，并置于 webview 之上 */
   z-index: 10001;
   pointer-events: auto;
@@ -805,6 +806,7 @@ onBeforeUnmount(() => {
   bottom: 14px;
   width: max-content;
   max-width: calc(100% - 32px);
+  min-height: 36px;
   z-index: 10001;
   pointer-events: auto;
 }
@@ -824,6 +826,11 @@ onBeforeUnmount(() => {
   transform: translateY(calc(100% + 20px));
   opacity: 0;
   pointer-events: none;
+  /* 隐藏时脱离布局流，防止容器面积过大导致 mouseleave 不触发 */
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 100%;
 }
 
 /* 悬浮手柄（右下角） */
@@ -860,11 +867,15 @@ onBeforeUnmount(() => {
   transform: translateY(0);
   opacity: 1;
   pointer-events: auto;
+  position: relative;
+  width: auto;
 }
 .bottom-toolbar-container.no-hover:hover .bottom-toolbar.hidden {
   transform: translateY(calc(100% + 20px));
   opacity: 0;
   pointer-events: none;
+  position: absolute;
+  width: 100%;
 }
 
 .toolbar-left,

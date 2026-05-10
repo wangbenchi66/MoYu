@@ -45,6 +45,41 @@ const DEFAULT_HEIGHT = 860
 const MIN_SAFE_WIDTH = 360
 const MIN_SAFE_HEIGHT = 240
 
+// 摸鱼时间统计
+let moyuStart = null
+
+function getTodayKey() {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function startMoyu() {
+    if (moyuStart) return
+    moyuStart = Date.now()
+}
+
+function endMoyu() {
+    if (!moyuStart) return
+    const now = Date.now()
+    if (now - moyuStart < 2000) {
+        moyuStart = null
+        return
+    }
+    const sessions = store.get('moyuSessions', {})
+    const key = getTodayKey()
+    if (!sessions[key]) sessions[key] = []
+    sessions[key].push({ start: moyuStart, end: now })
+    store.set('moyuSessions', sessions)
+    moyuStart = null
+}
+
+function getMoyuStats() {
+    return {
+        sessions: store.get('moyuSessions', {}),
+        activeStart: moyuStart,
+    }
+}
+
 /**
  * 获取设置文件的完整路径
  */
@@ -775,6 +810,19 @@ function createWindow() {
     win.on('show', () => {
         rememberWindowBounds()
         refreshTrayMenu()
+        startMoyu()
+    })
+
+    win.on('hide', () => {
+        endMoyu()
+    })
+
+    win.on('minimize', () => {
+        endMoyu()
+    })
+
+    win.on('restore', () => {
+        startMoyu()
     })
 
     win.on('blur', () => {
@@ -901,6 +949,14 @@ ipcMain.handle('window:open-settings', () => {
     openSettingsPanel()
 })
 
+ipcMain.handle('moyu:get-stats', () => getMoyuStats())
+
+ipcMain.handle('moyu:clear-stats', () => {
+    store.set('moyuSessions', {})
+    moyuStart = null
+    return true
+})
+
 ipcMain.handle('settings:get', () => currentSettings)
 
 ipcMain.handle('settings:update', (_, partial) => {
@@ -946,6 +1002,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', () => {
+    endMoyu()
     isQuitting = true
     stopAutoHideMonitor()
     globalShortcut.unregisterAll()

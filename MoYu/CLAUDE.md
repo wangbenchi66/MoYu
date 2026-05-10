@@ -39,6 +39,7 @@ src/main.js             # 渲染进程入口：挂载 Vue 应用
 - `window:minimize` / `window:maximize` / `window:close` / `window:quit` — 窗口控制
 - `ui:set-ignore-mouse-events` — 鼠标穿透
 - `shell:open-external` — 外部浏览器打开链接
+- `moyu:get-stats` / `moyu:clear-stats` — 摸鱼时间统计读取与清空
 
 ### 渲染进程核心结构
 
@@ -65,17 +66,23 @@ src/pages/ConsolePage.vue          # 控制台布局（底部 Tab 栏 + <router-
 src/pages/RecommendedPage.vue      # 首页（推荐站点 + 最近10条访问）
 src/pages/ProfilePage.vue          # 个人中心（菜单导航）
 src/pages/HistoryPage.vue          # 历史记录（搜索 + 分页）
+src/pages/StatsPage.vue            # 摸鱼时间统计（今日/历史/累计）
 ```
 
 **路由表：**
 
 | 路径 | name | 组件 | 说明 |
 |---|---|---|---|
-| `/` | `home` | RecommendedPage | 首页 |
+| `/` | `home` | HomePage | 首页 |
 | `/profile` | `profile` | ProfilePage | 个人中心菜单 |
 | `/profile/history` | `history` | HistoryPage | 完整历史记录 |
+| `/profile/stats` | `stats` | StatsPage | 摸鱼时间统计 |
 
-**添加新页面**：在 `src/router/index.js` 的 `children` 数组中注册路由，页面组件通过 `router.push({ name })` 导航。ConsolePage 的底部 Tab 栏根据 `route.path` 自动高亮。
+**添加新页面**：在 `src/router/index.js` 的路由数组中注册路由，页面组件通过 `router.push({ name })` 导航。ConsolePage 的底部 Tab 栏根据 `route.path` 自动高亮。
+
+### 摸鱼时间统计
+
+主进程通过窗口可见性事件（`show`/`restore` → 开始计时，`hide`/`minimize` → 结束计时）追踪摸鱼时长，数据按天分组持久化到 `electron-store`（键：`moyuSessions`）。渲染进程通过 `activeStart` 字段实现实时计时显示。
 
 ### 快捷键分层
 

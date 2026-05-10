@@ -28,6 +28,8 @@ const { pathToFileURL } = require('url')
                     setIgnoreMouseEvents: (ignore) => ipcRenderer.invoke('ui:set-ignore-mouse-events', !!ignore),
                     // 在外部浏览器中打开链接
                     openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
+                    getMoyuStats: () => ipcRenderer.invoke('moyu:get-stats'),
+                    clearMoyuStats: () => ipcRenderer.invoke('moyu:clear-stats'),
                 })
 
                 try {
