@@ -1083,6 +1083,7 @@ export function useDesktopApp() {
         leftToggleKeys,
         rightToggleKeys,
         activeTab,
+        recentVisits,
         filteredRecentVisits,
         recentVisibleCount,
         loadMoreRecentVisits,

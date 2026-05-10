@@ -8,7 +8,7 @@
 // - 管理本地阅读器（local-text）的自动滚动与用户交互暂停逻辑
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useDesktopApp } from '../composables/useDesktopApp';
-import recommendedPage from './RecommendedPage.vue';
+import consolePage from './ConsolePage.vue';
 
 const { settings, activeTab, activeTabId, tabs, addNewTab, selectTab, closeTab, patchSetting, updateTabMetadata, siteRules, ruleProviders, pushRecentVisit } = useDesktopApp();
 
@@ -1631,7 +1631,7 @@ onMounted(() => {
               allowpopups></webview>
 
             <!-- 仪表盘与本地阅读视图作为覆盖层显示：改为 v-if 以在非活跃时从 DOM 中移除，避免遮挡问题 -->
-            <recommended-page
+            <console-page
               v-if="activeTab?.kind === 'dashboard'"
               class="overlay-panel" />
 

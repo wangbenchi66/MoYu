@@ -2,6 +2,7 @@
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ShortcutRow from './components/ShortcutRow.vue';
+import { useRouter } from 'vue-router';
 import { useDesktopApp } from './composables/useDesktopApp';
 import TopBar from './layouts/TopBar.vue';
 import MainPage from './pages/MainPage.vue';
@@ -628,14 +629,16 @@ function openDefaultUrl() {
 /**
  * 跳转到仪表盘或创建空白仪表盘页
  */
+const router = useRouter();
 function goHome() {
   try {
     const dashboard = tabs.value.find((t) => t && (t.kind === 'dashboard' || t.url === 'about:blank'));
     if (dashboard) {
       selectTab(dashboard.id);
-      return;
+    } else {
+      createPageTab('about:blank', { kind: 'dashboard' });
     }
-    createPageTab('about:blank', { kind: 'dashboard' });
+    router.push({ name: 'home' });
   } catch (e) {}
 }
 
@@ -883,8 +886,8 @@ function localShortcutHandler(e) {
       <MainPage ref="mainPageRef" />
     </main>
 
-    <!-- 将 BottomToolbar 放在 MainPage 之外，作为外挂部件展示，避免遮挡 MainPage 底部内容 -->
-    <BottomToolbar v-bind="toolbarProps" />
+    <!-- 底部工具栏仅在嵌入网页时显示，控制台/个人中心等自有页面不显示 -->
+    <BottomToolbar v-if="activeTab?.kind !== 'dashboard'" v-bind="toolbarProps" />
 
     <div
       v-if="isSettingsOpen"

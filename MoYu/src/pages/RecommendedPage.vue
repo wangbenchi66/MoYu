@@ -1,15 +1,13 @@
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import ContextMenu from '../components/ContextMenu.vue';
 import { useDesktopApp } from '../composables/useDesktopApp';
 
 const {
-  filteredRecentVisits,
+  recentVisits,
   useRecommendedSite,
   openRecentVisit,
-  searchKeyword,
-  dashboardMetrics,
   urlInput,
   handleOpenUrl,
   uploadLocalFiles,
@@ -17,8 +15,6 @@ const {
   editRecommendedSite,
   removeRecommendedSite,
   recommendedSites,
-  loadMoreRecentVisits,
-  hasMoreRecentVisits,
   settings,
 } = useDesktopApp();
 
@@ -94,8 +90,8 @@ const recommendedPreview = computed(() => recommendedSites.value.slice(0, 8));
 
 const addPillRef = ref(null);
 const fileInputRef = ref(null);
-const historyEndRef = ref(null);
-const loadingMore = ref(false);
+
+const latestVisits = computed(() => recentVisits.value.slice(0, 10));
 
 function formatTime(t) {
   try {
@@ -123,30 +119,6 @@ async function handleFileChange(event) {
   event.target.value = '';
 }
 
-// 下滑加载更多（IntersectionObserver）
-onMounted(() => {
-  try {
-    if (!historyEndRef.value) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((ent) => {
-          if (ent.isIntersecting && hasMoreRecentVisits.value && !loadingMore.value) {
-            loadingMore.value = true;
-            try {
-              loadMoreRecentVisits();
-            } catch (e) {}
-            // 给渲染一点时间
-            setTimeout(() => {
-              loadingMore.value = false;
-            }, 300);
-          }
-        });
-      },
-      { root: null, rootMargin: '200px', threshold: 0.1 }
-    );
-    io.observe(historyEndRef.value);
-  } catch (e) {}
-});
 
 function getHost(rawUrl) {
   try {
@@ -351,16 +323,9 @@ function onMenuSelect(item) {
 
     <section class="history">
       <h2>最近访问</h2>
-      <div class="controls">
-        <input
-          v-model="searchKeyword"
-          placeholder="搜索最近访问"
-          class="mini-input" />
-      </div>
-
       <div class="list">
         <BaseButton
-          v-for="(item, idx) in filteredRecentVisits"
+          v-for="(item, idx) in latestVisits"
           :key="`${item.type}-${item.time || ''}-${idx}`"
           class="history-item"
           :title="item.url"
@@ -372,11 +337,8 @@ function onMenuSelect(item) {
           </div>
           <span class="url">{{ item.url }}</span>
         </BaseButton>
-        <div
-          ref="historyEndRef"
-          class="load-more-sentinel"
-          v-if="hasMoreRecentVisits">
-          <small style="color: var(--muted)">下滑加载更多…</small>
+        <div v-if="!latestVisits.length" style="text-align: center; padding: 12px 0; color: rgba(0,0,0,0.25); font-size: 13px">
+          暂无访问记录
         </div>
       </div>
     </section>

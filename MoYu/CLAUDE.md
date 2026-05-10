@@ -47,11 +47,35 @@ src/composables/useDesktopApp.js   # 全局状态（settings、tabs、历史、�
 src/App.vue                        # 根组件：快捷键处理、设置面板、热区悬停逻辑
 src/pages/MainPage.vue             # 多 webview 管理、脚本注入调度
 src/layouts/TopBar.vue             # 顶部标题栏（窗口控制、透明度快速切换）
-src/pages/parts/BottomToolbar.vue  # 底部工具栏（后退/前进/缩放，支持悬浮/停靠/固定模式）
+src/pages/parts/BottomToolbar.vue  # 底部工具栏（后退/前进/缩放，仅嵌入网页时显示）
 src/shared/defaultSettings.js      # 主进程与渲染进程共享的默认配置（单一来源）
 ```
 
 **状态管理**：`useDesktopApp.js` 是整个应用的唯一状态层，无 Pinia/Vuex。设置变更后通过防抖（120ms）同步到主进程；`immediateSyncKeys`（透明度、快捷键等）会立即同步。
+
+### 路由系统（vue-router）
+
+路由配置位于 `src/router/index.js`，使用 **Hash 模式**（`createWebHashHistory`），适配 Electron 的 `file://` 协议。
+
+**路由仅管理控制台区域（dashboard 标签页）的页面切换**，webview 标签页由 `MainPage.vue` 独立管理。
+
+```
+src/router/index.js                # 路由配置（Hash 模式）
+src/pages/ConsolePage.vue          # 控制台布局（底部 Tab 栏 + <router-view>）
+src/pages/RecommendedPage.vue      # 首页（推荐站点 + 最近10条访问）
+src/pages/ProfilePage.vue          # 个人中心（菜单导航）
+src/pages/HistoryPage.vue          # 历史记录（搜索 + 分页）
+```
+
+**路由表：**
+
+| 路径 | name | 组件 | 说明 |
+|---|---|---|---|
+| `/` | `home` | RecommendedPage | 首页 |
+| `/profile` | `profile` | ProfilePage | 个人中心菜单 |
+| `/profile/history` | `history` | HistoryPage | 完整历史记录 |
+
+**添加新页面**：在 `src/router/index.js` 的 `children` 数组中注册路由，页面组件通过 `router.push({ name })` 导航。ConsolePage 的底部 Tab 栏根据 `route.path` 自动高亮。
 
 ### 快捷键分层
 
