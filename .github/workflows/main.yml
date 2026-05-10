@@ -8,7 +8,17 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            arch: universal
+            build_args: --mac --universal
+          - os: windows-latest
+            arch: x64
+            build_args: --win --x64
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
@@ -34,8 +44,36 @@ jobs:
         working-directory: MoYu
 
       - name: Build Electron app
-        run: npx electron-builder --mac --universal --publish never
+        run: npx electron-builder ${{ matrix.build_args }} --publish never
         working-directory: MoYu
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}
+          retention-days: 1
+          path: |
+            MoYu/release/*.dmg
+            MoYu/release/*.exe
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from package.json
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./MoYu/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
@@ -43,4 +81,5 @@ jobs:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: MoYu v${{ steps.get_version.outputs.version }}
           files: |
-            MoYu/release/*.dmg
+            artifacts/*.dmg
+            artifacts/*.exe
