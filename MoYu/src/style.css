@@ -951,7 +951,7 @@ iframe {
   z-index: 3;
   width: 100%;
   height: 100%;
-  padding: 12px 12px;
+  padding: 4px 6px;
   box-sizing: border-box;
   overflow: auto;
   background: transparent;

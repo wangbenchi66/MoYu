@@ -21,14 +21,14 @@ const isProfile = computed(() => route.name === 'profile' || route.path.startsWi
 
     <div class="console-tab-bar no-drag">
       <button class="tab-btn" :class="{ active: isHome }" @click="router.push({ name: 'home' })">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
           <polyline points="9 22 9 12 15 12 15 22"/>
         </svg>
         <span>首页</span>
       </button>
       <button class="tab-btn" :class="{ active: isProfile }" @click="router.push({ name: 'profile' })">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
           <circle cx="12" cy="7" r="4"/>
         </svg>
@@ -60,7 +60,7 @@ const isProfile = computed(() => route.name === 'profile' || route.path.startsWi
   justify-content: center;
   border-top: 1px solid #f0f0f0;
   background: var(--surface, #fff);
-  padding: 2px 0 4px;
+  padding: 0;
 }
 
 .console-page.transparent-mode .console-tab-bar {
@@ -71,15 +71,17 @@ const isProfile = computed(() => route.name === 'profile' || route.path.startsWi
 .tab-btn {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 2px;
-  padding: 4px 0;
+  justify-content: center;
+  gap: 3px;
+  padding: 3px 0;
   border: none;
   background: transparent;
   cursor: pointer;
   color: #999;
-  font-size: 10px;
+  font-size: 9px;
+  line-height: 1;
   transition: color 0.15s;
 }
 
