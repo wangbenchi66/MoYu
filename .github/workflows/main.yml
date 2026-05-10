@@ -34,11 +34,23 @@ jobs:
         run: npx electron-builder --mac --universal --publish never
         working-directory: MoYu
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: MoYu-macos-v${{ steps.get_version.outputs.version }}-universal
-          retention-days: 1
-          path: |
-            MoYu/release/*.dmg
-            MoYu/release/*.pkg
+          tag_name: v${{ steps.get_version.outputs.version }}
+          release_name: MoYu v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+
+      - name: Upload DMG to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: MoYu/release/MoYu-${{ steps.get_version.outputs.version }}-universal.dmg
+          asset_name: MoYu-macos-v${{ steps.get_version.outputs.version }}-universal.dmg
+          asset_content_type: application/octet-stream
