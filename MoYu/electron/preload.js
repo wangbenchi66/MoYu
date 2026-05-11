@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('desktop', {
     // 摸鱼时间统计
     getMoyuStats: () => ipcRenderer.invoke('moyu:get-stats'),
     clearMoyuStats: () => ipcRenderer.invoke('moyu:clear-stats'),
+    // 版本更新检测
+    checkForUpdate: () => ipcRenderer.invoke('update:check'),
 })
 
 // 在 preload 加载时通知主进程，便于确认 preload 是否注入到渲染器

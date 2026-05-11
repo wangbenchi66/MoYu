@@ -65,6 +65,7 @@ try {
     // ignore
 }
 const localDocuments = ref([])
+const updateInfo = ref(null)
 
 // 初始最近访问保持空，使用真实浏览行为填充
 const recentVisits = ref([])
@@ -1112,6 +1113,7 @@ export function useDesktopApp() {
         closeTabsToLeft,
         closeTabsToRight,
         closeAllTabs,
+        updateInfo,
         initializeDesktopApp,
         disposeDesktopApp,
         updateTabMetadata,

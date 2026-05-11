@@ -1,13 +1,15 @@
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import ShortcutRow from './components/ShortcutRow.vue';
 import { useRouter } from 'vue-router';
+import ShortcutRow from './components/ShortcutRow.vue';
 import { useDesktopApp } from './composables/useDesktopApp';
+import http from './http/index.js';
 import TopBar from './layouts/TopBar.vue';
 import MainPage from './pages/MainPage.vue';
 import BottomToolbar from './pages/parts/BottomToolbar.vue';
 import TabBar from './pages/parts/TabBar.vue';
+import { setForceUpdateActive } from './router/index.js';
 import defaultSettings from './shared/defaultSettings.js';
 
 const {
@@ -35,7 +37,8 @@ const {
   closeAllTabs,
   toggleSetting,
   urlInput,
-  handleOpenUrl
+  handleOpenUrl,
+  updateInfo
 } = useDesktopApp();
 const desktopApi = typeof window !== 'undefined' ? window.desktop : null;
 
@@ -43,6 +46,21 @@ const desktopApi = typeof window !== 'undefined' ? window.desktop : null;
 // 1. 本文件为渲染进程入口，负责窗口级别的 UI 与全局快捷键处理。
 // 2. 主要职责包括：管理设置面板、捕获与匹配快捷键、协调 BottomToolbar 与 MainPage 的交互、以及窗口热区/悬停逻辑。
 // 3. 关键事件：window 的 keydown（快捷键捕获）、pointermove（热区检测）、mouseout/blur（失焦/移出回退处理）。
+
+function compareVersions(a, b) {
+  const pa = String(a || '0')
+    .split('.')
+    .map(Number);
+  const pb = String(b || '0')
+    .split('.')
+    .map(Number);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+  }
+  return 0;
+}
 
 const isSettingsOpen = ref(false);
 let removeOpenSettingsListener = null;
@@ -675,6 +693,31 @@ onMounted(() => {
     window.addEventListener('blur', onWindowBlur);
   } catch (e) {}
 
+  // 版本更新检测
+  if (desktopApi?.checkForUpdate) {
+    desktopApi
+      .checkForUpdate()
+      .then(async (info) => {
+        //TODO:开发环境关闭更新检查，避免频繁访问接口
+        if (!info || info.isDev) return;
+        //console.log('[update] checkForUpdate result:', info);
+        try {
+          const res = await http.get('/api/MoYu/CheckVersion', { platform: info.platform });
+          if (!res || !res.success || !res.data?.version) return;
+          const { version, downloadUrl, content } = res.data;
+          const hasUpdate = compareVersions(version, info.currentVersion) > 0;
+          if (hasUpdate) {
+            updateInfo.value = { currentVersion: info.currentVersion, latestVersion: version, downloadUrl, updateContent: content };
+            setForceUpdateActive(true);
+            router.replace({ name: 'update' });
+          }
+        } catch (e) {
+          console.warn('[update] check failed:', e);
+        }
+      })
+      .catch(() => {});
+  }
+
   if (desktopApi?.onOpenSettingsRequest) {
     removeOpenSettingsListener = desktopApi.onOpenSettingsRequest(() => {
       openSettingsModal();
@@ -887,7 +930,9 @@ function localShortcutHandler(e) {
     </main>
 
     <!-- 底部工具栏仅在嵌入网页时显示，控制台/个人中心等自有页面不显示 -->
-    <BottomToolbar v-if="activeTab?.kind !== 'dashboard'" v-bind="toolbarProps" />
+    <BottomToolbar
+      v-if="activeTab?.kind !== 'dashboard'"
+      v-bind="toolbarProps" />
 
     <div
       v-if="isSettingsOpen"

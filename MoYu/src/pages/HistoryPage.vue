@@ -1,6 +1,8 @@
 <script setup>
+import { ElMessage } from 'element-plus';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import ContextMenu from '../components/ContextMenu.vue';
 import { useDesktopApp } from '../composables/useDesktopApp';
 
 defineProps({
@@ -10,6 +12,57 @@ defineProps({
 const router = useRouter();
 
 const { recentVisits, openRecentVisit } = useDesktopApp();
+
+const menuVisible = ref(false);
+const menuX = ref(0);
+const menuY = ref(0);
+const menuTarget = ref(null);
+const menuItems = [
+  { key: 'open', label: '打开链接' },
+  { key: 'copy', label: '复制链接' },
+];
+
+function copyToClipboard(text) {
+  if (!text) return Promise.reject(new Error('empty'));
+  if (navigator?.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  return new Promise((resolve, reject) => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy') ? resolve() : reject(new Error('execCopyFailed'));
+      document.body.removeChild(ta);
+    } catch (e) { reject(e); }
+  });
+}
+
+function showMenuForItem(e, item) {
+  e.preventDefault();
+  e.stopPropagation();
+  menuTarget.value = item;
+  menuX.value = e.clientX || 0;
+  menuY.value = e.clientY || 0;
+  menuVisible.value = true;
+}
+
+function onMenuSelect(item) {
+  const target = menuTarget.value;
+  menuVisible.value = false;
+  menuTarget.value = null;
+  if (!item || !target) return;
+  if (item.key === 'open') {
+    openRecentVisit(target);
+  } else if (item.key === 'copy') {
+    const url = target.url || '';
+    if (!url) { ElMessage({ message: '没有可复制的链接', type: 'warning' }); return; }
+    copyToClipboard(url)
+      .then(() => ElMessage({ message: '已复制链接', type: 'success' }))
+      .catch(() => ElMessage({ message: '复制失败', type: 'error' }));
+  }
+}
 
 const searchKeyword = ref('');
 const currentPage = ref(1);
@@ -86,7 +139,8 @@ function formatTime(t) {
         v-for="(item, idx) in pagedList"
         :key="`${item.url}-${item.time}-${idx}`"
         class="history-item"
-        @click="openRecentVisit(item)">
+        @click="openRecentVisit(item)"
+        @contextmenu.prevent.stop="showMenuForItem($event, item)">
         <div class="item-header">
           <strong class="item-title">{{ item.title || '未知页面' }}</strong>
           <small class="item-time">{{ formatTime(item.time) }}</small>
@@ -104,6 +158,13 @@ function formatTime(t) {
       <button class="page-btn" :disabled="currentPage >= totalPages" @click="nextPage">下一页</button>
     </div>
   </div>
+  <ContextMenu
+    :visible="menuVisible"
+    :x="menuX"
+    :y="menuY"
+    :items="menuItems"
+    @select="onMenuSelect"
+    @close="menuVisible = false" />
 </template>
 
 <style scoped>

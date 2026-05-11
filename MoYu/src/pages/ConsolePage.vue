@@ -11,6 +11,7 @@ const isTransparent = computed(() => settings.pageTransparentMode || settings.fu
 
 const isHome = computed(() => route.name === 'home');
 const isProfile = computed(() => route.name === 'profile' || route.path.startsWith('/profile'));
+const isUpdatePage = computed(() => route.name === 'update');
 </script>
 
 <template>
@@ -19,7 +20,7 @@ const isProfile = computed(() => route.name === 'profile' || route.path.startsWi
       <router-view :is-transparent="isTransparent" />
     </div>
 
-    <div class="console-tab-bar no-drag">
+    <div v-if="!isUpdatePage" class="console-tab-bar no-drag">
       <button class="tab-btn" :class="{ active: isHome }" @click="router.push({ name: 'home' })">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>

@@ -1,13 +1,13 @@
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, reactive, ref } from 'vue';
-import ContextMenu from '../components/ContextMenu.vue';
+import { useRouter } from 'vue-router';
 import { useDesktopApp } from '../composables/useDesktopApp';
 
+const router = useRouter();
+
 const {
-  recentVisits,
   useRecommendedSite,
-  openRecentVisit,
   urlInput,
   handleOpenUrl,
   uploadLocalFiles,
@@ -91,24 +91,6 @@ const recommendedPreview = computed(() => recommendedSites.value.slice(0, 8));
 const addPillRef = ref(null);
 const fileInputRef = ref(null);
 
-const latestVisits = computed(() => recentVisits.value.slice(0, 10));
-
-function formatTime(t) {
-  try {
-    if (!t) return '';
-    const d = new Date(t);
-    if (isNaN(d.getTime())) return String(t);
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    if (d.toDateString() === now.toDateString()) return time;
-    const date = `${d.getMonth() + 1}/${d.getDate()}`;
-    if (d.getFullYear() === now.getFullYear()) return `${date} ${time}`;
-    return `${d.getFullYear()}/${date}`;
-  } catch (e) {
-    return t || '';
-  }
-}
 
 function triggerFileSelect() {
   fileInputRef.value?.click();
@@ -135,72 +117,6 @@ function avatarText(site) {
   return host ? host.charAt(0).toUpperCase() : '?';
 }
 
-const menuVisible = ref(false);
-const menuX = ref(0);
-const menuY = ref(0);
-const menuTarget = ref(null);
-
-const menuItems = [
-  { key: 'open', label: '打开链接' },
-  { key: 'copy', label: '复制链接' }
-];
-
-function copyToClipboard(text) {
-  if (!text) return Promise.reject(new Error('empty'));
-  if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-    return navigator.clipboard.writeText(text);
-  }
-  return new Promise((resolve, reject) => {
-    try {
-      const ta = document.createElement('textarea');
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      if (ok) resolve();
-      else reject(new Error('execCopyFailed'));
-    } catch (e) {
-      reject(e);
-    }
-  });
-}
-
-function showMenuForItem(e, item) {
-  try {
-    e.preventDefault();
-    e.stopPropagation();
-  } catch (e) {}
-  menuTarget.value = item;
-  menuX.value = e.clientX || 0;
-  menuY.value = e.clientY || 0;
-  menuVisible.value = true;
-}
-
-function onMenuSelect(item) {
-  const target = menuTarget.value;
-  menuVisible.value = false;
-  menuTarget.value = null;
-  if (!item || !target) return;
-  if (item.key === 'open') {
-    try {
-      openRecentVisit(target);
-    } catch (e) {}
-  } else if (item.key === 'copy') {
-    const url = target.url || '';
-    if (!url) {
-      ElMessage({ message: '没有可复制的链接', type: 'warning' });
-      return;
-    }
-    copyToClipboard(url)
-      .then(() => ElMessage({ message: '已复制链接', type: 'success' }))
-      .catch(() => ElMessage({ message: '复制失败', type: 'error' }));
-  }
-}
-
-// copyToClipboard / copyUrl 已在上方定义并用于菜单处理
 </script>
 
 <template>
@@ -321,35 +237,19 @@ function onMenuSelect(item) {
       </el-popover>
     </section>
 
-    <section class="history">
-      <h2>最近访问</h2>
-      <div class="list">
-        <BaseButton
-          v-for="(item, idx) in latestVisits"
-          :key="`${item.type}-${item.time || ''}-${idx}`"
-          class="history-item"
-          :title="item.url"
-          @click="openRecentVisit(item)"
-          @contextmenu.prevent.stop="showMenuForItem($event, item)">
-          <div class="item-header">
-            <strong class="item-title">{{ item.title }}</strong>
-            <small class="item-time">{{ formatTime(item.time) }}</small>
-          </div>
-          <span class="url">{{ item.url }}</span>
-        </BaseButton>
-        <div v-if="!latestVisits.length" style="text-align: center; padding: 12px 0; color: rgba(0,0,0,0.25); font-size: 13px">
-          暂无访问记录
-        </div>
-      </div>
+    <section class="history-entry" @click="router.push({ name: 'history' })">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+      <span>历史记录</span>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow">
+        <polyline points="9 18 15 12 9 6" />
+      </svg>
     </section>
   </div>
-  <ContextMenu
-    :visible="menuVisible"
-    :x="menuX"
-    :y="menuY"
-    :items="menuItems"
-    @select="onMenuSelect"
-    @close="menuVisible = false" />
 </template>
 
 <style scoped>
@@ -371,10 +271,9 @@ function onMenuSelect(item) {
 
 .recommended-page.transparent-page .metrics,
 .recommended-page.transparent-page .spotlight,
-.recommended-page.transparent-page .history,
+.recommended-page.transparent-page .history-entry,
 .recommended-page.transparent-page .metric-card,
 .recommended-page.transparent-page .pill,
-.recommended-page.transparent-page .history-item,
 .recommended-page.transparent-page .card,
 .recommended-page.transparent-page .nav-row {
   background: transparent !important;
@@ -402,7 +301,6 @@ function onMenuSelect(item) {
   box-sizing: border-box;
 }
 .spotlight,
-.history,
 .quicklinks {
   background: var(--surface);
   padding: 6px 8px;
@@ -443,29 +341,6 @@ h2 {
   justify-content: center;
   border-radius: 6px;
   font-weight: 700;
-}
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.history-item {
-  text-align: left;
-  padding: 3px 6px;
-  border-radius: 5px;
-  border: 1px solid #f0f0f0;
-  background: var(--surface);
-  cursor: pointer;
-  font-size: 12px;
-}
-.url {
-  display: block;
-  color: #888;
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
 .controls {
   margin-bottom: 4px;
@@ -603,29 +478,29 @@ h2 {
   color: #f56c6c;
 }
 
-.item-header {
+.history-entry {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-.item-title {
-  flex: 1;
-  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid #f0f0f0;
+  cursor: pointer;
   font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 500;
+  color: #666;
+  transition: background 0.12s;
 }
 
-.item-time {
-  flex-shrink: 0;
-  color: var(--muted);
-  font-size: 10px;
-  opacity: 0.7;
-  white-space: nowrap;
+.history-entry:hover {
+  background: rgba(64, 158, 255, 0.04);
+  color: #409eff;
+}
+
+.history-entry .arrow {
+  margin-left: auto;
+  opacity: 0.4;
 }
 
 @media (max-width: 360px) {

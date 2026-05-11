@@ -949,6 +949,14 @@ ipcMain.handle('window:open-settings', () => {
     openSettingsPanel()
 })
 
+// ── 版本更新检测 ──
+
+ipcMain.handle('update:check', () => ({
+    currentVersion: app.getVersion(),
+    platform: process.platform === 'darwin' ? 'mac' : 'win',
+    isDev,
+}))
+
 ipcMain.handle('moyu:get-stats', () => getMoyuStats())
 
 ipcMain.handle('moyu:clear-stats', () => {
