@@ -90,14 +90,30 @@ try {
 }
 
 /**
- * 将最近访问列表持久化到 localStorage
+ * 将最近访问列表持久化到 localStorage（防抖 2 秒）
  */
+let _persistRecentTimer = null
 function persistRecentVisits() {
+    if (_persistRecentTimer) clearTimeout(_persistRecentTimer)
+    _persistRecentTimer = setTimeout(() => {
+        _persistRecentTimer = null
+        try {
+            localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentVisits.value.slice(0, RECENT_MAX)))
+        } catch (e) {
+            // ignore
+        }
+    }, 2000)
+}
+
+// 立即写入（用于页面卸载时确保数据不丢失）
+function flushRecentVisits() {
+    if (_persistRecentTimer) {
+        clearTimeout(_persistRecentTimer)
+        _persistRecentTimer = null
+    }
     try {
         localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentVisits.value.slice(0, RECENT_MAX)))
-    } catch (e) {
-        // ignore
-    }
+    } catch (e) {}
 }
 
 // 使用共享默认配置（由 electron/main.js 与渲染端共同维护）
@@ -573,7 +589,7 @@ function openTab(tab) {
  */
 function createPageTab(url, options = {}) {
     const normalizedUrl = normalizeUrl(url)
-    const nextId = Date.now() + Math.floor(Math.random() * 1000)
+    const nextId = generateUniqueTabId()
     const title = options.title ?? getTitleFromUrl(normalizedUrl)
 
     // 当是工作台页（about:blank / dashboard）时，复用已存在的工作台 tab 而不是重复创建
@@ -615,7 +631,7 @@ function createPageTab(url, options = {}) {
  * 参数: fileName, content, documentId
  */
 function createLocalTextTab(fileName, content, documentId) {
-    const nextId = Date.now() + Math.floor(Math.random() * 1000)
+    const nextId = generateUniqueTabId()
 
     openTab({
         id: nextId,
@@ -792,41 +808,45 @@ async function uploadLocalFiles(fileList) {
     }
 
     for (const file of files) {
-        const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-        const documentId = Date.now() + Math.floor(Math.random() * 1000)
+        try {
+            const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+            const documentId = generateUniqueTabId()
 
-        if (['txt', 'md', 'markdown', 'log', 'json'].includes(extension) || file.type.startsWith('text/')) {
-            const content = await file.text()
+            if (['txt', 'md', 'markdown', 'log', 'json'].includes(extension) || file.type.startsWith('text/')) {
+                const content = await file.text()
+                localDocuments.value.unshift({
+                    id: documentId,
+                    fileName: file.name,
+                    type: 'local-text',
+                    content,
+                    size: file.size,
+                })
+                createLocalTextTab(file.name, content, documentId)
+                continue
+            }
+
+            const objectUrl = URL.createObjectURL(file)
             localDocuments.value.unshift({
                 id: documentId,
                 fileName: file.name,
-                type: 'local-text',
-                content,
+                type: 'local-file',
+                url: objectUrl,
+                objectUrl,
+                mimeType: file.type,
                 size: file.size,
             })
-            createLocalTextTab(file.name, content, documentId)
-            continue
+            createPageTab(objectUrl, {
+                title: file.name.replace(/\.[^.]+$/, ''),
+                subtitle: file.name,
+                kind: 'page',
+                objectUrl,
+                fileName: file.name,
+                mimeType: file.type,
+                documentId,
+            })
+        } catch (e) {
+            console.warn('[upload] 文件读取失败，已跳过:', file.name, e)
         }
-
-        const objectUrl = URL.createObjectURL(file)
-        localDocuments.value.unshift({
-            id: documentId,
-            fileName: file.name,
-            type: 'local-file',
-            url: objectUrl,
-            objectUrl,
-            mimeType: file.type,
-            size: file.size,
-        })
-        createPageTab(objectUrl, {
-            title: file.name.replace(/\.[^.]+$/, ''),
-            subtitle: file.name,
-            kind: 'page',
-            objectUrl,
-            fileName: file.name,
-            mimeType: file.type,
-            documentId,
-        })
     }
 
     localDocuments.value = localDocuments.value.slice(0, 12)
@@ -1068,6 +1088,7 @@ function initializeDesktopApp() {
  * 清理渲染端的桌面应用资源与监听器
  */
 function disposeDesktopApp() {
+    flushRecentVisits()
     window.clearTimeout(syncTimer)
     window.clearTimeout(transparencySyncTimer)
     removeSettingsListener?.()

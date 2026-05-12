@@ -1,10 +1,11 @@
 <script setup>
 import { CloseBold, Hide, House, Lock, Minus, Monitor, Picture, Pointer, Setting, Unlock } from '@element-plus/icons-vue';
-import { onUnmounted, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 
-// 检测平台：Mac 上窗口控制习惯在左侧
-const isMac = typeof window !== 'undefined' && window.desktop?.platform === 'darwin';
+// 检测平台：Mac 上窗口控制习惯在左侧（用 computed 避免 preload 异步竞态）
+const isMac = computed(() => typeof window !== 'undefined' && window.desktop?.platform === 'darwin');
+const isDev = import.meta.env.DEV;
 
 const props = defineProps({
   settings: Object,
@@ -65,12 +66,6 @@ function dragAreaText() {
         @click="props.handleClose">
         <el-icon><CloseBold /></el-icon>
       </BaseButton>
-      <BaseButton
-        class="ctrl-btn"
-        title="最小化"
-        @click="props.handleMinimize">
-        <el-icon><Minus /></el-icon>
-      </BaseButton>
     </div>
 
     <!-- 品牌图标（仅 House，无文字） -->
@@ -78,6 +73,7 @@ function dragAreaText() {
       <BaseButton class="home-btn" @click="props.goHome" title="首页">
         <el-icon><House /></el-icon>
       </BaseButton>
+      <span v-if="isDev" class="dev-badge">dev</span>
     </div>
 
     <!-- 中间拖拽区 -->
@@ -154,12 +150,6 @@ function dragAreaText() {
         </BaseButton>
         <template v-if="!isMac">
           <BaseButton
-            class="ctrl-btn"
-            title="最小化"
-            @click="props.handleMinimize">
-            <el-icon><Minus /></el-icon>
-          </BaseButton>
-          <BaseButton
             class="ctrl-btn close-btn"
             title="关闭"
             @click="props.handleClose">
@@ -187,6 +177,18 @@ function dragAreaText() {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  gap: 4px;
+}
+
+.dev-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  background: #e6a23c;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.2;
+  letter-spacing: 0.5px;
 }
 
 .home-btn {

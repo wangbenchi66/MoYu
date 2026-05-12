@@ -182,10 +182,10 @@ function normalizeSettings(partial = {}) {
  * 从磁盘加载持久化设置（仅保留快捷键相关项）
  */
 function loadSettings() {
+    const filePath = getSettingsFilePath()
+    const backupPath = filePath + '.bak'
     try {
-        // 读取持久化设置，并将用户自定义值合并到默认设置中进行规范化。
-        // 按用户要求：在退出/启动间持久化所有用户修改的值（而非仅快捷键）。
-        const raw = fs.readFileSync(getSettingsFilePath(), 'utf-8')
+        const raw = fs.readFileSync(filePath, 'utf-8')
         const parsed = JSON.parse(raw || '{}')
 
         // 移除不应持久化的临时字段
@@ -198,8 +198,23 @@ function loadSettings() {
             ...defaultSettings,
             ...parsed,
         })
-    } catch {
-        currentSettings = { ...defaultSettings }
+    } catch (err) {
+        // 主文件损坏，尝试读取备份
+        try {
+            console.warn('[settings] 主设置文件读取失败，尝试恢复备份:', err.message)
+            const backupRaw = fs.readFileSync(backupPath, 'utf-8')
+            const backupParsed = JSON.parse(backupRaw || '{}')
+            for (const k of Object.keys(backupParsed)) {
+                if (nonPersistentKeys.has(k)) delete backupParsed[k]
+            }
+            currentSettings = normalizeSettings({ ...defaultSettings, ...backupParsed })
+            // 用备份恢复主文件
+            fs.writeFileSync(filePath, JSON.stringify(currentSettings, null, 2), 'utf-8')
+            console.log('[settings] 已从备份恢复设置')
+        } catch {
+            currentSettings = { ...defaultSettings }
+            console.warn('[settings] 备份也无法读取，已重置为默认设置')
+        }
     }
 }
 
@@ -271,7 +286,14 @@ ipcMain.handle('ui:set-ignore-mouse-events', (_, ignore) => {
  */
 function saveSettings() {
     try {
-        fs.writeFileSync(getSettingsFilePath(), JSON.stringify(currentSettings, null, 2), 'utf-8')
+        const filePath = getSettingsFilePath()
+        // 写入前先备份旧文件
+        try {
+            if (fs.existsSync(filePath)) {
+                fs.copyFileSync(filePath, filePath + '.bak')
+            }
+        } catch (e) {}
+        fs.writeFileSync(filePath, JSON.stringify(currentSettings, null, 2), 'utf-8')
     } catch (error) {
         console.warn('[settings] save failed:', error)
     }
@@ -403,6 +425,9 @@ function refreshAutoHideMonitor() {
             return
         }
 
+        // 窗口不可见时跳过轮询，节省功耗
+        if (!mainWindow.isVisible() && !mainWindow.isMinimized()) return
+
         const cursorPoint = screen.getCursorScreenPoint()
         const trackedBounds = lastVisibleBounds ?? mainWindow.getBounds()
 
@@ -422,7 +447,7 @@ function refreshAutoHideMonitor() {
             // 使用短暂置顶以确保在层级切换时能被用户看到（不持久化 alwaysOnTop）
             showMainWindow(false, { tempTop: true })
         }
-    }, 180)
+    }, 250)
 }
 
 /**
@@ -1044,4 +1069,14 @@ app.on('will-quit', () => {
     isQuitting = true
     stopAutoHideMonitor()
     globalShortcut.unregisterAll()
+})
+
+// OS 关机或进程被要求终止时，确保 closeToTray 不阻止退出
+app.on('before-quit', () => {
+    isQuitting = true
+})
+
+app.on('session-end', () => {
+    isQuitting = true
+    app.quit()
 })

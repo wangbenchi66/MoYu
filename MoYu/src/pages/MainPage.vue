@@ -23,6 +23,7 @@ const lastExecutedScripts = {}; // tabId -> Set of script signatures (simple ded
 const webviewRefSetters = {}; // cache stable ref setter functions per tab id
 const webviewEventListeners = {}; // tabId -> { eventName: handler }
 const webviewLastRecordedUrl = {}; // tabId -> last recorded url for history
+let _forwardKeyHandler = null; // 键盘转发监听器引用，用于 onBeforeUnmount 清理
 
 function getWebviewRefSetter(id) {
   const k = String(id);
@@ -531,129 +532,63 @@ function onWebviewWillNavigate(e) {
 }
 
 // 注入到 webview 内部，强制移除或拦截所有 target="_blank" 行为，确保在当前页面打开链接
-function forceDisableBlankTargets() {
-  const script = `(() => {
+const BLANK_TARGET_SCRIPT = `(() => {
+  try {
+    window.open = function(url) {
+      if (!url) return null;
+      try { location.assign(url); } catch(e) {}
+      return null;
+    };
+    document.addEventListener('click', function(evt) {
+      try {
+        const el = evt.target && evt.target.closest && evt.target.closest('a');
+        if (!el) return;
+        const href = el.getAttribute && (el.getAttribute('href') || el.href);
+        if (!href) return;
+        const targ = (el.getAttribute && el.getAttribute('target') || el.target || '').toLowerCase();
+        if (targ === '_blank') {
+          evt.preventDefault();
+          try { el.removeAttribute('target'); } catch(e) {}
+          try { location.assign(href); } catch(e) {}
+        }
+      } catch(e) {}
+    }, true);
     try {
-      // 覆盖 window.open，避免通过脚本打开新窗口
-      window.open = function(url) {
-        if (!url) return null;
-        try { location.assign(url); } catch(e) {}
-        return null;
-      };
-
-      // 捕获点击，优先处理 target="_blank" 的锚点
-      document.addEventListener('click', function(evt) {
-        try {
-          const el = evt.target && evt.target.closest && evt.target.closest('a');
-          if (!el) return;
-          const href = el.getAttribute && (el.getAttribute('href') || el.href);
-          if (!href) return;
-          const targ = (el.getAttribute && el.getAttribute('target') || el.target || '').toLowerCase();
-          if (targ === '_blank') {
-            evt.preventDefault();
-            try { el.removeAttribute('target'); } catch(e) {}
-            try { location.assign(href); } catch(e) {}
-          }
-        } catch(e) {}
-      }, true);
-
-      // 初始移除已有的 target="_blank"
-      try {
-        document.querySelectorAll && document.querySelectorAll('a[target="_blank"]').forEach(a => { try { a.removeAttribute('target'); } catch(e) {} });
-      } catch(e) {}
-
-      // 监听动态插入或修改的元素，移除 target 属性
-      try {
-        const mo = new MutationObserver(function(muts) {
-          try {
-            muts.forEach(m => {
-              if (m.addedNodes && m.addedNodes.length) {
-                m.addedNodes.forEach(n => {
-                  if (n && n.nodeType === 1) {
-                    try {
-                      if (n.tagName === 'A' && (n.target || '').toLowerCase() === '_blank') n.removeAttribute('target');
-                      const inner = n.querySelectorAll && n.querySelectorAll('a[target="_blank"]');
-                      inner && inner.forEach(a => { try { a.removeAttribute('target'); } catch(e) {} });
-                    } catch(e) {}
-                  }
-                });
-              }
-              if (m.type === 'attributes' && m.target && m.target.tagName === 'A' && m.attributeName === 'target') {
-                try { if ((m.target.getAttribute('target') || '').toLowerCase() === '_blank') m.target.removeAttribute('target'); } catch(e) {}
-              }
-            });
-          } catch(e) {}
-        });
-        mo.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true, attributeFilter: ['target'] });
-      } catch(e) {}
+      document.querySelectorAll && document.querySelectorAll('a[target="_blank"]').forEach(a => { try { a.removeAttribute('target'); } catch(e) {} });
     } catch(e) {}
-    return true;
-  })();`;
+    try {
+      const mo = new MutationObserver(function(muts) {
+        try {
+          muts.forEach(m => {
+            if (m.addedNodes && m.addedNodes.length) {
+              m.addedNodes.forEach(n => {
+                if (n && n.nodeType === 1) {
+                  try {
+                    if (n.tagName === 'A' && (n.target || '').toLowerCase() === '_blank') n.removeAttribute('target');
+                    const inner = n.querySelectorAll && n.querySelectorAll('a[target="_blank"]');
+                    inner && inner.forEach(a => { try { a.removeAttribute('target'); } catch(e) {} });
+                  } catch(e) {}
+                }
+              });
+            }
+            if (m.type === 'attributes' && m.target && m.target.tagName === 'A' && m.attributeName === 'target') {
+              try { if ((m.target.getAttribute('target') || '').toLowerCase() === '_blank') m.target.removeAttribute('target'); } catch(e) {}
+            }
+          });
+        } catch(e) {}
+      });
+      mo.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true, attributeFilter: ['target'] });
+    } catch(e) {}
+  } catch(e) {}
+  return true;
+})();`;
 
-  runWebviewJS(script);
+function forceDisableBlankTargets() {
+  runWebviewJS(BLANK_TARGET_SCRIPT);
 }
 
-// 支持可选的 tabId，针对单个 webview 禁用 _blank 打开行为
 function forceDisableBlankTargetsFor(tabId) {
-  const script = `(() => {
-    try {
-      // 覆盖 window.open，避免通过脚本打开新窗口
-      window.open = function(url) {
-        if (!url) return null;
-        try { location.assign(url); } catch(e) {}
-        return null;
-      };
-
-      // 捕获点击，优先处理 target="_blank" 的锚点
-      document.addEventListener('click', function(evt) {
-        try {
-          const el = evt.target && evt.target.closest && evt.target.closest('a');
-          if (!el) return;
-          const href = el.getAttribute && (el.getAttribute('href') || el.href);
-          if (!href) return;
-          const targ = (el.getAttribute && el.getAttribute('target') || el.target || '').toLowerCase();
-          if (targ === '_blank') {
-            evt.preventDefault();
-            try { el.removeAttribute('target'); } catch(e) {}
-            try { location.assign(href); } catch(e) {}
-          }
-        } catch(e) {}
-      }, true);
-
-      // 初始移除已有的 target="_blank"
-      try {
-        document.querySelectorAll && document.querySelectorAll('a[target="_blank"]').forEach(a => { try { a.removeAttribute('target'); } catch(e) {} });
-      } catch(e) {}
-
-      // 监听动态插入或修改的元素，移除 target 属性
-      try {
-        const mo = new MutationObserver(function(muts) {
-          try {
-            muts.forEach(m => {
-              if (m.addedNodes && m.addedNodes.length) {
-                m.addedNodes.forEach(n => {
-                  if (n && n.nodeType === 1) {
-                    try {
-                      if (n.tagName === 'A' && (n.target || '').toLowerCase() === '_blank') n.removeAttribute('target');
-                      const inner = n.querySelectorAll && n.querySelectorAll('a[target="_blank"]');
-                      inner && inner.forEach(a => { try { a.removeAttribute('target'); } catch(e) {} });
-                    } catch(e) {}
-                  }
-                });
-              }
-              if (m.type === 'attributes' && m.target && m.target.tagName === 'A' && m.attributeFilter && m.attributeFilter.indexOf && m.attributeFilter.indexOf('target') !== -1) {
-                try { if ((m.target.getAttribute('target') || '').toLowerCase() === '_blank') m.target.removeAttribute('target'); } catch(e) {}
-              }
-            });
-          } catch(e) {}
-        });
-        mo.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true, attributeFilter: ['target'] });
-      } catch(e) {}
-    } catch(e) {}
-    return true;
-  })();`;
-
-  runWebviewJS(script, tabId);
+  runWebviewJS(BLANK_TARGET_SCRIPT, tabId);
 }
 
 // 从当前 webview 读取页面元数据并更新对应 tab（标题 / 副标题）
@@ -817,20 +752,16 @@ function onWebviewFailLoad(e) {
   } catch (err) {}
 }
 
-function syncWebviewTransparency() {
+function syncWebviewTransparency(tabId) {
   const enabled = settings.pageTransparentMode || settings.fullWindowTransparent;
   const css = settings.pageTransparentMode || settings.fullWindowTransparent ? transparentPageCssAggressive : transparentPageCss;
-  // 若传入 tabId 则会只针对该 webview 注入
-  const tabId = arguments.length ? arguments[0] : undefined;
   runWebviewCss('glass-transparent-style', enabled ? css : '', tabId);
 }
-function syncWebviewNoImage() {
-  const tabId = arguments.length ? arguments[0] : undefined;
+function syncWebviewNoImage(tabId) {
   runWebviewCss('glass-no-image-style', settings.noImageMode ? noImageCss : '', tabId);
 }
 
-function syncWebviewScrollbars() {
-  const tabId = arguments.length ? arguments[0] : undefined;
+function syncWebviewScrollbars(tabId) {
   const enabled = !!settings.showScrollbars;
   // 注入样式节点以隐藏滚动条视觉，但保留页面滚动行为
   const css = `
@@ -864,9 +795,8 @@ function syncWebviewScrollbars() {
   runWebviewJS(script, tabId);
 }
 
-function syncWebviewTextColor() {
+function syncWebviewTextColor(tabId) {
   if (!settings.forceReaderTextColor) {
-    const tabId = arguments.length ? arguments[0] : undefined;
     runWebviewCss('glass-force-text-color', '', tabId);
     return;
   }
@@ -877,13 +807,11 @@ function syncWebviewTextColor() {
     a, a * { color: inherit !important; }
   `;
 
-  const tabId = arguments.length ? arguments[0] : undefined;
   runWebviewCss('glass-force-text-color', css, tabId);
 }
 
-function syncWebviewFontSize() {
+function syncWebviewFontSize(tabId) {
   if (!settings.forceReaderFont) {
-    const tabId = arguments.length ? arguments[0] : undefined;
     runWebviewCss('glass-force-font-size', '', tabId);
     return;
   }
@@ -893,12 +821,10 @@ function syncWebviewFontSize() {
     html, body, body * { font-size: ${scale}% !important; }
   `;
 
-  const tabId = arguments.length ? arguments[0] : undefined;
   runWebviewCss('glass-force-font-size', css, tabId);
 }
 
-function syncWebviewAutoScroll() {
-  const tabId = arguments.length ? arguments[0] : undefined;
+function syncWebviewAutoScroll(tabId) {
   runWebviewJS(buildAutoScrollScript(settings.autoScrollEnabled, settings.autoScrollSpeed), tabId);
 }
 
@@ -1575,6 +1501,14 @@ onBeforeUnmount(() => {
   try {
     detachPauseListeners();
   } catch (e) {}
+  // 清理键盘转发监听器
+  try {
+    if (_forwardKeyHandler) {
+      window.removeEventListener('keydown', _forwardKeyHandler, true);
+      window.removeEventListener('keyup', _forwardKeyHandler, true);
+      _forwardKeyHandler = null;
+    }
+  } catch (e) {}
 });
 
 onMounted(() => {
@@ -1587,7 +1521,7 @@ onMounted(() => {
   } catch (e) {}
   // 将键盘事件转发到 active webview（使 webview 内的快捷键生效）
   try {
-    const forwardKey = (ev) => {
+    _forwardKeyHandler = (ev) => {
       try {
         const w = getActiveWebview();
         if (!w || typeof w.sendInputEvent !== 'function') return;
@@ -1603,8 +1537,8 @@ onMounted(() => {
         } catch (e) {}
       } catch (e) {}
     };
-    window.addEventListener('keydown', forwardKey, true);
-    window.addEventListener('keyup', forwardKey, true);
+    window.addEventListener('keydown', _forwardKeyHandler, true);
+    window.addEventListener('keyup', _forwardKeyHandler, true);
   } catch (e) {}
 });
 </script>
