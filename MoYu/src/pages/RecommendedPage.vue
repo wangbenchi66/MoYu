@@ -249,6 +249,19 @@ function avatarText(site) {
         <polyline points="9 18 15 12 9 6" />
       </svg>
     </section>
+
+    <section class="history-entry" @click="router.push({ name: 'library' })">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+      </svg>
+      <span>我的书架</span>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow">
+        <polyline points="9 18 15 12 9 6" />
+      </svg>
+    </section>
   </div>
 </template>
 
