@@ -255,6 +255,7 @@ const themeVars = computed(() => {
 })
 
 let syncTimer = null
+let transparencySyncTimer = null
 let removeSettingsListener = null
 let initialized = false
 // 当 fullWindowTransparent 启用时，我们可能会临时打开 pageTransparentMode
@@ -421,20 +422,23 @@ function patchSetting(key, value) {
         if (desktopApi?.setTransparency) {
             desktopApi.setTransparency(nextVal).then((nextSettings) => {
                 if (nextSettings && typeof nextSettings === 'object') {
-                    // 不用主进程返回值覆盖 transparency，避免异步回调把本地状态回退
                     const { transparency: _t, ...rest } = nextSettings
                     Object.assign(settings, rest)
                 }
-                if (desktopApi?.updateSettings) {
-                    desktopApi.updateSettings({ ...settings }).then((ns) => {
-                        if (ns && typeof ns === 'object') {
-                            const { transparency: _t2, ...rest2 } = ns
-                            Object.assign(settings, rest2)
-                        }
-                    }).catch(() => {
-                        statusMessage.value = '设置同步失败，请重试'
-                    })
-                }
+                // 持久化防抖：拖拽滑块时只在停止后写入磁盘
+                window.clearTimeout(transparencySyncTimer)
+                transparencySyncTimer = window.setTimeout(() => {
+                    if (desktopApi?.updateSettings) {
+                        desktopApi.updateSettings({ ...settings }).then((ns) => {
+                            if (ns && typeof ns === 'object') {
+                                const { transparency: _t2, ...rest2 } = ns
+                                Object.assign(settings, rest2)
+                            }
+                        }).catch(() => {
+                            statusMessage.value = '设置同步失败，请重试'
+                        })
+                    }
+                }, 300)
             }).catch(() => {
                 statusMessage.value = '设置同步失败，请重试'
             })
@@ -1065,6 +1069,7 @@ function initializeDesktopApp() {
  */
 function disposeDesktopApp() {
     window.clearTimeout(syncTimer)
+    window.clearTimeout(transparencySyncTimer)
     removeSettingsListener?.()
     removeSettingsListener = null
     initialized = false

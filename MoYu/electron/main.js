@@ -47,6 +47,7 @@ const MIN_SAFE_HEIGHT = 240
 
 // 摸鱼时间统计
 let moyuStart = null
+let moyuEndTimer = null
 
 function getTodayKey() {
     const d = new Date()
@@ -54,11 +55,23 @@ function getTodayKey() {
 }
 
 function startMoyu() {
+    // 有 pending 的延迟结束，取消它
+    if (moyuEndTimer) {
+        clearTimeout(moyuEndTimer)
+        moyuEndTimer = null
+    }
     if (moyuStart) return
     moyuStart = Date.now()
 }
 
 function endMoyu() {
+    // 延迟 5 秒执行，快速切换窗口时不会反复启停
+    if (moyuEndTimer) clearTimeout(moyuEndTimer)
+    moyuEndTimer = setTimeout(endMoyuNow, 5000)
+}
+
+function endMoyuNow() {
+    moyuEndTimer = null
     if (!moyuStart) return
     const now = Date.now()
     if (now - moyuStart < 2000) {
@@ -825,9 +838,25 @@ function createWindow() {
         startMoyu()
     })
 
+    win.on('focus', () => {
+        startMoyu()
+    })
+
     win.on('blur', () => {
         if (currentSettings.autoHide) {
+            // autoHide 时 hideMainWindow 会触发 hide 事件，由 hide 事件处理 endMoyu
             hideMainWindow()
+            return
+        }
+        // 非 autoHide 时：检查是否有媒体播放或自动滚动，有则继续计时
+        try {
+            win.webContents.executeJavaScript('!!(window.__moyuShouldKeepTracking && window.__moyuShouldKeepTracking())')
+                .then((shouldKeep) => {
+                    if (!shouldKeep) endMoyu()
+                })
+                .catch(() => endMoyu())
+        } catch (e) {
+            endMoyu()
         }
     })
 
@@ -960,6 +989,7 @@ ipcMain.handle('update:check', () => ({
 ipcMain.handle('moyu:get-stats', () => getMoyuStats())
 
 ipcMain.handle('moyu:clear-stats', () => {
+    if (moyuEndTimer) { clearTimeout(moyuEndTimer); moyuEndTimer = null }
     store.set('moyuSessions', {})
     moyuStart = null
     return true
@@ -1010,7 +1040,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', () => {
-    endMoyu()
+    endMoyuNow()
     isQuitting = true
     stopAutoHideMonitor()
     globalShortcut.unregisterAll()

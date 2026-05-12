@@ -109,6 +109,7 @@ const toolbarProps = computed(() => {
 const hotzoneHeight = ref(28);
 let _resizeObserver = null;
 let _pmHandler = null;
+let _pmRafId = null;
 let _mouseInsideWindow = false;
 let _lastNear = false;
 let _headerHideTimeout = null;
@@ -663,6 +664,29 @@ function goHome() {
 onMounted(() => {
   initializeDesktopApp();
 
+  // 暴露给主进程：blur 时判断是否应继续摸鱼计时
+  window.__moyuShouldKeepTracking = () => {
+    try {
+      // 自动滚动开启时视为活跃
+      if (settings.autoScrollEnabled) return true;
+      // 有正在播放的视频/音频时视为活跃
+      const media = document.querySelectorAll('video, audio');
+      for (const el of media) {
+        if (!el.paused && !el.ended) return true;
+      }
+      // 检查 webview 内的媒体（通过注入标记）
+      try {
+        const webviews = document.querySelectorAll('webview');
+        for (const wv of webviews) {
+          try {
+            if (wv.getAttribute('data-media-playing') === '1') return true;
+          } catch (e) {}
+        }
+      } catch (e) {}
+    } catch (e) {}
+    return false;
+  };
+
   window.addEventListener('keydown', handleKeydown);
   // 全局 pointermove 监听：用于 hover 标题栏逻辑（与底部工具栏一致）
   try {
@@ -682,7 +706,13 @@ onMounted(() => {
         _tabbarEl.addEventListener('mouseleave', onTopbarMouseLeave);
       }
     } catch (e) {}
-    _pmHandler = _onPointerMoveForHeader;
+    _pmHandler = (e) => {
+      if (_pmRafId) return;
+      _pmRafId = requestAnimationFrame(() => {
+        _pmRafId = null;
+        _onPointerMoveForHeader(e);
+      });
+    };
     window.addEventListener('pointermove', _pmHandler);
     // pointerdown 也用于触发进入检测（在 webview 上也更可靠）
     window.addEventListener('pointerdown', _pmHandler);
@@ -739,6 +769,10 @@ onBeforeUnmount(() => {
       window.removeEventListener('pointermove', _pmHandler);
       window.removeEventListener('pointerdown', _pmHandler);
       _pmHandler = null;
+    }
+    if (_pmRafId) {
+      cancelAnimationFrame(_pmRafId);
+      _pmRafId = null;
     }
   } catch (e) {}
   try {

@@ -218,7 +218,16 @@ function setWebviewRef(el, id) {
     };
     listeners['ipc-message'] = function (evt) {
       try {
-        console.debug('[webview.ipc]', evt && evt.channel ? evt.channel : evt, evt && evt.args ? evt.args : undefined);
+        const channel = evt && evt.channel;
+        if (channel === 'media-status') {
+          const playing = evt.args && evt.args[0] && evt.args[0].playing;
+          const wv = evt.target || el;
+          if (wv && wv.setAttribute) {
+            wv.setAttribute('data-media-playing', playing ? '1' : '0');
+          }
+          return;
+        }
+        console.debug('[webview.ipc]', channel, evt && evt.args ? evt.args : undefined);
       } catch (e) {}
     };
 
@@ -1008,12 +1017,14 @@ function syncLocalReaderAutoScroll() {
 }
 
 function syncReaderEffects(tabId) {
-  syncWebviewTransparency(tabId);
-  syncWebviewNoImage(tabId);
-  syncWebviewScrollbars(tabId);
-  syncWebviewTextColor(tabId);
-  syncWebviewFontSize(tabId);
-  syncWebviewAutoScroll(tabId);
+  // 未指定 tabId 时只作用于当前活跃 tab，避免扇出到所有 webview
+  const tid = tabId !== undefined && tabId !== null ? tabId : activeTabId.value;
+  syncWebviewTransparency(tid);
+  syncWebviewNoImage(tid);
+  syncWebviewScrollbars(tid);
+  syncWebviewTextColor(tid);
+  syncWebviewFontSize(tid);
+  syncWebviewAutoScroll(tid);
   syncLocalReaderAutoScroll();
   // 同步本地阅读器样式以保证立即可见
   applyLocalReaderStyles();
@@ -1256,6 +1267,35 @@ function handleWebviewDomReady(e) {
     syncLocalReaderAutoScroll();
   } catch (e) {}
 
+  // 注入媒体播放状态监听，用于摸鱼计时判断
+  try {
+    const mediaMonitor = `(() => {
+      try {
+        if (window.__glassReaderMediaMonitor) return true;
+        window.__glassReaderMediaMonitor = true;
+        const check = () => {
+          try {
+            const all = document.querySelectorAll('video, audio');
+            let playing = false;
+            for (const m of all) { if (!m.paused && !m.ended) { playing = true; break; } }
+            if (window.__glassReaderMediaPlaying !== playing) {
+              window.__glassReaderMediaPlaying = playing;
+              if (window.chrome && chrome.ipcRenderer && chrome.ipcRenderer.sendToHost) {
+                chrome.ipcRenderer.sendToHost('media-status', { playing });
+              }
+            }
+          } catch(e) {}
+        };
+        ['play', 'pause', 'ended', 'loadeddata'].forEach(evt => {
+          document.addEventListener(evt, check, true);
+        });
+        check();
+      } catch(e) {}
+      return true;
+    })();`;
+    runWebviewJS(mediaMonitor, tabId);
+  } catch (e) {}
+
   // 如果开启手机模式，尝试注入 viewport meta（若页面没有的话）
   try {
     if (settings && settings.mobileMode) {
@@ -1377,25 +1417,32 @@ function updateEffectiveToolbar() {
   }
 }
 
-// 监听强制网页透明开关，确保其变更能立即同步到 webview
-// 注意：直接传入 syncReaderEffects 会让 Vue 把新值作为参数传入
-// 从而误把布尔值当作 tabId；使用包裹函数以避免该问题
+// 批量同步 reader 效果：多个 settings watcher 共用，同一 tick 内只执行一次
+let _syncReaderPending = false;
+function scheduleSyncReaderEffects() {
+  if (_syncReaderPending) return;
+  _syncReaderPending = true;
+  nextTick(() => {
+    _syncReaderPending = false;
+    syncReaderEffects();
+  });
+}
+
 watch(
   () => settings.pageTransparentMode,
-  () => syncReaderEffects()
+  () => scheduleSyncReaderEffects()
 );
-// forcePageTransparent 已与 pageTransparentMode 功能合并，移除单独监听以避免重复触发
 watch(
   () => settings.noImageMode,
-  () => syncReaderEffects()
+  () => scheduleSyncReaderEffects()
 );
 watch(
   () => settings.autoScrollEnabled,
-  () => syncReaderEffects()
+  () => scheduleSyncReaderEffects()
 );
 watch(
   () => settings.autoScrollSpeed,
-  () => syncReaderEffects()
+  () => scheduleSyncReaderEffects()
 );
 watch(
   () => settings.readerTextColor,
@@ -1405,37 +1452,29 @@ watch(
   }
 );
 
-// 修复：切换 tab 后若开启自动滚动，清理暂停标记并重新同步自动滚动
+// 切换 tab 时：重置暂停标记、同步 reader 效果、更新工具栏
 watch(
   () => activeTabId.value,
-  async (newId, oldId) => {
-    try {
-      // 重置本地阅读器的用户交互暂停标记，使鼠标点击不会永久阻止自动滚动
-      localUserInteractingAt = null;
-      // 停止并重新启动本地 auto-scroll（如果适用）以恢复状态
-      try {
-        stopLocalReaderAutoScroll();
-      } catch (e) {}
-      try {
-        syncLocalReaderAutoScroll();
-      } catch (e) {}
+  async (newId) => {
+    // 重置本地阅读器的用户交互暂停标记
+    localUserInteractingAt = null;
+    try { stopLocalReaderAutoScroll(); } catch (e) {}
+    try { syncLocalReaderAutoScroll(); } catch (e) {}
 
-      // 对 webview 注入脚本，清理页面内可能设置的自动滚动暂停标记并重新同步
-      try {
-        const clearPaused = `(() => {
-          try {
-            if (window.__glassReaderAutoScrollPaused) window.__glassReaderAutoScrollPaused = false;
-          } catch(e) {}
-          return true;
-        })();`;
-        // 只针对当前激活 tab 注入以避免影响其它 tab
-        runWebviewJS(clearPaused, newId);
-        // 重新同步注入（会根据 settings 决定是否重启 auto-scroll）
-        try {
-          syncWebviewAutoScroll(newId);
-        } catch (e) {}
-      } catch (e) {}
+    // 清理 webview 内自动滚动暂停标记
+    try {
+      const clearPaused = `(() => {
+        try { if (window.__glassReaderAutoScrollPaused) window.__glassReaderAutoScrollPaused = false; } catch(e) {}
+        return true;
+      })();`;
+      runWebviewJS(clearPaused, newId);
     } catch (e) {}
+
+    // 更新 ready 状态并同步所有 reader 效果（只作用于当前 tab）
+    webviewReady.value = !!webviewReadyMap[String(newId)];
+    await nextTick();
+    syncReaderEffects(newId);
+    try { updateEffectiveToolbar(); } catch (e) {}
   }
 );
 
@@ -1502,33 +1541,7 @@ watch(
   }
 );
 
-watch(
-  () => activeTabId.value,
-  async () => {
-    // 切换 tab 时根据目标 tab 的 readyMap 更新状态，并同步该 tab 的 reader 效果
-    webviewReady.value = !!webviewReadyMap[String(activeTabId.value)];
-    await nextTick();
-    syncReaderEffects(activeTabId.value);
-    try {
-      updateEffectiveToolbar();
-    } catch (e) {}
-    try {
-      // diagnostic: enumerate webview frames and report classes/sizes
-      try {
-        const nodes = document.querySelectorAll && document.querySelectorAll('.webview-frame');
-        if (nodes && nodes.length) {
-          for (let i = 0; i < nodes.length; i++) {
-            const n = nodes[i];
-            try {
-              const r = n.getBoundingClientRect ? n.getBoundingClientRect() : { width: n.clientWidth || 0, height: n.clientHeight || 0 };
-              console.log('[webview.debug] post-switch frame', { idx: i, class: n.className || (n.classList ? Array.from(n.classList).join(' ') : ''), size: { w: r.width, h: r.height } });
-            } catch (e) {}
-          }
-        }
-      } catch (e) {}
-    } catch (e) {}
-  }
-);
+// activeTabId watcher 已合并到上方，移除重复监听
 
 // 监听用户是否启用失焦暂停行为，动态绑定/解绑事件监听器
 watch(
