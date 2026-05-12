@@ -93,6 +93,31 @@ function getMoyuStats() {
     }
 }
 
+// ── 日志系统 ──
+const LOG_MAX_SIZE = 2 * 1024 * 1024 // 2MB
+
+function getLogFilePath() {
+    return path.join(app.getPath('userData'), 'app.log')
+}
+
+function writeLog(level, msg, data) {
+    try {
+        const logPath = getLogFilePath()
+        // 超过限制时截断为一半
+        try {
+            const stat = fs.statSync(logPath)
+            if (stat.size > LOG_MAX_SIZE) {
+                const content = fs.readFileSync(logPath, 'utf-8')
+                const half = content.substring(Math.floor(content.length / 2))
+                fs.writeFileSync(logPath, half, 'utf-8')
+            }
+        } catch (e) {}
+        const ts = new Date().toISOString()
+        const line = `[${ts}] [${level}] ${msg}${data ? ' | ' + JSON.stringify(data) : ''}\n`
+        fs.appendFileSync(logPath, line, 'utf-8')
+    } catch (e) {}
+}
+
 /**
  * 获取设置文件的完整路径
  */
@@ -237,10 +262,11 @@ ipcMain.handle('settings:set-transparency', (_, percent) => {
     return currentSettings
 })
 
-// 接收来自 renderer 的调试日志，并在主进程终端打印，便于排查滑块事件
+// 接收来自 renderer 的调试日志，写入日志文件并打印到终端
 ipcMain.on('renderer:log', (event, msg) => {
     try {
         console.log('[renderer->main]', msg)
+        writeLog('INFO', String(msg))
     } catch (e) {
         console.warn('[renderer->main] log failed', e)
     }

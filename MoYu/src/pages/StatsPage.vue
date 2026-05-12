@@ -111,6 +111,60 @@ function toggleDay(key) {
     expandedDays.value.add(key);
   }
 }
+
+// 最近 7 天柱状图数据
+const last7Days = computed(() => {
+  const result = [];
+  const d = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const dt = new Date(d);
+    dt.setDate(dt.getDate() - i);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    result.push({
+      key,
+      label: `${dt.getMonth() + 1}/${dt.getDate()}`,
+      weekday: `周${weekdays[dt.getDay()]}`,
+      value: dayTotal(key),
+    });
+  }
+  return result;
+});
+
+const last7Max = computed(() => Math.max(1, ...last7Days.value.map(d => d.value)));
+
+// 按小时分布热力图数据（0-23 点）
+const hourlyData = computed(() => {
+  const buckets = new Array(24).fill(0);
+  const allSessions = [];
+  for (const key in sessions.value) {
+    allSessions.push(...(sessions.value[key] || []));
+  }
+  if (activeStart.value) {
+    allSessions.push({ start: activeStart.value, end: now.value });
+  }
+  for (const s of allSessions) {
+    const startDate = new Date(s.start);
+    const endDate = new Date(s.end);
+    // 按小时累加
+    const cur = new Date(startDate);
+    cur.setMinutes(0, 0, 0);
+    while (cur < endDate) {
+      const h = cur.getHours();
+      const hourStart = cur.getTime();
+      const hourEnd = hourStart + 3600000;
+      const overlapStart = Math.max(s.start, hourStart);
+      const overlapEnd = Math.min(s.end, hourEnd);
+      if (overlapEnd > overlapStart) {
+        buckets[h] += overlapEnd - overlapStart;
+      }
+      cur.setTime(cur.getTime() + 3600000);
+    }
+  }
+  return buckets;
+});
+
+const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 </script>
 
 <template>
@@ -145,6 +199,42 @@ function toggleDay(key) {
         </div>
       </div>
       <div v-else class="empty-tip">今天还没有摸鱼记录</div>
+    </div>
+
+    <!-- 最近 7 天柱状图 -->
+    <div class="stats-card chart-card" v-if="sortedDays.length">
+      <div class="card-header">
+        <span class="card-title">最近 7 天</span>
+      </div>
+      <div class="bar-chart">
+        <div v-for="d in last7Days" :key="d.key" class="bar-col">
+          <div class="bar-value">{{ d.value > 0 ? formatDuration(d.value) : '' }}</div>
+          <div class="bar-track">
+            <div class="bar-fill" :style="{ height: (d.value / last7Max * 100) + '%' }"></div>
+          </div>
+          <div class="bar-label">{{ d.label }}</div>
+          <div class="bar-weekday">{{ d.weekday }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 按小时分布热力图 -->
+    <div class="stats-card chart-card" v-if="sortedDays.length">
+      <div class="card-header">
+        <span class="card-title">摸鱼时段分布</span>
+      </div>
+      <div class="heatmap">
+        <div v-for="(val, h) in hourlyData" :key="h" class="heat-cell"
+          :style="{ opacity: val > 0 ? 0.2 + 0.8 * (val / hourlyMax) : 0.06 }"
+          :title="`${h}:00 - ${formatDuration(val)}`">
+          <span class="heat-hour">{{ h }}</span>
+        </div>
+      </div>
+      <div class="heatmap-legend">
+        <span>少</span>
+        <div class="legend-gradient"></div>
+        <span>多</span>
+      </div>
     </div>
 
     <!-- 累计总时长 -->
@@ -416,5 +506,104 @@ function toggleDay(key) {
 .clear-btn:hover {
   background: #f56c6c;
   color: #fff;
+}
+
+/* 柱状图 */
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+  height: 100px;
+  padding: 0 4px;
+}
+
+.bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.bar-value {
+  font-size: 9px;
+  color: #999;
+  height: 16px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.bar-track {
+  flex: 1;
+  width: 100%;
+  max-width: 28px;
+  background: #f0f0f0;
+  border-radius: 3px 3px 0 0;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #409eff, #66b1ff);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+  transition: height 0.3s ease;
+}
+
+.bar-label {
+  font-size: 10px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.bar-weekday {
+  font-size: 9px;
+  color: #bbb;
+}
+
+/* 热力图 */
+.heatmap {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 3px;
+  margin-top: 10px;
+}
+
+.heat-cell {
+  aspect-ratio: 1;
+  background: #409eff;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  transition: opacity 0.2s;
+}
+
+.heat-hour {
+  font-size: 9px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 10px;
+  color: #bbb;
+}
+
+.legend-gradient {
+  width: 60px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(64, 158, 255, 0.1), rgba(64, 158, 255, 1));
 }
 </style>

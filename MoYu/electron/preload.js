@@ -12,8 +12,9 @@ contextBridge.exposeInMainWorld('desktop', {
     setTransparency: (percent) => ipcRenderer.invoke('settings:set-transparency', percent),
     // 临时设置主窗口是否忽略鼠标事件（用于在启用鼠标穿透时恢复设置交互）
     setIgnoreMouseEvents: (ignore) => ipcRenderer.invoke('ui:set-ignore-mouse-events', !!ignore),
-    // 将 renderer 的调试日志转发到主进程，方便在主进程终端查看
+    // 将 renderer 的调试日志转发到主进程并写入日志文件
     log: (msg) => ipcRenderer.send('renderer:log', msg),
+    logError: (msg, data) => ipcRenderer.send('renderer:log', `[ERROR] ${msg}${data ? ' | ' + JSON.stringify(data) : ''}`),
     onSettingsChanged: (callback) => {
         const handler = (_, settings) => callback(settings)
         ipcRenderer.on('settings:changed', handler)

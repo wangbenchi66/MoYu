@@ -64,6 +64,8 @@ function compareVersions(a, b) {
 
 const isSettingsOpen = ref(false);
 let removeOpenSettingsListener = null;
+let _globalErrorHandler = null;
+let _globalRejectionHandler = null;
 const editingShortcut = ref(null);
 const capturedAccel = ref('');
 const autoRangeRef = ref(null);
@@ -758,6 +760,16 @@ onMounted(() => {
   try {
     window.addEventListener('keydown', localShortcutHandler, true);
   } catch (e) {}
+
+  // 全局错误捕获：写入日志文件方便排查
+  _globalErrorHandler = (e) => {
+    try { desktopApi?.logError?.(e.message || 'unknown error', { filename: e.filename, lineno: e.lineno }); } catch (_) {}
+  };
+  _globalRejectionHandler = (e) => {
+    try { desktopApi?.logError?.('unhandled rejection', { reason: String(e.reason || e) }); } catch (_) {}
+  };
+  window.addEventListener('error', _globalErrorHandler);
+  window.addEventListener('unhandledrejection', _globalRejectionHandler);
 });
 
 onBeforeUnmount(() => {
@@ -802,6 +814,8 @@ onBeforeUnmount(() => {
   try {
     window.removeEventListener('keydown', localShortcutHandler, true);
   } catch (e) {}
+  if (_globalErrorHandler) { window.removeEventListener('error', _globalErrorHandler); _globalErrorHandler = null; }
+  if (_globalRejectionHandler) { window.removeEventListener('unhandledrejection', _globalRejectionHandler); _globalRejectionHandler = null; }
 });
 
 /**
