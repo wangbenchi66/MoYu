@@ -2,7 +2,7 @@
   "name": "moyu",
   "description": "摸鱼工作台",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "author": "wangbenchi66",
   "main": "electron/main.js",
