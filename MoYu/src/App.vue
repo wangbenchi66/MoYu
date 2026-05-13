@@ -733,21 +733,33 @@ onMounted(() => {
         //TODO:开发环境关闭更新检查，避免频繁访问接口
         if (!info || info.isDev) return;
         //console.log('[update] checkForUpdate result:', info);
-        try {
-          const res = await http.get('/api/MoYu/CheckVersion', { platform: info.platform });
-          if (!res || !res.success || !res.data?.version) return;
-          const { version, downloadUrl, content } = res.data;
-          const hasUpdate = compareVersions(version, info.currentVersion) > 0;
-          if (hasUpdate) {
-            updateInfo.value = { currentVersion: info.currentVersion, latestVersion: version, downloadUrl, updateContent: content };
+        await http
+          .get('/api/MoYu/CheckVersion', { platform: info.platform })
+          .then((res) => {
+            if (!res || !res.success || !res.data?.version) return;
+            const { version, downloadUrl, content } = res.data;
+            const hasUpdate = compareVersions(version, info.currentVersion) > 0;
+            if (hasUpdate) {
+              updateInfo.value = { currentVersion: info.currentVersion, latestVersion: version, downloadUrl, updateContent: content };
+              setForceUpdateActive(true);
+              router.replace({ name: 'update' });
+            }
+          })
+          .catch(() => {
+            //如果更新检查失败（如网络问题），接口访问不到就强提示不允许进入
             setForceUpdateActive(true);
+            //然后设置一个保底的更新信息，提示用户检查网络或联系管理员
+            updateInfo.value = {
+              currentVersion: info.currentVersion,
+              latestVersion: '9999.9.9',
+              downloadUrl:
+                'http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=Fv7fD8vuvKubhvE0hYSRM2OrkoCLepgr&authKey=QSFki9D1JsetAc7Znyz4ho9n%2FwKBw0YgvELOzr4ASKAP6HEuw%2FJ33owpwrQS8ttJ&noverify=0&group_code=1039337282',
+              updateContent: '更新检查失败，点击下方按钮进入qq群(1039337282)获取。'
+            };
             router.replace({ name: 'update' });
-          }
-        } catch (e) {
-          console.warn('[update] check failed:', e);
-        }
+          });
       })
-      .catch(() => {});
+      .catch((e) => {});
   }
 
   if (desktopApi?.onOpenSettingsRequest) {
@@ -763,10 +775,14 @@ onMounted(() => {
 
   // 全局错误捕获：写入日志文件方便排查
   _globalErrorHandler = (e) => {
-    try { desktopApi?.logError?.(e.message || 'unknown error', { filename: e.filename, lineno: e.lineno }); } catch (_) {}
+    try {
+      desktopApi?.logError?.(e.message || 'unknown error', { filename: e.filename, lineno: e.lineno });
+    } catch (_) {}
   };
   _globalRejectionHandler = (e) => {
-    try { desktopApi?.logError?.('unhandled rejection', { reason: String(e.reason || e) }); } catch (_) {}
+    try {
+      desktopApi?.logError?.('unhandled rejection', { reason: String(e.reason || e) });
+    } catch (_) {}
   };
   window.addEventListener('error', _globalErrorHandler);
   window.addEventListener('unhandledrejection', _globalRejectionHandler);
@@ -814,8 +830,14 @@ onBeforeUnmount(() => {
   try {
     window.removeEventListener('keydown', localShortcutHandler, true);
   } catch (e) {}
-  if (_globalErrorHandler) { window.removeEventListener('error', _globalErrorHandler); _globalErrorHandler = null; }
-  if (_globalRejectionHandler) { window.removeEventListener('unhandledrejection', _globalRejectionHandler); _globalRejectionHandler = null; }
+  if (_globalErrorHandler) {
+    window.removeEventListener('error', _globalErrorHandler);
+    _globalErrorHandler = null;
+  }
+  if (_globalRejectionHandler) {
+    window.removeEventListener('unhandledrejection', _globalRejectionHandler);
+    _globalRejectionHandler = null;
+  }
 });
 
 /**

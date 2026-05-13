@@ -68,14 +68,14 @@ export const getAsync = async (url, params = {}, headerOptions = headerParams) =
     if (params && Object.keys(params).length > 0) {
         url += (url.includes('?') ? '&' : '?') + new URLSearchParams(params).toString()
     }
-    return await axios.get(url, headerOptions).then(res => res.data, () => undefined)
+    return await axios.get(url, headerOptions).then(res => res.data)
 }
 
 export const get = (url, params = {}, headerOptions = headerParams) => {
     if (params && Object.keys(params).length > 0) {
         url += (url.includes('?') ? '&' : '?') + new URLSearchParams(params).toString()
     }
-    return axios.get(url, headerOptions).then(res => res.data, () => undefined)
+    return axios.get(url, headerOptions).then(res => res.data)
 }
 
 export const postAsync = async (url, params, headerOptions = headerParams) => {
