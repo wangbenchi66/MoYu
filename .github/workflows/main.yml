@@ -1,4 +1,4 @@
-name: Build Electron Multi-Arch
+name: 打包推送到release
 
 on:
   workflow_dispatch:
