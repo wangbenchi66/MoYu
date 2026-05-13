@@ -69,8 +69,8 @@ function dragAreaText() {
       </BaseButton>
     </div>
 
-    <!-- 品牌图标（仅 House，无文字） -->
-    <div class="brand-group no-drag">
+    <!-- 品牌图标（仅 House，无文字）— Mac 上首页移到透明度左侧，此处隐藏 -->
+    <div v-if="!isMac" class="brand-group no-drag">
       <BaseButton class="home-btn" @click="props.goHome" title="首页">
         <el-icon><House /></el-icon>
       </BaseButton>
@@ -91,6 +91,14 @@ function dragAreaText() {
     <div class="window-controls no-drag">
       <!-- 组1：透明度（空间不足时优先隐藏） -->
       <div class="ctrl-group grp-collapsible-a">
+        <!-- Mac 上首页按钮放在此处（透明度左侧） -->
+        <BaseButton
+          v-if="isMac"
+          class="ctrl-btn home-btn-mac"
+          title="首页"
+          @click="props.goHome">
+          <el-icon><House /></el-icon>
+        </BaseButton>
         <BaseButton
           class="ctrl-btn opacity-btn"
           :title="`透明度 ${props.settings?.transparency ?? 85}%（点击循环切换）`"

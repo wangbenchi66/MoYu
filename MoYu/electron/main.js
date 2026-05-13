@@ -399,7 +399,8 @@ function showMainWindow(focus = true, opts = {}) {
     }
 
     if (!mainWindow.isVisible()) {
-        if (!focus && typeof mainWindow.showInactive === 'function') {
+        // macOS 上 showInactive() 无法恢复 hide() 后的窗口，始终使用 show()
+        if (!focus && process.platform !== 'darwin' && typeof mainWindow.showInactive === 'function') {
             mainWindow.showInactive()
         } else {
             mainWindow.show()
@@ -462,8 +463,8 @@ function refreshAutoHideMonitor() {
             return
         }
 
-        // 窗口不可见时跳过轮询，节省功耗
-        if (!mainWindow.isVisible() && !mainWindow.isMinimized()) return
+        // 最小化时不处理（用户主动操作，不自动干预）
+        if (mainWindow.isMinimized()) return
 
         const cursorPoint = screen.getCursorScreenPoint()
         const trackedBounds = lastVisibleBounds ?? mainWindow.getBounds()
@@ -478,6 +479,7 @@ function refreshAutoHideMonitor() {
             return
         }
 
+        // 窗口已隐藏（非最小化）：检查光标是否回到窗口区域
         if (isPointInsideBounds(cursorPoint, trackedBounds, 6)) {
             // 老板键主动隐藏时不自动显示
             if (bossKeyHidden) return
