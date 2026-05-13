@@ -4,7 +4,7 @@ let forceUpdateActive = false
 export function setForceUpdateActive(val) { forceUpdateActive = val }
 
 const routes = [
-  { path: '/', name: 'home', title: '首页', component: () => import('../pages/RecommendedPage.vue') },
+  { path: '/', name: 'home', title: '首页', component: () => import('../pages/HomePage.vue') },
   { path: '/profile', name: 'profile', title: '个人资料', component: () => import('../pages/ProfilePage.vue') },
   { path: '/profile/history', name: 'history', title: '历史记录', component: () => import('../pages/HistoryPage.vue') },
   { path: '/profile/stats', name: 'stats', title: '摸鱼时间统计', component: () => import('../pages/StatsPage.vue') },

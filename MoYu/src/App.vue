@@ -7,8 +7,8 @@ import { useDesktopApp } from './composables/useDesktopApp';
 import http from './http/index.js';
 import TopBar from './layouts/TopBar.vue';
 import MainPage from './pages/MainPage.vue';
-import BottomToolbar from './pages/parts/BottomToolbar.vue';
-import TabBar from './pages/parts/TabBar.vue';
+import BottomToolbar from './components/BottomToolbar.vue';
+import TabBar from './components/TabBar.vue';
 import { setForceUpdateActive } from './router/index.js';
 import defaultSettings from './shared/defaultSettings.js';
 

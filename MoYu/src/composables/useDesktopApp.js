@@ -7,8 +7,8 @@
  * 暴露给组件：settings、tabs、patchSetting、createPageTab、initializeDesktopApp 等。
  */
 import { computed, reactive, ref } from 'vue'
-import * as ruleProviders from '../lib/ruleProviders'
-import * as siteRules from '../lib/siteRules'
+import * as ruleProviders from '../rules/providers'
+import * as siteRules from '../rules'
 import defaultSettings from '../shared/defaultSettings.js'
 
 const desktopApi = typeof window !== 'undefined' ? window.desktop : null

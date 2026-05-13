@@ -2,8 +2,8 @@
 import { Close } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { computed, defineProps, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import BaseButton from '../../components/BaseButton.vue';
-import ContextMenu from '../../components/ContextMenu.vue';
+import BaseButton from './BaseButton.vue';
+import ContextMenu from './ContextMenu.vue';
 
 const props = defineProps({
   tabs: Array,

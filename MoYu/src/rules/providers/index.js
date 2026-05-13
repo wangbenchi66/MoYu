@@ -1,4 +1,4 @@
-import * as site from '../siteRules'
+import * as site from '../index.js'
 import * as settings from './settingsRules'
 import * as toolbar from './toolbarRules'
 

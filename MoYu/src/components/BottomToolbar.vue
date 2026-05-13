@@ -1,7 +1,7 @@
 <script setup>
 import { ArrowLeft, ArrowRight, Brush, Close, DCaret, Menu, Picture, Refresh, TopRight } from '@element-plus/icons-vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import BaseButton from '../../components/BaseButton.vue';
+import BaseButton from './BaseButton.vue';
 
 const props = defineProps({
   settings: { type: Object, required: true },

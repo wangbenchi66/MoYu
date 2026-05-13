@@ -3,7 +3,7 @@ const STORAGE_KEY = 'glass_reader_site_rules'
 let rules = []
 let _loaded = false
 
-// 从 src/rule 文件夹加载静态站点规则（由开发者以文件形式提供）
+// 从 src/rules/scripts 文件夹加载静态站点规则（由开发者以文件形式提供）
 // 每个模块应导出默认对象：{ pattern, matchType, enabled, preventBlankTargets, removeImages, customCss, customJs }
 // 也支持导出默认函数（返回规则对象）或直接导出对象。
 // 静态规则分为两类：默认全局规则（来自 rule/default.js）与站点规则（其它文件）
@@ -11,7 +11,7 @@ let staticDefaults = []
 let staticSiteRules = []
 try {
     // 使用 Vite 的 import.meta.glob({ eager: true }) 在构建时加载规则模块
-    const modules = import.meta.glob('../rule/*.js', { eager: true });
+    const modules = import.meta.glob('./scripts/*.js', { eager: true });
     for (const key in modules) {
         const mod = modules[key];
         const name = key.split('/').pop().replace('.js', '');

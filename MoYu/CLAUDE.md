@@ -26,6 +26,64 @@ npm run dist:win
 
 ## 架构概览
 
+### 项目目录结构
+
+```
+electron/
+  main.js               # 主进程：窗口管理、设置持久化、Tray、全局快捷键（仅老板键）
+  preload.js            # 预加载脚本：通过 contextBridge 向渲染进程暴露 ipcRenderer 接口
+
+src/
+  main.js               # 渲染进程入口：挂载 Vue 应用
+  App.vue               # 根组件：快捷键处理、设置面板、热区悬停逻辑
+  style.css             # 全局样式
+
+  components/           # 公共组件
+    BaseButton.vue      # 通用按钮
+    BottomToolbar.vue   # 底部工具栏（后退/前进/缩放，仅嵌入网页时显示）
+    ContextMenu.vue     # 右键菜单
+    ShortcutRow.vue     # 快捷键设置行
+    TabBar.vue          # 顶部标签栏
+
+  composables/
+    useDesktopApp.js    # 全局状态（settings、tabs、历史、规则）— 唯一数据层，聚合导出
+
+  http/
+    index.js            # Axios 封装（拦截器、Loading 管理、错误处理）
+
+  layouts/
+    TopBar.vue          # 顶部标题栏（窗口控制、透明度快速切换）
+
+  pages/                # 页面组件
+    ConsolePage.vue     # 控制台布局（底部 Tab 栏 + <router-view>）
+    HomePage.vue        # 首页（推荐站点 + 最近访问）
+    ProfilePage.vue     # 个人中心（菜单导航）
+    HistoryPage.vue     # 历史记录（搜索 + 分页）
+    StatsPage.vue       # 摸鱼时间统计（今日/历史/累计）
+    UpdatePage.vue      # 版本更新
+    MainPage.vue        # 多 webview 管理、脚本注入调度
+    LibraryPage.vue     # 书架（导入/管理书籍）
+    ReaderPage.vue      # 阅读器（连续滚动、章节加载、目录/设置）
+
+  rules/                # 站点规则注入系统
+    index.js            # 规则加载入口（import.meta.glob 加载 scripts/）
+    providers/
+      index.js          # 规则聚合（合并 site / toolbar / settings）
+      settingsRules.js  # 设置类规则（按站点覆盖设置）
+      toolbarRules.js   # 工具栏规则（按站点控制工具栏显隐）
+    scripts/            # 站点规则脚本
+      default.js        # 默认全局规则
+      zhihu.com.js      # 知乎
+      weread.qq.com.js  # 微信读书
+      vendors/          # 第三方油猴脚本
+
+  router/
+    index.js            # 路由配置（Hash 模式）
+
+  shared/
+    defaultSettings.js  # 主进程与渲染进程共享的默认配置（单一来源）
+```
+
 ### 进程分工
 
 ```
@@ -38,21 +96,12 @@ src/main.js             # 渲染进程入口：挂载 Vue 应用
 - `settings:get` / `settings:update` / `settings:set-transparency` — 设置读写
 - `window:minimize` / `window:maximize` / `window:close` / `window:quit` — 窗口控制
 - `ui:set-ignore-mouse-events` — 鼠标穿透
-- `shell:open-external` — 外部浏览器打开链接
+- `shell:open-external` — 外部浏览器打开链接（仅允许 http/https）
 - `moyu:get-stats` / `moyu:clear-stats` — 摸鱼时间统计读取与清空
 
-### 渲染进程核心结构
+### 状态管理
 
-```
-src/composables/useDesktopApp.js   # 全局状态（settings、tabs、历史、规则）— 唯一数据层
-src/App.vue                        # 根组件：快捷键处理、设置面板、热区悬停逻辑
-src/pages/MainPage.vue             # 多 webview 管理、脚本注入调度
-src/layouts/TopBar.vue             # 顶部标题栏（窗口控制、透明度快速切换）
-src/pages/parts/BottomToolbar.vue  # 底部工具栏（后退/前进/缩放，仅嵌入网页时显示）
-src/shared/defaultSettings.js      # 主进程与渲染进程共享的默认配置（单一来源）
-```
-
-**状态管理**：`useDesktopApp.js` 是整个应用的唯一状态层，无 Pinia/Vuex。设置变更后通过防抖（120ms）同步到主进程；`immediateSyncKeys`（透明度、快捷键等）会立即同步。
+`useDesktopApp.js` 是整个应用的唯一状态层，无 Pinia/Vuex。设置变更后通过防抖（120ms）同步到主进程；`immediateSyncKeys`（透明度、快捷键等）会立即同步。
 
 ### 路由系统（vue-router）
 
@@ -60,23 +109,17 @@ src/shared/defaultSettings.js      # 主进程与渲染进程共享的默认配�
 
 **路由仅管理控制台区域（dashboard 标签页）的页面切换**，webview 标签页由 `MainPage.vue` 独立管理。
 
-```
-src/router/index.js                # 路由配置（Hash 模式）
-src/pages/ConsolePage.vue          # 控制台布局（底部 Tab 栏 + <router-view>）
-src/pages/RecommendedPage.vue      # 首页（推荐站点 + 最近10条访问）
-src/pages/ProfilePage.vue          # 个人中心（菜单导航）
-src/pages/HistoryPage.vue          # 历史记录（搜索 + 分页）
-src/pages/StatsPage.vue            # 摸鱼时间统计（今日/历史/累计）
-```
-
 **路由表：**
 
 | 路径 | name | 组件 | 说明 |
 |---|---|---|---|
-| `/` | `home` | HomePage | 首页 |
+| `/` | `home` | HomePage | 首页（推荐站点 + 最近访问） |
 | `/profile` | `profile` | ProfilePage | 个人中心菜单 |
 | `/profile/history` | `history` | HistoryPage | 完整历史记录 |
 | `/profile/stats` | `stats` | StatsPage | 摸鱼时间统计 |
+| `/library` | `library` | LibraryPage | 书架 |
+| `/library/:id` | `reader` | ReaderPage | 阅读器 |
+| `/update` | `update` | UpdatePage | 版本更新 |
 
 **添加新页面**：在 `src/router/index.js` 的路由数组中注册路由，页面组件通过 `router.push({ name })` 导航。ConsolePage 的底部 Tab 栏根据 `route.path` 自动高亮。
 
@@ -93,12 +136,12 @@ src/pages/StatsPage.vue            # 摸鱼时间统计（今日/历史/累计�
 
 ### 站点规则注入系统
 
-规则文件位于 `src/rule/*.js`，构建时通过 `import.meta.glob` 自动加载（`src/lib/siteRules.js`）。
+规则文件位于 `src/rules/scripts/*.js`，构建时通过 `import.meta.glob` 自动加载（`src/rules/index.js`）。
 
 **规则文件标准结构：**
 
 ```js
-// src/rule/example.com.js
+// src/rules/scripts/example.com.js
 export const pattern = ['example.com'];  // 支持字符串、数组、正则、或 match 函数
 
 export default function main(helper) {
