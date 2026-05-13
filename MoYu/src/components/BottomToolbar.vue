@@ -1,3 +1,4 @@
+<!-- BottomToolbar.vue — 底部工具栏（后退/前进/缩放/透明度/自动滚动控制） -->
 <script setup>
 import { ArrowLeft, ArrowRight, Brush, Close, DCaret, Menu, Picture, Refresh, TopRight } from '@element-plus/icons-vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';

@@ -1,5 +1,5 @@
-// 微信读书 (weread.qq.com) 增强注入规则
-// 构建时由 `src/lib/siteRules.js` 通过 `import.meta.glob` 自动加载，无需手动注册。
+// weread.qq.com.js — 微信读书站点增强注入规则
+// 构建时由 `src/rules/index.js` 通过 `import.meta.glob` 自动加载，无需手动注册。
 
 /** 匹配的主机名（支持数组） */
 export const pattern = ['weread.qq.com', 'book.weread.qq.com'];

@@ -1,3 +1,4 @@
+// rules/providers/index.js — 规则聚合层（合并 site / settings / toolbar 规则，提供统一查询）
 import * as site from '../index.js'
 import * as settings from './settingsRules'
 import * as toolbar from './toolbarRules'

@@ -1,3 +1,4 @@
+<!-- HistoryPage.vue — 历史记录（搜索 + 分页浏览） -->
 <script setup>
 import { ElMessage } from 'element-plus';
 import { computed, ref } from 'vue';

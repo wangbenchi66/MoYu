@@ -1,3 +1,4 @@
+<!-- ShortcutRow.vue — 快捷键设置行（录制/显示/清除快捷键绑定） -->
 <script setup>
 import { computed } from 'vue';
 

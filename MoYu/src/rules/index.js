@@ -1,5 +1,7 @@
 const STORAGE_KEY = 'glass_reader_site_rules'
 
+import { matchesRule } from './matchRule.js'
+
 let rules = []
 let _loaded = false
 
@@ -116,101 +118,6 @@ function getRules() {
     loadRules()
     // 合并静态默认规则 -> 静态站点规则 -> 用户持久化规则（用户规则优先级最高）
     return staticDefaults.concat(staticSiteRules).concat(rules).slice()
-}
-
-/**
- * 判断给定 URL 是否匹配规则（支持函数、正则、通配符与多种匹配类型）
- * 参数: rule - 规则对象；rawUrl - 要匹配的原始 URL
- */
-function matchesRule(rule, rawUrl) {
-    if (!rule) return false;
-    if (!rawUrl) return false;
-
-    // 支持自定义匹配函数：export const match = (url) => boolean
-    if (typeof rule.match === 'function') {
-        try { return !!rule.match(rawUrl); } catch (e) { return false; }
-    }
-
-    const patternVal = rule.pattern;
-
-    // 支持数组的 pattern：如果 patterns 是数组，任一匹配即算匹配
-    if (Array.isArray(patternVal)) {
-        for (const p of patternVal) {
-            try {
-                if (matchesRule(Object.assign({}, rule, { pattern: p }), rawUrl)) return true;
-            } catch (e) { }
-        }
-        return false;
-    }
-
-    // 支持 RegExp 直接作为 pattern
-    if (patternVal instanceof RegExp) {
-        try {
-            const u = new URL(rawUrl);
-            const hostname = (u.hostname || '').toLowerCase();
-            return patternVal.test(rawUrl) || patternVal.test(hostname);
-        } catch (e) {
-            return patternVal.test(rawUrl);
-        }
-    }
-
-    // 到此处，patternVal 应为字符串（或可转为字符串）
-    if (!patternVal && patternVal !== 0) return false;
-    const pattern = String(patternVal).trim();
-    const matchType = rule.matchType || 'hostname';
-
-    function escapeForRegex(s) {
-        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
-    try {
-        const url = new URL(rawUrl);
-        const hostname = (url.hostname || '').toLowerCase();
-        const raw = rawUrl || '';
-
-        if (matchType === 'regex') {
-            try {
-                const re = new RegExp(pattern);
-                return re.test(raw) || re.test(hostname);
-            } catch (e) {
-                return false;
-            }
-        }
-
-        if (matchType === 'url') {
-            try {
-                return raw.toLowerCase().indexOf(pattern.toLowerCase()) !== -1;
-            } catch (e) {
-                return false;
-            }
-        }
-
-        // hostname 或默认：支持通配符
-        if (pattern.indexOf('*') !== -1) {
-            const parts = pattern.split('*').map(p => escapeForRegex(p)).join('.*');
-            try {
-                const re = new RegExp(`^${parts}$`, 'i');
-                return re.test(hostname);
-            } catch (e) {
-                return hostname.indexOf(pattern.replace('*', '')) !== -1;
-            }
-        }
-
-        const esc = escapeForRegex(pattern);
-        try {
-            const re = new RegExp(`(^|\\.)${esc}$`, 'i');
-            return re.test(hostname);
-        } catch (e) {
-            return hostname === pattern.toLowerCase() || hostname.indexOf(pattern.toLowerCase()) !== -1;
-        }
-    } catch (e) {
-        // 不是有效 URL，退回到包含匹配（忽略大小写）
-        try {
-            return (rawUrl || '').toLowerCase().indexOf(pattern.toLowerCase()) !== -1;
-        } catch (err) {
-            return false;
-        }
-    }
 }
 
 /**

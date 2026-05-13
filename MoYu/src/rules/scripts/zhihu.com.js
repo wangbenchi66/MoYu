@@ -1,5 +1,5 @@
-// 知乎 (zhihu.com) 增强注入规则
-// 构建时由 `src/lib/siteRules.js` 通过 `import.meta.glob` 自动加载，无需手动注册。
+// zhihu.com.js — 知乎站点增强注入规则
+// 构建时由 `src/rules/index.js` 通过 `import.meta.glob` 自动加载，无需手动注册。
 
 /** 匹配的主机名 */
 export const pattern = ['zhihu.com', 'www.zhihu.com'];

@@ -1,3 +1,4 @@
+// electron/preload.js — 预加载脚本：通过 contextBridge 暴露 desktop API（ESM 版本）
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('desktop', {

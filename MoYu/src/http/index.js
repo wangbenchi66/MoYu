@@ -1,3 +1,4 @@
+// http/index.js — Axios 封装（拦截器、Loading 管理、GET/POST/PUT/DELETE）
 import axios from "axios";
 import { ElLoading, ElMessage } from 'element-plus';
 

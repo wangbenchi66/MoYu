@@ -1,3 +1,4 @@
+// main.js — 渲染进程入口：创建 Vue 应用、注册 Element Plus 和路由
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import { createApp } from 'vue'

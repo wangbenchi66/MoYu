@@ -1,3 +1,4 @@
+<!-- HomePage.vue — 首页（推荐站点 + 最近访问记录） -->
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, reactive, ref } from 'vue';

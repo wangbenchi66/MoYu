@@ -1,5 +1,5 @@
 /**
- * Shared default settings for GlassReader.
+ * MoYu 默认配置（主进程与渲染进程共享）
  *
  * 本文件为主进程与渲染进程提供统一的默认配置。
  * 每个字段旁给出简短的中文说明，方便维护与调整。

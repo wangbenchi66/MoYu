@@ -1,5 +1,7 @@
 const STORAGE_KEY = 'glass_reader_toolbar_rules'
 
+import { matchesRule } from '../matchRule.js'
+
 let rules = []
 let _loaded = false
 
@@ -37,43 +39,6 @@ function persistRules() {
 function getRules() {
     loadRules()
     return rules.slice()
-}
-
-/**
- * 判断 URL 是否匹配 toolbar 规则
- * 参数: rule - 规则对象；rawUrl - 待匹配的 URL
- */
-function matchesRule(rule, rawUrl) {
-    if (!rule || !rule.pattern) return false
-    if (!rawUrl) return false
-
-    try {
-        const url = new URL(rawUrl)
-        const pattern = (rule.pattern || '').trim()
-        if (rule.matchType === 'regex') {
-            try {
-                const re = new RegExp(pattern)
-                return re.test(rawUrl) || re.test(url.hostname)
-            } catch (e) {
-                return false
-            }
-        }
-
-        if (rule.matchType === 'url') {
-            return rawUrl.indexOf(pattern) !== -1
-        }
-
-        // hostname 或默认：支持简单通配符 *
-        const p = pattern.replace(/\*/g, '.*')
-        try {
-            const re = new RegExp(`^${p}$`)
-            return re.test(url.hostname) || re.test(rawUrl)
-        } catch (e) {
-            return url.hostname.indexOf(pattern) !== -1
-        }
-    } catch (e) {
-        return rawUrl.indexOf(rule.pattern || '') !== -1
-    }
 }
 
 /**

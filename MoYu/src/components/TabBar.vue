@@ -1,3 +1,4 @@
+<!-- TabBar.vue — 顶部标签栏（标签页切换/关闭/右键菜单） -->
 <script setup>
 import { Close } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';

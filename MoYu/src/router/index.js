@@ -1,3 +1,4 @@
+// router/index.js — 路由配置（Hash 模式，管理控制台区域页面切换）
 import { createRouter, createWebHashHistory } from 'vue-router'
 
 let forceUpdateActive = false

@@ -1,3 +1,4 @@
+<!-- TopBar.vue — 顶部标题栏（窗口控制、透明度快速切换、品牌图标） -->
 <script setup>
 import { CloseBold, Hide, House, Lock, Minus, Monitor, Picture, Pointer, Setting, Unlock } from '@element-plus/icons-vue';
 import { computed, onUnmounted, ref, watch } from 'vue';

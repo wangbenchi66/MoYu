@@ -1,3 +1,4 @@
+// electron/main.js — 主进程：窗口管理、设置持久化、Tray、全局快捷键、IPC 处理
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, Tray } from 'electron'
 import { EventEmitter } from 'events'
 import Store from 'electron-store'

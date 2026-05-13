@@ -30,66 +30,77 @@ npm run dist:win
 
 ```
 electron/
-  main.js               # 主进程：窗口管理、设置持久化、Tray、全局快捷键（仅老板键）
-  preload.js            # 预加载脚本：通过 contextBridge 向渲染进程暴露 ipcRenderer 接口
+  main.js               主进程：窗口管理、设置持久化、Tray、全局快捷键、IPC 处理
+  preload.js            预加载脚本（ESM 版本）：通过 contextBridge 暴露 desktop API
+  preload.cjs           预加载 CJS 包装器：动态导入 ESM preload，失败时回退
 
 src/
-  main.js               # 渲染进程入口：挂载 Vue 应用
-  App.vue               # 根组件：快捷键处理、设置面板、热区悬停逻辑
-  style.css             # 全局样式
+  main.js               渲染进程入口：创建 Vue 应用、注册 Element Plus 和路由
+  App.vue               根组件：快捷键处理、设置面板、热区悬停、窗口级 UI 布局
+  style.css             全局样式（CSS 变量、基础排版、主题色）
 
-  components/           # 公共组件
-    BaseButton.vue      # 通用按钮
-    BottomToolbar.vue   # 底部工具栏（后退/前进/缩放，仅嵌入网页时显示）
-    ContextMenu.vue     # 右键菜单
-    ShortcutRow.vue     # 快捷键设置行
-    TabBar.vue          # 顶部标签栏
+  components/           公共组件
+    BaseButton.vue      通用按钮（自动判断渲染为 el-button 或原生 button）
+    BottomToolbar.vue   底部工具栏（后退/前进/缩放/透明度/自动滚动控制）
+    ContextMenu.vue     右键菜单（支持图标、快捷键提示）
+    ShortcutRow.vue     快捷键设置行（录制/显示/清除快捷键绑定）
+    TabBar.vue          顶部标签栏（标签页切换/关闭/右键菜单）
+    TopBar.vue          顶部标题栏（窗口控制、透明度快速切换、品牌图标）
 
-  composables/
-    useDesktopApp.js    # 全局状态（settings、tabs、历史、规则）— 唯一数据层，聚合导出
+  composables/          状态管理层
+    useAppState.js      共享状态与基础工具函数（settings、tabs、refs、normalizeUrl 等）
+    useDesktopApp.js    应用全局状态聚合层（从子模块导入，统一对外暴露）
+    useSettings.js      设置同步、patch、toggle（防抖同步到主进程）
+    useRecentVisits.js  最近访问记录管理（localStorage 持久化、分页）
+    useTabManager.js    标签页管理（打开/关闭/选择/导航）
+    useRecommendedSites.js  推荐站点 CRUD（默认站点 + 用户自定义）
+    useLocalFiles.js    本地文件管理（上传、打开、删除本地文档）
+    mainpage/           MainPage 专用子模块
+      useWebviewRefs.js     webview 引用管理（实例生命周期、事件监听绑定）
+      useWebviewExec.js     脚本/CSS 注入工具（runWebviewJS/runWebviewCss）
+      useWebviewSync.js     webview 样式/效果同步（透明、无图、滚动条、字号）
+      useLocalReaderAutoScroll.js  本地阅读器自动滚动
+      usePauseOnBlur.js     失焦/隐藏时暂停媒体与自动滚动
 
   http/
-    index.js            # Axios 封装（拦截器、Loading 管理、错误处理）
+    index.js            Axios 封装（拦截器、Loading 管理、GET/POST/PUT/DELETE）
 
-  layouts/
-    TopBar.vue          # 顶部标题栏（窗口控制、透明度快速切换）
+  pages/                页面组件
+    ConsolePage.vue     控制台布局（底部 Tab 栏 + <router-view>）
+    HomePage.vue        首页（推荐站点 + 最近访问）
+    ProfilePage.vue     个人中心（菜单导航）
+    HistoryPage.vue     历史记录（搜索 + 分页）
+    StatsPage.vue       摸鱼时间统计（今日/历史/累计）
+    UpdatePage.vue      版本更新检查与更新日志
+    MainPage.vue        多 webview 管理（标签渲染、脚本注入调度、本地阅读器）
+    LibraryPage.vue     书架（导入/管理 EPUB/PDF/TXT 书籍）
+    ReaderPage.vue      阅读器（连续滚动、章节加载、目录/设置面板）
 
-  pages/                # 页面组件
-    ConsolePage.vue     # 控制台布局（底部 Tab 栏 + <router-view>）
-    HomePage.vue        # 首页（推荐站点 + 最近访问）
-    ProfilePage.vue     # 个人中心（菜单导航）
-    HistoryPage.vue     # 历史记录（搜索 + 分页）
-    StatsPage.vue       # 摸鱼时间统计（今日/历史/累计）
-    UpdatePage.vue      # 版本更新
-    MainPage.vue        # 多 webview 管理、脚本注入调度
-    LibraryPage.vue     # 书架（导入/管理书籍）
-    ReaderPage.vue      # 阅读器（连续滚动、章节加载、目录/设置）
-
-  rules/                # 站点规则注入系统
-    index.js            # 规则加载入口（import.meta.glob 加载 scripts/）
+  rules/                站点规则注入系统
+    index.js            规则加载入口（import.meta.glob 加载 scripts/，提供 CRUD）
+    matchRule.js        规则 URL 匹配工具（统一的 matchesRule 实现）
     providers/
-      index.js          # 规则聚合（合并 site / toolbar / settings）
-      settingsRules.js  # 设置类规则（按站点覆盖设置）
-      toolbarRules.js   # 工具栏规则（按站点控制工具栏显隐）
-    scripts/            # 站点规则脚本
-      default.js        # 默认全局规则
-      zhihu.com.js      # 知乎
-      weread.qq.com.js  # 微信读书
-      vendors/          # 第三方油猴脚本
+      index.js          规则聚合层（合并 site / settings / toolbar 规则）
+      settingsRules.js  设置类规则（按站点覆盖设置）
+      toolbarRules.js   工具栏规则（按站点控制工具栏显隐）
+    scripts/            站点规则脚本
+      default.js        默认全局规则（注入快捷键到 webview）
+      zhihu.com.js      知乎增强规则
+      weread.qq.com.js  微信读书增强规则
 
   router/
-    index.js            # 路由配置（Hash 模式）
+    index.js            路由配置（Hash 模式，管理控制台区域页面切换）
 
   shared/
-    defaultSettings.js  # 主进程与渲染进程共享的默认配置（单一来源）
+    defaultSettings.js  主进程与渲染进程共享的默认配置（单一来源）
 ```
 
 ### 进程分工
 
 ```
-electron/main.js        # 主进程：窗口管理、设置持久化、Tray、全局快捷键（仅老板键）
-electron/preload.js     # 预加载脚本：通过 contextBridge 向渲染进程暴露 ipcRenderer 接口
-src/main.js             # 渲染进程入口：挂载 Vue 应用
+electron/main.js        主进程：窗口管理、设置持久化、Tray、全局快捷键（仅老板键）
+electron/preload.js     预加载脚本：通过 contextBridge 向渲染进程暴露 ipcRenderer 接口
+src/main.js             渲染进程入口：挂载 Vue 应用
 ```
 
 **主进程 ↔ 渲染进程通信（IPC）**：
@@ -101,7 +112,21 @@ src/main.js             # 渲染进程入口：挂载 Vue 应用
 
 ### 状态管理
 
-`useDesktopApp.js` 是整个应用的唯一状态层，无 Pinia/Vuex。设置变更后通过防抖（120ms）同步到主进程；`immediateSyncKeys`（透明度、快捷键等）会立即同步。
+`useDesktopApp.js` 是整个应用的唯一状态聚合层，无 Pinia/Vuex。内部拆分为子模块：
+
+```
+useAppState          ← 共享 ref / reactive 对象
+  ↑
+useSettings          ← 设置同步（防抖 120ms）
+useRecentVisits      ← 最近访问记录
+useTabManager        ← 标签 CRUD
+useRecommendedSites  ← 推荐站点
+useLocalFiles        ← 本地文件
+  ↑
+useDesktopApp        ← 聚合导出（对外 API 不变）
+```
+
+设置变更后通过防抖（120ms）同步到主进程；`immediateSyncKeys`（透明度、快捷键等）会立即同步。
 
 ### 路由系统（vue-router）
 
@@ -138,6 +163,8 @@ src/main.js             # 渲染进程入口：挂载 Vue 应用
 
 规则文件位于 `src/rules/scripts/*.js`，构建时通过 `import.meta.glob` 自动加载（`src/rules/index.js`）。
 
+URL 匹配逻辑统一在 `src/rules/matchRule.js`，支持自定义 match 函数、RegExp、数组 pattern、通配符、regex/url/hostname 匹配类型。
+
 **规则文件标准结构：**
 
 ```js
@@ -163,7 +190,7 @@ export default function main(helper) {
 
 `helper` 对象字段：`runWebviewCss(idSuffix, css)`、`runWebviewJS(js)`、`webview`（DOM 元素）、`settings`、`activeTab`、`rule`。
 
-**注入时机**：`MainPage.vue` 监听 webview 的 `did-finish-load` 事件后触发规则匹配与注入；框架通过脚本签名防止重复注入。
+**注入时机**：`MainPage.vue` 监听 webview 的 `dom-ready` 事件后触发规则匹配与注入；框架通过脚本签名防止重复注入。
 
 **调试**：webview 内的 `console.log` 会被转发到渲染器 Console，前缀为 `[webview.console]`。
 

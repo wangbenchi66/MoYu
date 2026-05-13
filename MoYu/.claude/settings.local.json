@@ -10,7 +10,8 @@
       "Bash(curl -s http://127.0.0.1:5173/)",
       "Bash(curl -s http://127.0.0.1:5173/src/pages/RecommendedPage.vue)",
       "Bash(curl -s 'http://127.0.0.1:5173/src/pages/RecommendedPage.vue')",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(npm run *)"
     ]
   }
 }

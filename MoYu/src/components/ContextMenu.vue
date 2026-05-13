@@ -1,3 +1,4 @@
+<!-- ContextMenu.vue — 右键菜单（支持图标、快捷键提示、多级菜单） -->
 <template>
   <teleport to="body">
     <div

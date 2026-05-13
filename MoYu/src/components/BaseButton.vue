@@ -1,3 +1,4 @@
+<!-- BaseButton.vue — 通用按钮（自动判断渲染为 el-button 或原生 button） -->
 <template>
   <component
     :is="tag"

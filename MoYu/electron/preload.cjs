@@ -1,3 +1,4 @@
+// electron/preload.cjs — 预加载 CJS 包装器（尝试动态导入 ESM preload，失败时回退到内联实现）
 const path = require('path')
 const { pathToFileURL } = require('url')
 

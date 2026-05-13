@@ -1,3 +1,4 @@
+<!-- App.vue — 根组件：快捷键处理、设置面板、热区悬停、窗口级 UI 布局 -->
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
@@ -5,7 +6,7 @@ import { useRouter } from 'vue-router';
 import ShortcutRow from './components/ShortcutRow.vue';
 import { useDesktopApp } from './composables/useDesktopApp';
 import http from './http/index.js';
-import TopBar from './layouts/TopBar.vue';
+import TopBar from './components/TopBar.vue';
 import MainPage from './pages/MainPage.vue';
 import BottomToolbar from './components/BottomToolbar.vue';
 import TabBar from './components/TabBar.vue';
@@ -840,12 +841,6 @@ onBeforeUnmount(() => {
   }
 });
 
-/**
- * 本地快捷键处理器（仅在窗口聚焦时生效）
- * 使用 `formatAcceleratorFromEvent` 将按键事件序列化为类似 "Ctrl+Alt+T" 的字符串，
- * 然后与 `settings` 中保存的快捷键做匹配。注意：老板键 (`bossKey`) 保持由主进程作为全局快捷键处理，
- * 因此这里会忽略与 `bossKey` 相同的组合，避免重复触发。
- */
 /**
  * 本地快捷键处理器（仅在窗口聚焦或鼠标在窗口内时生效）
  * 参数: e - 键盘事件对象

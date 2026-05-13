@@ -1,3 +1,4 @@
+<!-- StatsPage.vue — 摸鱼时间统计（今日/历史/累计） -->
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';

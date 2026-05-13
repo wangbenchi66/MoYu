@@ -1,3 +1,4 @@
+<!-- UpdatePage.vue — 版本更新检查与更新日志 -->
 <script setup>
 import { computed } from 'vue';
 import { useDesktopApp } from '../composables/useDesktopApp';

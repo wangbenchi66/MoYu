@@ -1,3 +1,4 @@
+<!-- LibraryPage.vue — 书架（导入/管理 EPUB/PDF/TXT 书籍） -->
 <script setup>
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';

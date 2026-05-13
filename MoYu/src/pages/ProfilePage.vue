@@ -1,3 +1,4 @@
+<!-- ProfilePage.vue — 个人中心（菜单导航入口） -->
 <script setup>
 import { useRouter } from 'vue-router';
 

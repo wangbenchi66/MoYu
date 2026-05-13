@@ -1,3 +1,4 @@
+<!-- ConsolePage.vue — 控制台布局（底部 Tab 栏 + <router-view>） -->
 <script setup>
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';

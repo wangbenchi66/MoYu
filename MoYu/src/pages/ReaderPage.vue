@@ -1,3 +1,4 @@
+<!-- ReaderPage.vue — 阅读器（连续滚动、章节加载、目录/设置面板） -->
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, reactive, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
