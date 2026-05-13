@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, reactive, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import DOMPurify from 'dompurify';
 
 const route = useRoute();
 const router = useRouter();
@@ -20,7 +21,6 @@ const loadedChapters = computed(() => {
 });
 const nextChapterToLoad = ref(0);
 const minLoadedIdx = computed(() => chapterMap.size ? Math.min(...chapterMap.keys()) : -1);
-const maxLoadedIdx = computed(() => chapterMap.size ? Math.max(...chapterMap.keys()) : -1);
 const hasMore = computed(() => book.value && nextChapterToLoad.value < (book.value.chapters?.length || 0));
 
 const currentVisibleChapter = ref(0);
@@ -79,6 +79,7 @@ const progressPct = computed(() => {
 });
 
 let epubBookInstance = null;
+let isReaderMounted = true;
 const CHAPTER_LOAD_THRESHOLD = 600;
 
 onMounted(() => {
@@ -88,6 +89,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  isReaderMounted = false;
   cancelScrollRestore();
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   saveProgress();
@@ -135,8 +137,10 @@ async function loadChapterContent(idx) {
     } else {
       html = `<pre style="white-space:pre-wrap;font-family:inherit;text-indent:0;">${escapeHtml(ch.content || '')}</pre>`;
     }
-    chapterMap.set(idx, { index: idx, title: ch.title, html });
+    if (!isReaderMounted) return;
+    chapterMap.set(idx, { index: idx, title: ch.title, html: DOMPurify.sanitize(html) });
   } catch (e) {
+    if (!isReaderMounted) return;
     chapterMap.set(idx, { index: idx, title: ch.title, html: '<p style="color:#999">加载失败</p>' });
   }
 
@@ -225,7 +229,7 @@ async function loadEpubChapter(b, ch) {
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function onScroll() {

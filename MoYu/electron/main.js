@@ -2,10 +2,13 @@ import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, nativeT
 import { EventEmitter } from 'events'
 import Store from 'electron-store'
 import fs from 'node:fs'
+import path from 'node:path'
 
 // 多 webview tab 时 Electron 内部 guest WebContents 会超出默认 10 个监听器上限
-EventEmitter.defaultMaxListeners = 100
-import path from 'node:path'
+// 仅在需要时按实例设置，而非全局覆盖
+function safeSetMaxListeners(emitter, count) {
+    try { emitter.setMaxListeners(count) } catch (e) {}
+}
 import { fileURLToPath } from 'node:url'
 import defaultSettings from '../src/shared/defaultSettings.js'
 
@@ -108,8 +111,11 @@ function writeLog(level, msg, data) {
             const stat = fs.statSync(logPath)
             if (stat.size > LOG_MAX_SIZE) {
                 const content = fs.readFileSync(logPath, 'utf-8')
-                const half = content.substring(Math.floor(content.length / 2))
-                fs.writeFileSync(logPath, half, 'utf-8')
+                let half = Math.floor(content.length / 2)
+                // 从换行符后开始截断，避免拆开多字节字符和日志行
+                const newlinePos = content.indexOf('\n', half)
+                if (newlinePos > 0) half = newlinePos + 1
+                fs.writeFileSync(logPath, content.substring(half), 'utf-8')
             }
         } catch (e) {}
         const ts = new Date().toISOString()
@@ -285,7 +291,11 @@ ipcMain.on('preload:loaded', (event, info) => {
 ipcMain.handle('shell:open-external', async (_, url) => {
     try {
         if (!url) return { success: false, error: 'empty url' }
-        await shell.openExternal(String(url))
+        const str = String(url)
+        if (!str.startsWith('http://') && !str.startsWith('https://')) {
+            return { success: false, error: 'only http/https allowed' }
+        }
+        await shell.openExternal(str)
         return { success: true }
     } catch (err) {
         console.warn('[ipc] shell:open-external failed', err)

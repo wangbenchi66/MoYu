@@ -383,18 +383,9 @@ function displayInputUrlForUI(url) {
 /**
  * 生成不会与现有 tabs 冲突的唯一 ID
  */
+let _tabIdCounter = Date.now()
 function generateUniqueTabId() {
-    let id
-    let attempts = 0
-    do {
-        id = Date.now() + Math.floor(Math.random() * 1000)
-        attempts++
-        if (attempts > 50) {
-            // 兜底，扩大随机范围以避免极端重复
-            id = Date.now() + Math.floor(Math.random() * 1000000)
-        }
-    } while (tabs.value.some((t) => t && t.id === id))
-    return id
+    return ++_tabIdCounter
 }
 
 /**
@@ -1089,6 +1080,7 @@ function initializeDesktopApp() {
  */
 function disposeDesktopApp() {
     flushRecentVisits()
+    window.clearTimeout(_persistRecentTimer)
     window.clearTimeout(syncTimer)
     window.clearTimeout(transparencySyncTimer)
     removeSettingsListener?.()

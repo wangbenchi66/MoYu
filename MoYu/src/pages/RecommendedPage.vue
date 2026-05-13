@@ -6,17 +6,7 @@ import { useDesktopApp } from '../composables/useDesktopApp';
 
 const router = useRouter();
 
-const {
-  useRecommendedSite,
-  urlInput,
-  handleOpenUrl,
-  uploadLocalFiles,
-  addRecommendedSite,
-  editRecommendedSite,
-  removeRecommendedSite,
-  recommendedSites,
-  settings,
-} = useDesktopApp();
+const { useRecommendedSite, urlInput, handleOpenUrl, uploadLocalFiles, addRecommendedSite, editRecommendedSite, removeRecommendedSite, recommendedSites, settings } = useDesktopApp();
 
 // isTransparent：与 syncWebviewTransparency 保持一致——pageTransparentMode 或 fullWindowTransparent 任一开启即触发透明样式
 const isTransparent = computed(() => settings.pageTransparentMode || settings.fullWindowTransparent);
@@ -91,7 +81,6 @@ const recommendedPreview = computed(() => recommendedSites.value.slice(0, 8));
 const addPillRef = ref(null);
 const fileInputRef = ref(null);
 
-
 function triggerFileSelect() {
   fileInputRef.value?.click();
 }
@@ -100,7 +89,6 @@ async function handleFileChange(event) {
   await uploadLocalFiles(event.target.files);
   event.target.value = '';
 }
-
 
 function getHost(rawUrl) {
   try {
@@ -116,7 +104,6 @@ function avatarText(site) {
   const host = getHost(site?.url || '');
   return host ? host.charAt(0).toUpperCase() : '?';
 }
-
 </script>
 
 <template>
@@ -171,31 +158,58 @@ function avatarText(site) {
           @click="useRecommendedSite(site)">
           <el-avatar size="24">{{ avatarText(site) }}</el-avatar>
           <span class="pill-name">{{ site.name }}</span>
-          <div class="pill-actions" v-if="!site.system">
+          <div
+            class="pill-actions"
+            v-if="!site.system">
             <el-popover
               v-model:visible="ensureEditForm(site).visible"
               placement="bottom"
               width="320"
               trigger="manual">
               <template #reference>
-                <span class="pill-icon-btn" @click.stop="openEditPopover(site)" title="编辑">✎</span>
+                <span
+                  class="pill-icon-btn"
+                  @click.stop="openEditPopover(site)"
+                  title="编辑"
+                  >✎</span
+                >
               </template>
               <div class="popover-form">
-                <el-form :model="ensureEditForm(site)" label-position="top">
+                <el-form
+                  :model="ensureEditForm(site)"
+                  label-position="top">
                   <el-form-item label="名称">
-                    <el-input v-model="ensureEditForm(site).name" size="small" />
+                    <el-input
+                      v-model="ensureEditForm(site).name"
+                      size="small" />
                   </el-form-item>
                   <el-form-item label="网址">
-                    <el-input v-model="ensureEditForm(site).url" size="small" />
+                    <el-input
+                      v-model="ensureEditForm(site).url"
+                      size="small" />
                   </el-form-item>
                   <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px">
-                    <el-button size="small" @click="cancelEdit(site)">取消</el-button>
-                    <el-button type="primary" size="small" @click="saveEditSite(site)">保存</el-button>
+                    <el-button
+                      size="small"
+                      @click="cancelEdit(site)"
+                      >取消</el-button
+                    >
+                    <el-button
+                      type="primary"
+                      size="small"
+                      @click="saveEditSite(site)"
+                      >保存</el-button
+                    >
                   </div>
                 </el-form>
               </div>
             </el-popover>
-            <span class="pill-icon-btn danger" @click.stop="confirmDeleteSite(site)" title="删除">✕</span>
+            <span
+              class="pill-icon-btn danger"
+              @click.stop="confirmDeleteSite(site)"
+              title="删除"
+              >✕</span
+            >
           </div>
         </div>
 
@@ -209,7 +223,11 @@ function avatarText(site) {
             style="background: #fff; border: 1px dashed #dcdfe6; color: #409eff">
             +
           </el-avatar>
-          <span class="pill-name" style="color: #409eff">添加站点</span>
+          <span
+            class="pill-name"
+            style="color: #409eff"
+            >添加站点</span
+          >
         </div>
       </div>
 
@@ -221,36 +239,74 @@ function avatarText(site) {
         width="320"
         trigger="manual">
         <div class="popover-form">
-          <el-form :model="addForm" label-position="top">
+          <el-form
+            :model="addForm"
+            label-position="top">
             <el-form-item label="名称">
-              <el-input v-model="addForm.name" size="small" />
+              <el-input
+                v-model="addForm.name"
+                size="small" />
             </el-form-item>
             <el-form-item label="网址">
-              <el-input v-model="addForm.url" size="small" placeholder="https://example.com" />
+              <el-input
+                v-model="addForm.url"
+                size="small"
+                placeholder="https://example.com" />
             </el-form-item>
             <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px">
-              <el-button size="small" @click="addPopoverVisible = false">取消</el-button>
-              <el-button type="primary" size="small" @click="doAddSite">保存</el-button>
+              <el-button
+                size="small"
+                @click="addPopoverVisible = false"
+                >取消</el-button
+              >
+              <el-button
+                type="primary"
+                size="small"
+                @click="doAddSite"
+                >保存</el-button
+              >
             </div>
           </el-form>
         </div>
       </el-popover>
     </section>
 
-    <section class="history-entry" @click="router.push({ name: 'history' })">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10" />
+    <section
+      class="history-entry"
+      @click="router.push({ name: 'history' })">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round">
+        <circle
+          cx="12"
+          cy="12"
+          r="10" />
         <polyline points="12 6 12 12 16 14" />
       </svg>
       <span>历史记录</span>
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        width="12"
+        height="12"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="arrow">
         <polyline points="9 18 15 12 9 6" />
       </svg>
     </section>
 
-    <section class="history-entry" @click="router.push({ name: 'library' })">
+    <!-- <section class="history-entry" @click="router.push({ name: 'library' })">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none"
         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
@@ -261,7 +317,7 @@ function avatarText(site) {
         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow">
         <polyline points="9 18 15 12 9 6" />
       </svg>
-    </section>
+    </section> -->
   </div>
 </template>
 
@@ -456,7 +512,9 @@ h2 {
   font-size: 11px;
   cursor: pointer;
   color: #999;
-  transition: color 0.12s, background 0.12s;
+  transition:
+    color 0.12s,
+    background 0.12s;
 }
 .pill-icon-btn:hover {
   color: #409eff;

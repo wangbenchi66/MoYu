@@ -59,6 +59,8 @@ function setWebviewRef(el, id) {
       delete insertedCssKeysByTab[tid];
       delete webviewEventListeners[tid];
       delete webviewLastRecordedUrl[tid];
+      delete lastExecutedScripts[tid];
+      delete webviewRefSetters[tid];
     } catch (e) {}
     return;
   }
@@ -91,7 +93,7 @@ function setWebviewRef(el, id) {
         console.log('[webview.event] did-finish-load', { tid, src: el && typeof el.getURL === 'function' ? el.getURL() || el.src : el && el.src });
       } catch (e) {}
     };
-    listeners['did-navigate'] = function (evt) {
+    function recordNavigation(evt) {
       try {
         const url = (evt && evt.url) || (el && (typeof el.getURL === 'function' ? el.getURL() : el.src)) || '';
         if (!url) return;
@@ -123,37 +125,9 @@ function setWebviewRef(el, id) {
           if (typeof pushRecentVisit === 'function') pushRecentVisit({ title: url, url, type: 'site' });
         }
       } catch (e) {}
-    };
-    listeners['did-navigate-in-page'] = function (evt) {
-      try {
-        const url = (evt && evt.url) || (el && (typeof el.getURL === 'function' ? el.getURL() : el.src)) || '';
-        if (!url) return;
-        const tabObj2 = tabs.value.find((t) => String(t.id) === String(tid));
-        if (!tabObj2 || tabObj2.kind === 'dashboard' || tabObj2.kind === 'local-text') return;
-        if (String(url).startsWith('about:') || String(url).startsWith('local:')) return;
-        if (webviewLastRecordedUrl[tid] === url) return;
-        webviewLastRecordedUrl[tid] = url;
-
-        if (el && typeof el.executeJavaScript === 'function') {
-          try {
-            el.executeJavaScript('document.title || ""')
-              .then((t) => {
-                try {
-                  const title = (t && String(t).trim()) || url;
-                  if (typeof pushRecentVisit === 'function') pushRecentVisit({ title, url, type: 'site' });
-                } catch (e) {}
-              })
-              .catch(() => {
-                if (typeof pushRecentVisit === 'function') pushRecentVisit({ title: url, url, type: 'site' });
-              });
-          } catch (e) {
-            if (typeof pushRecentVisit === 'function') pushRecentVisit({ title: url, url, type: 'site' });
-          }
-        } else {
-          if (typeof pushRecentVisit === 'function') pushRecentVisit({ title: url, url, type: 'site' });
-        }
-      } catch (e) {}
-    };
+    }
+    listeners['did-navigate'] = recordNavigation;
+    listeners['did-navigate-in-page'] = recordNavigation;
     listeners['did-fail-load'] = function (evt) {
       try {
         console.warn('[webview.event] did-fail-load', { tid, details: evt });

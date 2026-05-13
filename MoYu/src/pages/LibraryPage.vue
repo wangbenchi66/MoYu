@@ -163,85 +163,6 @@ function yieldToMain() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-// 从纯文本中提取章节结构（同步版）
-function extractChapters(text) {
-  const lines = text.split(/\r?\n/);
-  const candidates = [];
-
-  const patterns = [
-    { regex: /^\s*第([一二三四五六七八九十零百千万0-9]+)([章节条款])\s*(.+)$/, level: 1, titleIdx: 3, filter: (m) => m[3] },
-    { regex: /^\s*第([一二三四五六七八九十零百千万0-9]+)部分\s*(.+)$/, level: 1, titleIdx: 2, filter: (m) => m[2] },
-    { regex: /^\s*(?:Chapter|Ch\.?)\s+(\d+|[IVXLCDM]+)\s*(.*)$/i, level: 1, titleIdx: 2, filter: (m) => m[2] }
-    // { regex: /^\s*(\d+)\.\s+(.+)$/, level: 1, titleIdx: 2, filter: (m) => m[2] },
-    // { regex: /^\s*(\d+)\.(\d+)\.?\s+(.+)$/, level: 2, titleIdx: 3, filter: (m) => m[3] },
-    // { regex: /^\s*(\d+)\.(\d+)\.(\d+)\.?\s+(.+)$/, level: 3, titleIdx: 4, filter: (m) => m[4] },
-    // { regex: /^\s*[（(](\d+)[）)]\s+(.+)$/, level: 2, titleIdx: 2, filter: (m) => m[2] },
-    // { regex: /^\s*([A-Z])\.\s+(.+)$/, level: 2, titleIdx: 2, filter: (m) => m[2] },
-  ];
-
-  function hasValidText(str) {
-    return /[一-龥a-zA-Z]/.test(str);
-  }
-
-  function matchAndPush(pat, line, lineIdx) {
-    const m = line.match(pat.regex);
-    if (!m) return false;
-    let extracted = pat.filter(m);
-    if (extracted !== undefined) extracted = extracted.trim();
-    else extracted = '';
-    if (extracted.length < 2 && !hasValidText(extracted)) return false;
-    if (/^\d+$/.test(extracted)) return false;
-    candidates.push({ lineNo: lineIdx, level: pat.level, raw: line, title: line.trim(), marker: m[0] });
-    return true;
-  }
-
-  let lockedPat = null;
-  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-    const line = lines[lineIdx];
-    if (!line.trim()) continue;
-    // 优先用已锁定的模式
-    if (lockedPat && matchAndPush(lockedPat, line, lineIdx)) continue;
-    // 尝试所有模式
-    for (const pat of patterns) {
-      if (matchAndPush(pat, line, lineIdx)) {
-        if (!lockedPat) lockedPat = pat;
-        break;
-      }
-    }
-  }
-
-  candidates.sort((a, b) => a.lineNo - b.lineNo);
-
-  // 没有找到章节标记，按字数分段
-  if (candidates.length === 0) return splitBySize(text, 50000);
-
-  // 第一个标记之前的内容不丢失：在最前面插入虚拟标记
-  if (candidates[0].lineNo > 0) {
-    candidates.unshift({ lineNo: -1, level: 0, raw: '', title: '开始', marker: '' });
-  }
-
-  const chapters = [];
-  for (let i = 0; i < candidates.length; i++) {
-    const cur = candidates[i];
-    const startLine = cur.lineNo;
-    const endLine = i + 1 < candidates.length ? candidates[i + 1].lineNo - 1 : lines.length - 1;
-
-    const contentLines = lines.slice(startLine, endLine + 1);
-    let content = contentLines.join('\n');
-    content = content.replace(/\s+$/, '');
-
-    chapters.push({
-      level: cur.level,
-      title: cur.title,
-      startLine,
-      endLine,
-      content
-    });
-  }
-
-  return chapters;
-}
-
 // 异步分章：逐行扫描，每批让出主线程
 async function extractChaptersAsync(text) {
   const lines = text.split(/\r?\n/);
@@ -374,22 +295,13 @@ function importPdf(file) {
   });
 }
 
-// 按 Markdown 标题（# 或 ##）拆章
-function splitMarkdownChapters(content) {
-  const parts = content.split(/^(?=# )/m).filter(Boolean);
-  if (parts.length <= 1) return extractChapters(content);
-  return parts.map((part, i) => {
-    const firstLine = part.split('\n')[0];
-    const title = firstLine.replace(/^#+\s*/, '').trim() || `第${i + 1}节`;
-    return { title, content: part };
-  });
-}
-
 function openBook(book) {
   router.push({ name: 'reader', params: { id: book.id } });
 }
 
 function removeBook(book) {
+  if (book.epubUrl) URL.revokeObjectURL(book.epubUrl);
+  if (book.pdfUrl) URL.revokeObjectURL(book.pdfUrl);
   books.value = books.value.filter((b) => b.id !== book.id);
   saveBooks();
 }
