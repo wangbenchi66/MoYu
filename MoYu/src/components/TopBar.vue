@@ -1,11 +1,9 @@
 <!-- TopBar.vue — 顶部标题栏（窗口控制、透明度快速切换、品牌图标） -->
 <script setup>
-import { CloseBold, Hide, House, Lock, Minus, Monitor, Picture, Pointer, Setting, Unlock } from '@element-plus/icons-vue';
+import { CloseBold, Hide, House, Lock, Monitor, Picture, Pointer, Setting, Unlock } from '@element-plus/icons-vue';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 
-// 检测平台：Mac 上窗口控制习惯在左侧（用 computed 避免 preload 异步竞态）
-const isMac = computed(() => typeof window !== 'undefined' && window.desktop?.platform === 'darwin');
 const isDev = import.meta.env.DEV;
 
 const props = defineProps({
@@ -68,19 +66,9 @@ function dragAreaText() {
 </script>
 
 <template>
-  <header class="topbar" :class="{ 'is-mac': isMac }">
-    <!-- Mac 专属：关闭/最小化在左侧（符合 macOS 交互习惯） -->
-    <div v-if="isMac" class="mac-winctrls no-drag">
-      <BaseButton
-        class="ctrl-btn close-btn"
-        title="关闭"
-        @click="props.handleClose">
-        <el-icon><CloseBold /></el-icon>
-      </BaseButton>
-    </div>
-
-    <!-- 品牌图标（仅 House，无文字）— Mac 上首页移到透明度左侧，此处隐藏 -->
-    <div v-if="!isMac" class="brand-group no-drag">
+  <header class="topbar">
+    <!-- 品牌图标（仅 House，无文字） -->
+    <div class="brand-group no-drag">
       <BaseButton class="home-btn" @click="props.goHome" title="首页">
         <el-icon><House /></el-icon>
       </BaseButton>
@@ -101,14 +89,6 @@ function dragAreaText() {
     <div class="window-controls no-drag">
       <!-- 组1：透明度（空间不足时优先隐藏） -->
       <div class="ctrl-group grp-collapsible-a">
-        <!-- Mac 上首页按钮放在此处（透明度左侧） -->
-        <BaseButton
-          v-if="isMac"
-          class="ctrl-btn home-btn-mac"
-          title="首页"
-          @click="props.goHome">
-          <el-icon><House /></el-icon>
-        </BaseButton>
         <BaseButton
           class="ctrl-btn opacity-btn"
           :title="`透明度 ${props.settings?.transparency ?? 85}%（点击循环切换）`"
@@ -159,7 +139,7 @@ function dragAreaText() {
         <span class="ctrl-sep"></span>
       </div>
 
-      <!-- 组3：窗口操作（始终可见；Mac 上最小化/关闭已在左侧，此处仅保留设置） -->
+      <!-- 组3：窗口操作（始终可见） -->
       <div class="ctrl-group grp-essential">
         <BaseButton
           class="ctrl-btn"
@@ -167,14 +147,12 @@ function dragAreaText() {
           @click="props.openSettingsModal">
           <el-icon><Setting /></el-icon>
         </BaseButton>
-        <template v-if="!isMac">
-          <BaseButton
-            class="ctrl-btn close-btn"
-            title="关闭"
-            @click="props.handleClose">
-            <el-icon><CloseBold /></el-icon>
-          </BaseButton>
-        </template>
+        <BaseButton
+          class="ctrl-btn close-btn"
+          title="关闭"
+          @click="props.handleClose">
+          <el-icon><CloseBold /></el-icon>
+        </BaseButton>
       </div>
     </div>
   </header>
@@ -356,20 +334,6 @@ function dragAreaText() {
   background: rgba(0, 0, 0, 0.1);
   margin: 0 3px;
   flex-shrink: 0;
-}
-
-/* Mac 左侧窗口控制组（关闭在最左，最小化次之） */
-.mac-winctrls {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 0;
-  margin-right: 2px;
-}
-
-/* Mac 模式下 topbar 左侧稍微内缩，视觉上与右侧对称 */
-.topbar.is-mac {
-  padding-left: 2px;
 }
 
 /* 透明度数值标签 */
