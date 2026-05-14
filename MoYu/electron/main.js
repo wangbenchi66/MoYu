@@ -837,6 +837,7 @@ function createWindow() {
     const initialW = clamp(savedW, MIN_SAFE_WIDTH, maxW)
     const initialH = clamp(savedH, MIN_SAFE_HEIGHT, maxH)
     //创建窗口
+    const isMac = process.platform === 'darwin'
     const win = new BrowserWindow({
         // 在 Windows 上，通过 BrowserWindow.icon 可以控制任务栏/窗口图标。
         // 使用共享默认配置中的 appIconPath（若存在且文件可用）。
@@ -848,12 +849,15 @@ function createWindow() {
         height: initialH,
         minWidth: 280,
         minHeight: 200,
-        frame: false,
+        // macOS 使用 titleBarStyle + trafficLightPosition 隐藏原生交通灯按钮
+        // Windows 使用 frame: false 隐藏原生标题栏
+        ...(isMac
+            ? { titleBarStyle: 'hidden', trafficLightPosition: { x: -100, y: -100 } }
+            : { frame: false }),
         // 创建为透明窗口，页面透明区域将透出桌面（CSS 控制具体显示效果）
         transparent: true,
         hasShadow: false,
         backgroundColor: '#00000000',
-        titleBarStyle: 'hidden',
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             contextIsolation: true,
