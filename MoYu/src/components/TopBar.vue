@@ -4,6 +4,8 @@ import { CloseBold, Hide, House, Lock, Monitor, Picture, Pointer, Setting, Unloc
 import { computed, onUnmounted, ref, watch } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 
+// 检测平台：Mac 上窗口控制习惯在左侧
+const isMac = computed(() => typeof window !== 'undefined' && window.desktop?.platform === 'darwin');
 const isDev = import.meta.env.DEV;
 
 const props = defineProps({
@@ -66,7 +68,10 @@ function dragAreaText() {
 </script>
 
 <template>
-  <header class="topbar">
+  <header class="topbar" :class="{ 'is-mac': isMac }">
+    <!-- Mac 专属：红绿灯占位区域（titleBarStyle: hidden 时红绿灯浮在内容上，需要留出空间） -->
+    <div v-if="isMac" class="mac-trafficlights-space no-drag"></div>
+
     <!-- 品牌图标（仅 House，无文字） -->
     <div class="brand-group no-drag">
       <BaseButton class="home-btn" @click="props.goHome" title="首页">
@@ -334,6 +339,17 @@ function dragAreaText() {
   background: rgba(0, 0, 0, 0.1);
   margin: 0 3px;
   flex-shrink: 0;
+}
+
+/* Mac 红绿灯占位区域：titleBarStyle: hidden 时红绿灯浮在内容上，需留出约 70px 空间 */
+.mac-trafficlights-space {
+  flex: 0 0 70px;
+  height: 100%;
+}
+
+/* Mac 模式下 topbar 不需要额外左侧内缩（红绿灯占位已处理） */
+.topbar.is-mac {
+  padding-left: 0;
 }
 
 /* 透明度数值标签 */

@@ -587,7 +587,11 @@ function createTray() {
     }
 
     // 仅从共享默认配置指定的路径加载托盘图标（不读取用户上传路径）
-    const configured = defaultSettings.trayIconPath || ''
+    // macOS 不支持 .ico 格式，自动切换为 .png
+    let configured = defaultSettings.trayIconPath || ''
+    if (process.platform === 'darwin' && configured.endsWith('.ico')) {
+        configured = configured.replace(/\.ico$/, '.png')
+    }
     if (!configured) {
         console.warn('[tray] default trayIconPath not set; skipping tray creation')
         return
@@ -852,7 +856,7 @@ function createWindow() {
         // macOS 使用 titleBarStyle + trafficLightPosition 隐藏原生交通灯按钮
         // Windows 使用 frame: false 隐藏原生标题栏
         ...(isMac
-            ? { titleBarStyle: 'hidden', trafficLightPosition: { x: -100, y: -100 } }
+            ? { titleBarStyle: 'hidden' }
             : { frame: false }),
         // 创建为透明窗口，页面透明区域将透出桌面（CSS 控制具体显示效果）
         transparent: true,
