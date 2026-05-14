@@ -1,17 +1,16 @@
 // electron/main.js — 主进程：窗口管理、设置持久化、Tray、全局快捷键、IPC 处理
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, Tray } from 'electron'
-import { EventEmitter } from 'events'
 import Store from 'electron-store'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import defaultSettings from '../src/shared/defaultSettings.js'
 
 // 多 webview tab 时 Electron 内部 guest WebContents 会超出默认 10 个监听器上限
 // 仅在需要时按实例设置，而非全局覆盖
 function safeSetMaxListeners(emitter, count) {
-    try { emitter.setMaxListeners(count) } catch (e) {}
+    try { emitter.setMaxListeners(count) } catch (e) { }
 }
-import { fileURLToPath } from 'node:url'
-import defaultSettings from '../src/shared/defaultSettings.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -119,11 +118,11 @@ function writeLog(level, msg, data) {
                 if (newlinePos > 0) half = newlinePos + 1
                 fs.writeFileSync(logPath, content.substring(half), 'utf-8')
             }
-        } catch (e) {}
+        } catch (e) { }
         const ts = new Date().toISOString()
         const line = `[${ts}] [${level}] ${msg}${data ? ' | ' + JSON.stringify(data) : ''}\n`
         fs.appendFileSync(logPath, line, 'utf-8')
-    } catch (e) {}
+    } catch (e) { }
 }
 
 /**
@@ -330,7 +329,7 @@ function saveSettings() {
             if (fs.existsSync(filePath)) {
                 fs.copyFileSync(filePath, filePath + '.bak')
             }
-        } catch (e) {}
+        } catch (e) { }
         fs.writeFileSync(filePath, JSON.stringify(currentSettings, null, 2), 'utf-8')
     } catch (error) {
         console.warn('[settings] save failed:', error)
@@ -587,11 +586,7 @@ function createTray() {
     }
 
     // 仅从共享默认配置指定的路径加载托盘图标（不读取用户上传路径）
-    // macOS 不支持 .ico 格式，自动切换为 .png
-    let configured = defaultSettings.trayIconPath || ''
-    if (process.platform === 'darwin' && configured.endsWith('.ico')) {
-        configured = configured.replace(/\.ico$/, '.png')
-    }
+    const configured = defaultSettings.trayIconPath || ''
     if (!configured) {
         console.warn('[tray] default trayIconPath not set; skipping tray creation')
         return
@@ -616,12 +611,23 @@ function createTray() {
         return
     }
 
+    // macOS 菜单栏图标需要缩小到 16x16，且设为 template 以适配深色/浅色模式
+    if (process.platform === 'darwin') {
+        trayImage = trayImage.resize({ width: 16, height: 16 })
+        trayImage.setTemplateImage(true)
+    }
+
     // 使用 nativeImage 实例创建托盘，避免路径解析差异
     tray = new Tray(trayImage)
     tray.setToolTip('MoYu')
 
     tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate()))
-    tray.on('double-click', () => toggleMainWindow())
+    // macOS 菜单栏图标单击即可响应，Windows/Linux 需要双击
+    if (process.platform === 'darwin') {
+        tray.on('click', () => toggleMainWindow())
+    } else {
+        tray.on('double-click', () => toggleMainWindow())
+    }
 }
 
 /**
@@ -843,11 +849,8 @@ function createWindow() {
     //创建窗口
     const isMac = process.platform === 'darwin'
     const win = new BrowserWindow({
-        // 在 Windows 上，通过 BrowserWindow.icon 可以控制任务栏/窗口图标。
-        // 使用共享默认配置中的 appIconPath（若存在且文件可用）。
-        icon: (() => {
-            return getIconPath(defaultSettings.appIconPath)
-        })(),
+        // Windows 使用自定义图标；macOS 使用应用包自带图标（不需要传 icon）
+        ...(!isMac ? { icon: getIconPath(defaultSettings.appIconPath) } : {}),
         //icon: './public/icon.png',
         width: initialW,
         height: initialH,
@@ -983,7 +986,7 @@ function createWindow() {
                         console.log('[nav] blocked will-navigate:', url)
                         navEvent.preventDefault()
                     }
-                } catch (e) {}
+                } catch (e) { }
             })
 
             // 拦截服务端 302/301 重定向到 zhihu:// 或 /oia/ 的情况
@@ -993,7 +996,7 @@ function createWindow() {
                         console.log('[nav] blocked will-redirect:', url)
                         navEvent.preventDefault()
                     }
-                } catch (e) {}
+                } catch (e) { }
             })
 
             // 拦截所有 frame 的导航（包含 iframe，Electron 22+ 支持）
@@ -1004,9 +1007,9 @@ function createWindow() {
                             console.log('[nav] blocked will-frame-navigate:', details.url)
                             details.preventDefault()
                         }
-                    } catch (e) {}
+                    } catch (e) { }
                 })
-            } catch (e) {}
+            } catch (e) { }
 
             // 拦截 window.open() 打开自定义协议链接
             try {
@@ -1017,9 +1020,9 @@ function createWindow() {
                     }
                     return { action: 'allow' }
                 })
-            } catch (e) {}
+            } catch (e) { }
 
-        } catch (e) {}
+        } catch (e) { }
     })
 
     win.on('closed', () => {
@@ -1112,7 +1115,14 @@ app.whenReady().then(() => {
     refreshAutoHideMonitor()
 
     app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
+        // macOS 点击 Dock 图标时：有隐藏窗口则显示，没有则新建
+        const existing = BrowserWindow.getAllWindows()
+        if (existing.length > 0) {
+            const win = existing[0]
+            if (win.isMinimized()) win.restore()
+            if (!win.isVisible()) win.show()
+            win.focus()
+        } else {
             createWindow()
         }
     })
