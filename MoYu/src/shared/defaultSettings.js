@@ -12,7 +12,7 @@ const defaultSettings = {
     // 是否在系统任务栏显示图标（true 显示，false 隐藏）
     showInTaskbar: true,
 
-    // 鼠标移出窗口时自动隐藏（用于浮动/侧边窗口体验）
+    // 鼠标移出窗口时自动隐藏（false=关闭, 'hover'=移入显示, 'hide'=移入不显示）
     autoHide: false,
 
     // 是否显示标签栏（标签页）

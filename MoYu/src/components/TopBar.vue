@@ -34,6 +34,16 @@ const cycleTitlebarOpacity = () => {
   } catch (e) {}
 };
 
+// 自动隐藏二态循环：关闭 → 移入不显示 → 关闭
+const autoHideTitle = computed(() => {
+  return props.settings?.autoHide ? '移出隐藏 · 移入不显示（点击关闭）' : '自动隐藏（关闭）';
+});
+const cycleAutoHide = () => {
+  try {
+    props.patchSetting && props.patchSetting('autoHide', props.settings?.autoHide ? false : 'hide');
+  } catch (e) {}
+};
+
 const showStatus = ref(false);
 let _statusTimer = null;
 
@@ -133,9 +143,9 @@ function dragAreaText() {
         </BaseButton>
         <BaseButton
           class="ctrl-btn"
-          :class="{ active: props.settings.autoHide }"
-          :title="props.settings.autoHide ? '自动隐藏（关闭）' : '自动隐藏（开启）'"
-          @click="() => props.toggleSetting && props.toggleSetting('autoHide')">
+          :class="{ active: !!props.settings.autoHide }"
+          :title="autoHideTitle"
+          @click="cycleAutoHide">
           <el-icon><Pointer /></el-icon>
         </BaseButton>
         <BaseButton

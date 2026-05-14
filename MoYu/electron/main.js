@@ -23,6 +23,7 @@ let tray = null
 let isQuitting = false
 let autoHideMonitor = null
 let lastVisibleBounds = null
+let autoHideAwaitingEnter = false  // hide 模式下老板键恢复后，等待鼠标进入窗口
 let currentSettings = { ...defaultSettings }
 // 临时置顶计时器（用于 autoHide 自动显示时短暂将窗口置于顶层）
 let _tempTopTimer = null
@@ -455,6 +456,7 @@ function refreshAutoHideMonitor() {
     stopAutoHideMonitor()
 
     if (!currentSettings.autoHide) {
+        autoHideAwaitingEnter = false
         return
     }
 
@@ -472,15 +474,21 @@ function refreshAutoHideMonitor() {
         if (mainWindow.isVisible()) {
             rememberWindowBounds()
 
-            if (!isPointInsideBounds(cursorPoint, trackedBounds, 12)) {
+            const inside = isPointInsideBounds(cursorPoint, trackedBounds, 0)
+            if (autoHideAwaitingEnter) {
+                if (inside) autoHideAwaitingEnter = false
+                return
+            }
+
+            if (!inside && !isPointInsideBounds(cursorPoint, trackedBounds, 12)) {
                 hideMainWindow()
             }
 
             return
         }
 
-        // 窗口已隐藏（非最小化）：检查光标是否回到窗口区域
-        if (isPointInsideBounds(cursorPoint, trackedBounds, 6)) {
+        // 窗口已隐藏（非最小化）：仅 hover 模式下检查光标是否回到窗口区域
+        if (currentSettings.autoHide === 'hover' && isPointInsideBounds(cursorPoint, trackedBounds, 6)) {
             // 老板键主动隐藏时不自动显示
             if (bossKeyHidden) return
             // 使用短暂置顶以确保在层级切换时能被用户看到（不持久化 alwaysOnTop）
@@ -550,6 +558,9 @@ function toggleMainWindow() {
     }
 
     bossKeyHidden = false
+    if (currentSettings.autoHide && currentSettings.autoHide !== 'hover') {
+        autoHideAwaitingEnter = true
+    }
     showMainWindow(true)
 }
 
@@ -699,7 +710,7 @@ function buildTrayMenuTemplate() {
                 { label: '关闭时最小化到托盘', type: 'checkbox', checked: !!currentSettings.closeToTray, click: (item) => updateSettingsFromTray({ closeToTray: item.checked }) },
                 { label: '悬停显示标题栏', type: 'checkbox', checked: !!currentSettings.hoverHeaderMode, click: (item) => updateSettingsFromTray({ hoverHeaderMode: item.checked }) },
                 { label: '显示标签栏', type: 'checkbox', checked: !!currentSettings.showTabBar, click: (item) => updateSettingsFromTray({ showTabBar: item.checked }) },
-                { label: '鼠标移出隐藏窗口', type: 'checkbox', checked: !!currentSettings.autoHide, click: (item) => updateSettingsFromTray({ autoHide: item.checked }) },
+                { label: '鼠标移出隐藏', type: 'checkbox', checked: !!currentSettings.autoHide, click: (item) => updateSettingsFromTray({ autoHide: item.checked ? 'hide' : false }) },
                 { label: '隐藏时暂停媒体与滚动', type: 'checkbox', checked: !!currentSettings.pauseOnBlurHide, click: (item) => updateSettingsFromTray({ pauseOnBlurHide: item.checked }) },
                 { label: '工具栏显示', type: 'checkbox', checked: !!currentSettings.toolbarVisible, click: (item) => updateSettingsFromTray({ toolbarVisible: item.checked }) },
                 { label: '工具栏停靠底部', type: 'checkbox', checked: !!currentSettings.toolbarDocked, click: (item) => updateSettingsFromTray({ toolbarDocked: item.checked }) },
@@ -908,6 +919,8 @@ function createWindow() {
 
     win.on('blur', () => {
         if (currentSettings.autoHide) {
+            // hide 模式下老板键恢复后等待鼠标进入，期间不因 blur 隐藏
+            if (autoHideAwaitingEnter) return
             // autoHide 时 hideMainWindow 会触发 hide 事件，由 hide 事件处理 endMoyu
             hideMainWindow()
             return

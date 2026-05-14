@@ -72,8 +72,11 @@ function patchSetting(key, value) {
         statusMessage.value = settings[key] ? '关闭主窗口时将最小化到托盘' : '关闭主窗口时将直接退出应用'
     if (key === 'showInTaskbar')
         statusMessage.value = settings[key] ? '已显示任务栏图标' : '已隐藏任务栏图标'
-    if (key === 'autoHide')
-        statusMessage.value = settings[key] ? '鼠标移出后会自动隐藏，移回原区域自动恢复' : '已关闭自动隐藏'
+    if (key === 'autoHide') {
+        if (settings[key] === 'hover') statusMessage.value = '鼠标移出隐藏，移回显示'
+        else if (settings[key]) statusMessage.value = '鼠标移出隐藏，移回不显示（用老板键恢复）'
+        else statusMessage.value = '已关闭自动隐藏'
+    }
     if (key === 'hoverHeaderMode')
         statusMessage.value = settings[key] ? '标题栏改为悬停显示' : '标题栏常驻显示'
     if (key === 'autoScrollEnabled')
