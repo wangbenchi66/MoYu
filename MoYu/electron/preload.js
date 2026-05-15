@@ -39,6 +39,8 @@ contextBridge.exposeInMainWorld('desktop', {
     clearMoyuStats: () => ipcRenderer.invoke('moyu:clear-stats'),
     // 版本更新检测
     checkForUpdate: () => ipcRenderer.invoke('update:check'),
+    // 获取持久化的匿名设备 ID（存于 userData 文件，不随缓存清理）
+    getDeviceId: () => ipcRenderer.invoke('device:get-id'),
 })
 
 // 在 preload 加载时通知主进程，便于确认 preload 是否注入到渲染器

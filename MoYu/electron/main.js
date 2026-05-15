@@ -1,6 +1,7 @@
 // electron/main.js — 主进程：窗口管理、设置持久化、Tray、全局快捷键、IPC 处理
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, Tray } from 'electron'
 import Store from 'electron-store'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -1073,6 +1074,18 @@ ipcMain.handle('update:check', () => ({
     platform: process.platform === 'darwin' ? 'mac' : 'win',
     isDev,
 }))
+
+// ── 匿名设备 ID（持久化到 userData，不随缓存清理）──
+ipcMain.handle('device:get-id', () => {
+    const idPath = path.join(app.getPath('userData'), '.moyu_device_id')
+    try {
+        const id = fs.readFileSync(idPath, 'utf-8').trim()
+        if (id) return id
+    } catch (_) {}
+    const id = randomUUID()
+    fs.writeFileSync(idPath, id, 'utf-8')
+    return id
+})
 
 ipcMain.handle('moyu:get-stats', () => getMoyuStats())
 

@@ -1,19 +1,6 @@
 // useDeviceReport.js — 匿名设备信息上报（需用户已同意隐私协议）
 import http from '../http/index.js';
 
-function getOrCreateDeviceId() {
-  const key = 'moyu-device-id';
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = (Math.random() * 16) | 0;
-      return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-    });
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
-
 function parseOsInfo() {
   const ua = navigator.userAgent || '';
   const win = ua.match(/Windows NT ([\d.]+)/);
@@ -31,9 +18,13 @@ export async function reportDevice() {
   if (!localStorage.getItem('moyu-privacy-consent')) return;
   try {
     const desktopApi = typeof window !== 'undefined' ? window.desktop : null;
-    const updateInfo = desktopApi?.checkForUpdate ? await desktopApi.checkForUpdate() : {};
+    // 设备 ID 从主进程文件读取，不随浏览器缓存清理而丢失
+    const [deviceId, updateInfo] = await Promise.all([
+      desktopApi?.getDeviceId?.() ?? '',
+      desktopApi?.checkForUpdate?.() ?? {},
+    ]);
     await http.post('/api/MoYu/ReportDevice', {
-      deviceId: getOrCreateDeviceId(),
+      deviceId,
       platform: updateInfo.platform || (desktopApi?.platform === 'darwin' ? 'mac' : 'win'),
       appVersion: updateInfo.currentVersion || '',
       osInfo: parseOsInfo(),
