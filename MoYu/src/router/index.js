@@ -10,6 +10,7 @@ const routes = [
   { path: '/profile/history', name: 'history', title: '历史记录', component: () => import('../pages/HistoryPage.vue') },
   { path: '/profile/stats', name: 'stats', title: '摸鱼时间统计', component: () => import('../pages/StatsPage.vue') },
   { path: '/profile/about', name: 'about', title: '关于', component: () => import('../pages/AboutPage.vue') },
+  { path: '/profile/help', name: 'help', title: '使用说明', component: () => import('../pages/HelpPage.vue') },
   { path: '/library', name: 'library', title: '我的书架', component: () => import('../pages/LibraryPage.vue') },
   { path: '/library/:id', name: 'reader', title: '阅读', component: () => import('../pages/ReaderPage.vue') },
   { path: '/update', name: 'update', title: '版本更新', component: () => import('../pages/UpdatePage.vue') },
