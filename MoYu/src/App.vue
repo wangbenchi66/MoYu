@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import ShortcutRow from './components/ShortcutRow.vue';
+import PrivacyConsent from './components/PrivacyConsent.vue';
 import { useDesktopApp } from './composables/useDesktopApp';
 import http from './http/index.js';
 import TopBar from './components/TopBar.vue';
@@ -12,6 +13,7 @@ import BottomToolbar from './components/BottomToolbar.vue';
 import TabBar from './components/TabBar.vue';
 import { setForceUpdateActive } from './router/index.js';
 import defaultSettings from './shared/defaultSettings.js';
+import { reportDevice } from './composables/useDeviceReport.js';
 
 const {
   settings,
@@ -64,6 +66,8 @@ function compareVersions(a, b) {
 }
 
 const isSettingsOpen = ref(false);
+const hasPrivacyConsent = !!localStorage.getItem('moyu-privacy-consent');
+const showPrivacyConsent = ref(!hasPrivacyConsent);
 let removeOpenSettingsListener = null;
 let _globalErrorHandler = null;
 let _globalRejectionHandler = null;
@@ -664,8 +668,22 @@ function goHome() {
   } catch (e) {}
 }
 
+// 已同意：关闭弹窗并上报；刚同意也走此路径
+function handlePrivacyAgreed() {
+  showPrivacyConsent.value = false;
+  reportDevice();
+}
+
+// 未同意：仅关闭本次弹窗，下次启动继续提示
+function handlePrivacyDismissed() {
+  showPrivacyConsent.value = false;
+}
+
 onMounted(() => {
   initializeDesktopApp();
+
+  // 已同意过隐私协议，每次启动静默上报
+  if (hasPrivacyConsent) reportDevice();
 
   // 暴露给主进程：blur 时判断是否应继续摸鱼计时
   window.__moyuShouldKeepTracking = () => {
@@ -1166,6 +1184,8 @@ function localShortcutHandler(e) {
         </section>
       </section>
     </div>
+
+    <PrivacyConsent v-if="showPrivacyConsent" @agreed="handlePrivacyAgreed" @dismissed="handlePrivacyDismissed" />
   </div>
 </template>
 
