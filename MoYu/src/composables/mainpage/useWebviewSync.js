@@ -5,7 +5,6 @@ import { nextTick } from 'vue'
 import { activeTabId, settings } from '../useAppState.js'
 import { webviewRefs, getWebview } from './useWebviewRefs.js'
 import { runWebviewJS, runWebviewCss, buildAutoScrollScript } from './useWebviewExec.js'
-import { syncLocalReaderAutoScroll, applyLocalReaderStyles } from './useLocalReaderAutoScroll.js'
 
 const transparentPageCss = `
 html,
@@ -128,8 +127,6 @@ function syncReaderEffects(tabId) {
   syncWebviewTextColor(tid)
   syncWebviewFontSize(tid)
   syncWebviewAutoScroll(tid)
-  syncLocalReaderAutoScroll()
-  applyLocalReaderStyles()
 }
 
 let _syncReaderPending = false

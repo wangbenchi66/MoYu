@@ -36,6 +36,10 @@ const defaultSettings = {
     // 网页区域透明（仅影响页面内容区）
     pageTransparentMode: false,
 
+    // 仅软件外壳透明：shell/surface 归零，但网页区域保持不透明。
+    // 与 fullWindowTransparent 的区别：后者连网页一起透明。
+    shellOnlyTransparent: false,
+
     // 强制网页背景透明（覆盖站点规则）
     forcePageTransparent: false,
 
@@ -63,6 +67,14 @@ const defaultSettings = {
     // 失焦或隐藏时暂停所有媒体（视频/音频）并停止自动滚动，恢复时再恢复
     // true = 启用该行为，false = 不做任何自动暂停/恢复
     pauseOnBlurHide: true,
+
+    // 窗口失焦/隐藏时是否允许音频继续在后台播放。
+    // 默认 true —— 听播客/音乐时切走不该被掐断。
+    // 开启后：音频（<audio> 或没有画面的播放）不暂停、不静音；
+    //        视频仍会被暂停；自动滚动仍会停止。
+    // 注意：仅影响「失焦/隐藏」路径。老板键静音（muteOnBossKey）是紧急隐藏，
+    //       无论此项如何设置都会静音。
+    keepAudioPlayingInBackground: true,
 
     // 阅读器文字颜色（十六进制）
     readerTextColor: '#283247',
@@ -124,6 +136,39 @@ const defaultSettings = {
 
     // 工具栏是否被用户禁用（禁用后不再通过移入显示）
     toolbarDisabled: false,
+
+    // ── 隐私 / 痕迹清理 ──
+    // 历史记录保留天数：0 表示永久保留；其它值（1/3/7/30）表示只保留最近 N 天
+    historyRetentionDays: 0,
+
+    // 是否在应用启动时自动清理过期痕迹
+    autoCleanOnStartup: true,
+
+    // ── 会话与痕迹 ──
+
+    // 启动时是否恢复上次的标签页。
+    // 默认开启（符合浏览器预期）；在意痕迹可关掉。
+    restoreTabsOnStartup: true,
+
+    // 老板键隐藏窗口时是否静音所有网页音频（恢复显示时还原）。
+    // 摸鱼场景下建议开启——否则藏了窗口声音还在放。
+    muteOnBossKey: true,
+
+    // 退出应用时是否清理 webview 的浏览数据（缓存 / Cookie / 本地存储等）。
+    // 属于强隐私选项，会清掉所有网站的登录态，默认关闭。
+    clearCacheOnExit: false,
+
+    // ── 后端接口开关 ──
+    // 是否启用「后端在线服务」。关闭后应用**完全不发起任何后端请求**：
+    //   - GET  /api/MoYu/CheckVersion   （版本检测）
+    //   - POST /api/MoYu/ReportDevice   （匿名设备上报）
+    // 关闭时：
+    //   1. 启动不再做版本检测，也就不会因接口不可达而强制跳转更新页
+    //   2. 隐私弹窗的「同意」只记录本地标记，不再上报任何数据
+    //   3. 关于页的「检查更新」按钮给出禁用提示
+    // 注意：window.desktop.checkForUpdate() 是**本地 IPC**（只返回版本号/平台），
+    // 不属于网络请求，因此不受此开关影响。
+    backendEnabled: false,
 }
 
 export default defaultSettings

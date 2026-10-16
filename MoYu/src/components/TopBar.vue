@@ -1,6 +1,6 @@
 <!-- TopBar.vue — 顶部标题栏（窗口控制、透明度快速切换、品牌图标） -->
 <script setup>
-import { CloseBold, Hide, House, Lock, Monitor, Picture, Pointer, Setting, Unlock } from '@element-plus/icons-vue';
+import { CloseBold, Hide, House, Lock, Monitor, Moon, Setting, Top, Unlock, View } from '@element-plus/icons-vue';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 
@@ -30,9 +30,102 @@ const cycleTitlebarOpacity = () => {
     const cur = Number(props.settings?.transparency ?? 85);
     // 找第一个严格大于当前值的预设；到头了就回到 0
     const next = presets.find(v => v > cur) ?? presets[0];
-    props.patchSetting && props.patchSetting('transparency', next);
+    setOpacity(next);
   } catch (e) {}
 };
+
+// 透明度上限与设置面板滑块保持一致（0-100）
+const OPACITY_MAX = 100;
+
+/** 记忆「双击前」的非零透明度，用于双击在 0 与它之间切换 */
+const lastNonZeroOpacity = ref(0);
+
+function currentOpacity() {
+  const v = Number(props.settings?.transparency);
+  return Number.isFinite(v) ? v : 0;
+}
+
+function setOpacity(v) {
+  try {
+    const next = Math.max(0, Math.min(OPACITY_MAX, Math.round(Number(v) || 0)));
+    const cur = currentOpacity();
+    // 记录最近一次非零值（供双击恢复）
+    if (cur > 0) lastNonZeroOpacity.value = cur;
+    props.patchSetting && props.patchSetting('transparency', next);
+  } catch (e) {}
+}
+
+// 调节反馈：数字短暂放大，让用户确认微调已生效
+const adjusting = ref(false);
+let _adjustTimer = null;
+function flashAdjusting() {
+  try {
+    adjusting.value = true;
+    if (_adjustTimer) clearTimeout(_adjustTimer);
+    _adjustTimer = setTimeout(() => { adjusting.value = false; _adjustTimer = null; }, 420);
+  } catch (e) { }
+}
+
+/**
+ * 滚轮微调透明度：每格 ±1%。
+ * 顶栏空间紧张，用滚轮代替滑块，既能精细调节又不占位置。
+ */
+function onOpacityWheel(e) {
+  try {
+    // 阻止滚轮穿透到下层（否则可能触发页面滚动）
+    e.preventDefault();
+    e.stopPropagation();
+    const delta = e.deltaY < 0 ? 1 : -1;
+    setOpacity(currentOpacity() + delta);
+    flashAdjusting();
+  } catch (e) {}
+}
+
+/**
+ * 单击与双击共用同一个按钮，需要区分：
+ * 双击必然先触发两次 click，若立即执行会导致透明度被循环两轮再归零。
+ * 做法：单击延迟 DBLCLICK_DELAY 执行，等待期内若发生第二次点击就取消它。
+ */
+const DBLCLICK_DELAY = 220;
+let _clickTimer = null;
+
+function onOpacityClick() {
+  try {
+    if (_clickTimer) {
+      // 已在等待中 → 这是第二次点击，交给 dblclick 处理
+      clearTimeout(_clickTimer);
+      _clickTimer = null;
+      return;
+    }
+    _clickTimer = setTimeout(() => {
+      _clickTimer = null;
+      cycleTitlebarOpacity();
+    }, DBLCLICK_DELAY);
+  } catch (e) { }
+}
+
+function onOpacityDblClick(e) {
+  try {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    // 取消挂起的单击，避免它稍后再执行一次
+    if (_clickTimer) { clearTimeout(_clickTimer); _clickTimer = null; }
+    const cur = currentOpacity();
+    if (cur > 0) {
+      lastNonZeroOpacity.value = cur;
+      setOpacity(0);
+    } else {
+      // 记忆值为 0（从未设过非零）时，给一个直观的默认值
+      const restore = lastNonZeroOpacity.value > 0 ? lastNonZeroOpacity.value : 50;
+      setOpacity(restore);
+    }
+    flashAdjusting();
+  } catch (e) { }
+}
+
+onUnmounted(() => {
+  if (_clickTimer) { clearTimeout(_clickTimer); _clickTimer = null; }
+  clearTimeout(_statusTimer);
+});
 
 // 自动隐藏二态循环：关闭 → 移入不显示 → 关闭
 const autoHideTitle = computed(() => {
@@ -43,6 +136,60 @@ const cycleAutoHide = () => {
     props.patchSetting && props.patchSetting('autoHide', props.settings?.autoHide ? false : 'hide');
   } catch (e) {}
 };
+
+/**
+ * 背景透明三态循环（把原先的两个按钮合并成一个）：
+ *   0 = 关闭              ：外壳与网页都不透明
+ *   1 = 软件透明        ：shellOnlyTransparent = true（外壳/面板透明，网页保持不透明）
+ *   2 = 软件+网页都透明  ：fullWindowTransparent + pageTransparentMode 同时为真
+ *
+ * 之所以合并：两个旧按钮只差「网页是否也透明」，普通用户难以区分，
+ * 却占了顶栏两个位置（顶栏很窄）。
+ *
+ * 顺序为「软件优先」：先只让外壳透明，再叠加网页透明。
+ *
+ * 注意三档是**递进叠加**而非互斥：
+ *   useDesktopApp 的 themeVars 里 fullWindowTransparent 优先级最高（提前 return），
+ *   因此进入第 2 档时必须保留低档位效果，否则从第 1 档切上去会「看起来没变化」。
+ */
+const transparencyLevel = computed(() => {
+  try {
+    if (props.settings?.fullWindowTransparent) return 2;
+    if (props.settings?.shellOnlyTransparent) return 1;
+    return 0;
+  } catch (e) { return 0; }
+});
+
+const transparencyTitle = computed(() => {
+  const lv = transparencyLevel.value;
+  if (lv === 2) return '背景透明：软件+网页都透明｜点击关闭';
+  if (lv === 1) return '背景透明：软件透明（外壳/面板）｜点击切为「软件+网页都透明」';
+  return '背景透明：关闭｜点击切为「软件透明」';
+});
+
+function cycleTransparency() {
+  try {
+    const next = (transparencyLevel.value + 1) % 3;
+    const set = props.patchSetting;
+    if (!set) return;
+    // 递进叠加：进入更高档位时保留低档位的效果
+    if (next === 0) {
+      set('shellOnlyTransparent', false);
+      set('fullWindowTransparent', false);
+      set('pageTransparentMode', false);
+    } else if (next === 1) {
+      // 档 1：只让外壳/面板透明，网页保持原样
+      set('fullWindowTransparent', false);
+      set('pageTransparentMode', false);
+      set('shellOnlyTransparent', true);
+    } else {
+      // 档 2：外壳 + 网页一起透明
+      set('shellOnlyTransparent', false);
+      set('pageTransparentMode', true);
+      set('fullWindowTransparent', true);
+    }
+  } catch (e) {}
+}
 
 const showStatus = ref(false);
 let _statusTimer = null;
@@ -55,8 +202,6 @@ watch(() => props.statusMessage, (msg) => {
     showStatus.value = false;
   }, 2500);
 });
-
-onUnmounted(() => clearTimeout(_statusTimer));
 
 function dragAreaText() {
   if (showStatus.value && props.statusMessage) return props.statusMessage;
@@ -96,23 +241,26 @@ function dragAreaText() {
       <div class="ctrl-group grp-collapsible-a">
         <BaseButton
           class="ctrl-btn opacity-btn"
-          :title="`透明度 ${props.settings?.transparency ?? 85}%（点击循环切换）`"
-          @click="cycleTitlebarOpacity">
-          <span class="opacity-label">{{ props.settings?.transparency ?? 85 }}%</span>
+          :class="{ 'opacity-adjusting': adjusting }"
+          :title="`透明度 ${props.settings?.transparency ?? 0}%｜滚轮微调（±1%）· 单击循环档位 · 双击在 0 与上次值间切换`"
+          @click="onOpacityClick"
+          @wheel.prevent="onOpacityWheel"
+          @dblclick="onOpacityDblClick">
+          <span class="opacity-label">{{ props.settings?.transparency ?? 0 }}%</span>
         </BaseButton>
         <BaseButton
-          class="ctrl-btn"
-          :class="{ active: props.settings.fullWindowTransparent }"
-          :title="props.settings.fullWindowTransparent ? '软件背景透明（关闭）' : '软件背景透明（开启）'"
-          @click="() => props.toggleSetting && props.toggleSetting('fullWindowTransparent')">
-          <el-icon><Monitor /></el-icon>
-        </BaseButton>
-        <BaseButton
-          class="ctrl-btn"
-          :class="{ active: props.settings.pageTransparentMode }"
-          :title="props.settings.pageTransparentMode ? '网页背景透明（关闭）' : '网页背景透明（开启）'"
-          @click="() => props.toggleSetting && props.toggleSetting('pageTransparentMode')">
-          <el-icon><Picture /></el-icon>
+          class="ctrl-btn transparency-btn"
+          :class="['lv' + transparencyLevel, { active: transparencyLevel > 0 }]"
+          :title="transparencyTitle"
+          @click="cycleTransparency">
+          <el-icon v-if="transparencyLevel === 0"><Monitor /></el-icon>
+          <el-icon v-else-if="transparencyLevel === 1"><Moon /></el-icon>
+          <el-icon v-else><View /></el-icon>
+          <!-- 小圆点标记：小窗口下靠图标难辨状态，用一个点明确「已开启」 -->
+          <span
+            v-if="transparencyLevel > 0"
+            class="state-dot"
+            :class="{ double: transparencyLevel === 2 }"></span>
         </BaseButton>
         <span class="ctrl-sep"></span>
       </div>
@@ -122,16 +270,23 @@ function dragAreaText() {
         <BaseButton
           class="ctrl-btn"
           :class="{ active: props.settings.hoverHeaderMode }"
-          :title="props.settings.hoverHeaderMode ? '悬停标题栏（关闭）' : '悬停标题栏（开启）'"
+          :title="props.settings.hoverHeaderMode ? '悬停显示标题栏（点击关闭）' : '标题栏改为悬停显示（点击开启）'"
           @click="() => props.toggleSetting && props.toggleSetting('hoverHeaderMode')">
-          <el-icon><Hide /></el-icon>
+          <el-icon v-if="props.settings.hoverHeaderMode"><View /></el-icon>
+          <el-icon v-else><Hide /></el-icon>
+          <span
+            v-if="props.settings.hoverHeaderMode"
+            class="state-dot"></span>
         </BaseButton>
         <BaseButton
           class="ctrl-btn"
           :class="{ active: !!props.settings.autoHide }"
           :title="autoHideTitle"
           @click="cycleAutoHide">
-          <el-icon><Pointer /></el-icon>
+          <el-icon><Top /></el-icon>
+          <span
+            v-if="props.settings.autoHide"
+            class="state-dot"></span>
         </BaseButton>
         <BaseButton
           class="ctrl-btn"
@@ -140,6 +295,9 @@ function dragAreaText() {
           @click="props.togglePin">
           <el-icon v-if="props.settings.alwaysOnTop"><Lock /></el-icon>
           <el-icon v-else><Unlock /></el-icon>
+          <span
+            v-if="props.settings.alwaysOnTop"
+            class="state-dot"></span>
         </BaseButton>
         <span class="ctrl-sep"></span>
       </div>
@@ -267,17 +425,24 @@ function dragAreaText() {
   min-width: 0;
 }
 
-/* 组1（透明度）：空间不足时优先消失 */
-.grp-collapsible-a {
-  flex: 0 3 auto;
+/*
+ * 响应式：窗口变窄时按优先级整组隐藏（而非靠 flex 收缩）。
+ *
+ * 为什么不用 flex 收缩：.ctrl-btn 有 min-width: 22px !important，
+ * 按钮无法被压缩到 0，flex 收缩实际不会让按钮「消失」，
+ * 只会让 overflow:hidden 从右侧把按钮切掉——可能切到一半、也看不清剩了什么。
+ * 实测即使窗口窄到 360px，8 个按钮仍完整可见，因此这里用明确的宽度阈值整组隐藏。
+ *
+ * 优先级：组1（透明度）最先消失 → 组2（可见性）次之 → 组3（设置/关闭）永不隐藏。
+ */
+@media (max-width: 420px) {
+  .grp-collapsible-a { display: none; }
+}
+@media (max-width: 340px) {
+  .grp-collapsible-b { display: none; }
 }
 
-/* 组2（可见性）：次优先消失 */
-.grp-collapsible-b {
-  flex: 0 2 auto;
-}
-
-/* 组3（最小化/关闭）：始终完整显示 */
+/* 组3（设置/最小化/关闭）：始终完整显示 */
 .grp-essential {
   flex: 0 0 auto;
 }
@@ -321,6 +486,30 @@ function dragAreaText() {
   color: #2f78ff !important;
 }
 
+/* 状态圆点：小窗口下图标语义难辨，用一个点明确「此项已开启」
+   单点 = 普通两态开启；双点（.double）= 三态中的最高档 */
+.ctrl-btn {
+  position: relative;
+}
+
+.state-dot {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #2f78ff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
+
+.state-dot.double {
+  /* 双点：并排两个点，表示「全部透明」这一档 */
+  width: 9px;
+  border-radius: 3px;
+}
+
 .ctrl-btn.active:hover {
   background: rgba(59, 130, 246, 0.2) !important;
 }
@@ -362,5 +551,20 @@ function dragAreaText() {
   display: inline-block;
   line-height: 1;
   white-space: nowrap;
+  transition: transform 0.08s ease;
+}
+
+/* 滚轮/双击微调时的高亮反馈：数字闪一下，提示已生效 */
+.opacity-btn.opacity-adjusting .opacity-label {
+  transform: scale(1.18);
+}
+
+.opacity-btn {
+  /* 滚轮调节的语义提示 */
+  cursor: ns-resize;
+}
+
+.opacity-btn:hover {
+  cursor: ns-resize;
 }
 </style>

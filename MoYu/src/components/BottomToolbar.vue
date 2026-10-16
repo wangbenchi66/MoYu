@@ -243,7 +243,9 @@ onBeforeUnmount(() => {
 
         <BaseButton class="icon-btn icon-only" :class="{ on: props.settings.noImageMode }"
           @click="() => props.patchSetting('noImageMode', !props.settings.noImageMode)"
-          :title="props.settings.noImageMode ? '显示图片' : '隐藏图片'"><el-icon><Picture /></el-icon></BaseButton>
+          :title="props.settings.noImageMode ? '显示图片' : '隐藏图片'"><el-icon><Picture /></el-icon>
+          <span v-if="props.settings.noImageMode" class="state-dot"></span>
+        </BaseButton>
 
         <div class="toggle-with-pop" data-id="color"
           @mouseenter="() => showPop('color', props.settings.readerTextColor, 0, 1)"
@@ -259,7 +261,9 @@ onBeforeUnmount(() => {
 
         <BaseButton class="icon-btn icon-only" :class="{ on: props.settings.showScrollbars }"
           @click="() => props.patchSetting('showScrollbars', !props.settings.showScrollbars)"
-          :title="props.settings.showScrollbars ? '隐藏滚动条' : '显示滚动条'"><el-icon><Menu /></el-icon></BaseButton>
+          :title="props.settings.showScrollbars ? '隐藏滚动条' : '显示滚动条'"><el-icon><Menu /></el-icon>
+          <span v-if="props.settings.showScrollbars" class="state-dot"></span>
+        </BaseButton>
       </div>
 
       <!-- 水平臂：导航按钮整体面板 -->
@@ -496,6 +500,24 @@ onBeforeUnmount(() => {
 .icon-btn.on {
   background: rgba(64, 158, 255, 0.1);
   color: #409eff;
+}
+
+/* 状态圆点：与 TopBar 保持同一套视觉语言（4px 蓝点 + 白描边）。
+   小窗口下只靠颜色难以辨识「已开启」，用点做出明确标记。 */
+.icon-btn {
+  position: relative;
+}
+
+.state-dot {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #2f78ff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  pointer-events: none;
 }
 
 .close-toolbar-btn {

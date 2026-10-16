@@ -13,9 +13,13 @@ const immediateSyncKeys = new Set([
     'clickThroughMode', 'autoScrollEnabled', 'autoScrollSpeed', 'readerTextColor',
     'forceReaderTextColor', 'forceReaderFont', 'readerFontScale', 'toolbarDocked',
     'toolbarPinned', 'toolbarVisible', 'toolbarDisabled', 'showScrollbars',
-    'fullWindowTransparent', 'bossKey', 'decreaseTransparencyShortcut',
+    'fullWindowTransparent', 'shellOnlyTransparent', 'bossKey', 'decreaseTransparencyShortcut',
     'increaseTransparencyShortcut', 'clickThroughShortcut', 'autoToggleShortcut',
     'autoSpeedDownShortcut', 'autoSpeedUpShortcut',
+    // 隐私 / 会话：改动需立刻同步到主进程（老板键静音、退出清缓存由主进程执行）
+    'restoreTabsOnStartup', 'muteOnBossKey', 'clearCacheOnExit',
+    'historyRetentionDays', 'autoCleanOnStartup', 'backendEnabled',
+    'keepAudioPlayingInBackground', 'pauseOnBlurHide',
 ])
 
 function syncSettingsNow() {
@@ -83,6 +87,10 @@ function patchSetting(key, value) {
         statusMessage.value = settings[key] ? '自动滚动已开启' : '自动滚动已关闭'
     if (key === 'pageTransparentMode') {
         try { settings.forcePageTransparent = !!settings.pageTransparentMode } catch (e) { }
+    }
+    // 仅外壳透明时不应强制改网页背景，否则「网页保持不透明」的语义会被破坏
+    if (key === 'shellOnlyTransparent' && settings[key]) {
+        try { settings.forcePageTransparent = false } catch (e) { }
     }
 
     if (immediateSyncKeys.has(key)) { syncSettingsNow(); return }

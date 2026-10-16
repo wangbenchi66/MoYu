@@ -25,6 +25,8 @@ export default function main(helper) {
                 try { window.fireKeyEvent = window.fireKeyEvent || ${fnToStr(fireKeyEvent)}; } catch (e) {}
                 try { window.__performNextNow = window.__performNextNow || ${fnToStr(__performNextNow)}; } catch (e) {}
                 try { window.nextChapter = window.nextChapter || ${fnToStr(nextChapter)}; } catch (e) {}
+                try { window.showNextCountdown = window.showNextCountdown || ${fnToStr(showNextCountdown)}; } catch (e) {}
+                try { window.hideNextCountdown = window.hideNextCountdown || ${fnToStr(hideNextCountdown)}; } catch (e) {}
                 try { window.getSelectionState = window.getSelectionState || ${fnToStr(getSelectionState)}; } catch (e) {}
 
                 // --- 透明模式弹出层修复（500ms）：最先启动，确保选区菜单出现时已就绪 ---
@@ -106,7 +108,11 @@ function __performNextNow() {
     try {
         if (window.__glassReaderPerformingNext) return false;
         window.__glassReaderPerformingNext = true;
-        try { if (typeof isPageLoading === 'function' && isPageLoading()) return false; } catch (e) { }
+        // 注意：注入时每个函数都是「具名函数表达式」并赋值给 window 属性，
+        // 该名字只在自身函数体内部可见。兄弟函数内写裸标识符 isPageLoading()
+        // 不会报错，但 typeof 会是 'undefined'，于是整条 loading 守卫被静默跳过。
+        // 因此跨函数调用必须统一走 window.X()。
+        try { if (typeof window.isPageLoading === 'function' && window.isPageLoading()) return false; } catch (e) { }
 
         var btn = document.querySelector('.readerFooter_button');
         if (btn) {
@@ -156,16 +162,130 @@ function nextChapter(opts) {
         var delay = (opts && typeof opts.delayMs === 'number') ? opts.delayMs : (window.__glassReaderNextDelayMs || 1000);
         if (delay && delay > 0) {
             window.__glassReaderNextPending = setTimeout(function () {
-                try { __performNextNow(); } catch (e) { }
+                try { window.__performNextNow(); } catch (e) { }
                 finally { clearTimeout(window.__glassReaderNextPending); window.__glassReaderNextPending = null; window.__glassReaderAutoNextTimer = null; }
             }, delay);
         } else {
-            try { __performNextNow(); } catch (e) { }
+            try { window.__performNextNow(); } catch (e) { }
             finally { window.__glassReaderAutoNextTimer = null; }
         }
         return true;
     } catch (e) { }
     return false;
+}
+
+/**
+ * 移除倒计时浮层并清理其计时器与状态。
+ */
+function hideNextCountdown() {
+    try {
+        if (window.__glassReaderCountdownTick) {
+            clearInterval(window.__glassReaderCountdownTick);
+            window.__glassReaderCountdownTick = null;
+        }
+        if (window.__glassReaderCountdownNode) {
+            try { window.__glassReaderCountdownNode.remove(); } catch (e) { }
+            window.__glassReaderCountdownNode = null;
+        }
+    } catch (e) { }
+}
+
+/**
+ * 在页面右下角展示「N 秒后翻到下一章」浮层，带倒计时与取消按钮。
+ *
+ * 行为约定：
+ * - 点「取消」→ 取消本次翻章，并置 __glassReaderAutoNextSuppressed，
+ *   在用户滚离底部之前不再弹出（由 attachAutoNext 的滚动处理器解除）。
+ * - 倒计时归零 → 调用 __performNextNow 真正翻章。
+ * - 浮层使用页面内最高的 z-index 与内联样式，避免被站点 CSS 或本项目的透明模式影响。
+ *
+ * 参数: seconds - 倒计时秒数（默认 3）
+ * 返回: boolean — true 表示浮层已展示并开始倒计时
+ */
+function showNextCountdown(seconds) {
+    try {
+        // 已有浮层在倒计时：不重复弹出
+        if (window.__glassReaderCountdownNode) return false;
+
+        var total = (typeof seconds === 'number' && seconds > 0) ? seconds : 3;
+        var remain = total;
+
+        var box = document.createElement('div');
+        box.id = '__glassreader_next_countdown';
+        box.setAttribute('style', [
+            'position:fixed',
+            'right:16px',
+            'bottom:16px',
+            'z-index:2147483647',
+            'display:flex',
+            'align-items:center',
+            'gap:10px',
+            'padding:10px 12px',
+            'border-radius:10px',
+            'background:rgba(28,28,30,.95)',
+            'color:#fff',
+            'font-size:13px',
+            'line-height:1.2',
+            'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif',
+            'box-shadow:0 4px 24px rgba(0,0,0,.45)',
+            'pointer-events:auto',
+            'user-select:none',
+        ].join(';'));
+
+        var text = document.createElement('span');
+        text.textContent = remain + ' 秒后翻到下一章';
+
+        var cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.textContent = '取消';
+        cancel.setAttribute('style', [
+            'cursor:pointer',
+            'border:1px solid rgba(255,255,255,.45)',
+            'background:transparent',
+            'color:#fff',
+            'font-size:12px',
+            'padding:3px 10px',
+            'border-radius:6px',
+            'font-family:inherit',
+        ].join(';'));
+
+        box.appendChild(text);
+        box.appendChild(cancel);
+        (document.body || document.documentElement).appendChild(box);
+        window.__glassReaderCountdownNode = box;
+
+        function finish() {
+            window.hideNextCountdown();
+            try { window.__performNextNow(); } catch (e) { }
+            // 翻章后滚动位置会重置，解除抑制以便下一章还能触发
+            try { window.__glassReaderAutoNextSuppressed = false; } catch (e) { }
+            try { window.__glassReaderAutoNextTimer = null; } catch (e) { }
+        }
+
+        cancel.addEventListener('click', function (ev) {
+            try { ev.preventDefault(); ev.stopPropagation(); } catch (e) { }
+            window.hideNextCountdown();
+            // 用户明确拒绝：本次不翻，且在滚离底部前不再打扰
+            window.__glassReaderAutoNextSuppressed = true;
+            // 注意：保留 latch，避免立刻被同一位置的后续滚动重新触发
+            window.__glassReaderAutoNextTimer = true;
+        }, true);
+
+        window.__glassReaderCountdownTick = setInterval(function () {
+            try {
+                remain -= 1;
+                if (remain <= 0) { finish(); return; }
+                if (window.__glassReaderCountdownNode) {
+                    var t = window.__glassReaderCountdownNode.firstChild;
+                    if (t) t.textContent = remain + ' 秒后翻到下一章';
+                }
+            } catch (e) { }
+        }, 1000);
+
+        return true;
+    } catch (e) {
+        return false;
+    }
 }
 
 /**
@@ -215,17 +335,17 @@ function attachAutoNext() {
 
         // 页面仍在加载：轮询等待，就绪（或超时）后重新调用自身完成安装
         try {
-            if (typeof isPageLoading === 'function' && isPageLoading()) {
+            if (typeof window.isPageLoading === 'function' && window.isPageLoading()) {
                 if (window.__glassReaderAutoNextWaiter) return;
                 var attempts = 0;
                 window.__glassReaderAutoNextWaiter = setInterval(function () {
                     try {
                         attempts++;
-                        var stillLoading = (typeof isPageLoading === 'function' && isPageLoading());
+                        var stillLoading = (typeof window.isPageLoading === 'function' && window.isPageLoading());
                         if (!stillLoading || attempts >= 100) {
                             clearInterval(window.__glassReaderAutoNextWaiter);
                             window.__glassReaderAutoNextWaiter = null;
-                            attachAutoNext();
+                            window.attachAutoNext();
                         }
                     } catch (e) { }
                 }, 300);
@@ -264,10 +384,34 @@ function attachAutoNext() {
                         var clientHeight = isDocEl ? (document.documentElement.clientHeight || window.innerHeight) : el.clientHeight;
 
                         if ((scrollHeight - clientHeight) <= minScrollable) return;
-                        if (scrollTop + clientHeight >= scrollHeight - threshold) {
-                            if (window.__glassReaderAutoNextTimer) return;
-                            window.__glassReaderAutoNextTimer = true;
-                            try { if (typeof window.nextChapter === 'function') window.nextChapter(); } catch (e) { }
+                        var atBottom = (scrollTop + clientHeight >= scrollHeight - threshold);
+                        // 滚离底部：解除「取消」抑制，并清掉 latch，允许下次到底重新触发
+                        if (!atBottom) {
+                            if (window.__glassReaderAutoNextSuppressed) {
+                                window.__glassReaderAutoNextSuppressed = false;
+                            }
+                            if (window.__glassReaderAutoNextTimer) {
+                                window.__glassReaderAutoNextTimer = null;
+                            }
+                            return;
+                        }
+                        if (window.__glassReaderAutoNextSuppressed) return;
+                        if (window.__glassReaderAutoNextTimer) return;
+                        window.__glassReaderAutoNextTimer = true;
+                        try {
+                            if (typeof window.showNextCountdown === 'function') {
+                                if (window.showNextCountdown(3) !== true) {
+                                    // 浮层未能展示（例如已有浮层）：解锁，等待下次滚动重试
+                                    window.__glassReaderAutoNextTimer = null;
+                                }
+                            } else if (typeof window.nextChapter === 'function') {
+                                // 兜底：浮层不可用时退回原「延迟后翻章」行为
+                                window.nextChapter();
+                            } else {
+                                window.__glassReaderAutoNextTimer = null;
+                            }
+                        } catch (e) {
+                            window.__glassReaderAutoNextTimer = null;
                         }
                     } catch (e) { }
                 };

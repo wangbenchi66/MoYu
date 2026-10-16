@@ -32,6 +32,15 @@ contextBridge.exposeInMainWorld('desktop', {
             ipcRenderer.removeListener('ui:open-settings', handler)
         }
     },
+    // webview 内的右键：主进程转发 params，渲染进程自行渲染菜单
+    onContextMenu: (callback) => {
+        const handler = (_, payload) => callback(payload)
+        ipcRenderer.on('contextmenu:show', handler)
+
+        return () => {
+            ipcRenderer.removeListener('contextmenu:show', handler)
+        }
+    },
     // 在外部浏览器中打开链接
     openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
     // 摸鱼时间统计

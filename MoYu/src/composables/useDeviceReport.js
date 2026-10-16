@@ -1,5 +1,16 @@
 // useDeviceReport.js — 匿名设备信息上报（需用户已同意隐私协议）
 import http from '../http/index.js';
+import defaultSettings from '../shared/defaultSettings.js';
+
+// 后端在线服务总开关。关闭时完全不上报（见 defaultSettings.backendEnabled）
+// 这里直接从共享默认配置读取，避免依赖运行时 settings 的加载时序。
+function isBackendEnabled() {
+  try {
+    return defaultSettings.backendEnabled !== false;
+  } catch (e) {
+    return false;
+  }
+}
 
 function parseOsInfo() {
   const ua = navigator.userAgent || '';
@@ -13,8 +24,10 @@ function parseOsInfo() {
   return ua.slice(0, 80);
 }
 
-// 上报设备信息，仅在用户已同意时执行，失败静默忽略
+// 上报设备信息，仅在「后端服务已启用」且用户已同意时执行，失败静默忽略
 export async function reportDevice() {
+  // 后端在线服务已关闭：不上报任何数据
+  if (!isBackendEnabled()) return;
   if (!localStorage.getItem('moyu-privacy-consent')) return;
   try {
     const desktopApi = typeof window !== 'undefined' ? window.desktop : null;
@@ -31,3 +44,5 @@ export async function reportDevice() {
     });
   } catch (_) {}
 }
+
+export { isBackendEnabled };

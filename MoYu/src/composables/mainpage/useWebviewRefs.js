@@ -83,8 +83,8 @@ function setWebviewRef(el, id) {
         const url = (evt && evt.url) || (el && (typeof el.getURL === 'function' ? el.getURL() : el.src)) || ''
         if (!url) return
         const tabObj = tabs.value.find((t) => String(t.id) === String(tid))
-        if (!tabObj || tabObj.kind === 'dashboard' || tabObj.kind === 'local-text') return
-        if (String(url).startsWith('about:') || String(url).startsWith('local:')) return
+        if (!tabObj || tabObj.kind === 'dashboard') return
+        if (String(url).startsWith('about:')) return
         if (webviewLastRecordedUrl[tid] === url) return
         webviewLastRecordedUrl[tid] = url
 

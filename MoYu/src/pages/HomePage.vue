@@ -7,7 +7,7 @@ import { useDesktopApp } from '../composables/useDesktopApp';
 
 const router = useRouter();
 
-const { useRecommendedSite, urlInput, handleOpenUrl, uploadLocalFiles, addRecommendedSite, editRecommendedSite, removeRecommendedSite, recommendedSites, settings } = useDesktopApp();
+const { useRecommendedSite, urlInput, handleOpenUrl, addRecommendedSite, editRecommendedSite, removeRecommendedSite, recommendedSites, settings } = useDesktopApp();
 
 // isTransparent：与 syncWebviewTransparency 保持一致——pageTransparentMode 或 fullWindowTransparent 任一开启即触发透明样式
 const isTransparent = computed(() => settings.pageTransparentMode || settings.fullWindowTransparent);
@@ -80,16 +80,6 @@ function confirmDeleteSite(site) {
 const recommendedPreview = computed(() => recommendedSites.value.slice(0, 8));
 
 const addPillRef = ref(null);
-const fileInputRef = ref(null);
-
-function triggerFileSelect() {
-  fileInputRef.value?.click();
-}
-
-async function handleFileChange(event) {
-  await uploadLocalFiles(event.target.files);
-  event.target.value = '';
-}
 
 function getHost(rawUrl) {
   try {
@@ -123,17 +113,6 @@ function avatarText(site) {
         @click="handleOpenUrl">
         打开
       </el-button>
-      <el-button
-        round
-        @click="triggerFileSelect">
-        导入文件
-      </el-button>
-      <input
-        ref="fileInputRef"
-        class="hidden-input"
-        type="file"
-        multiple
-        @change="handleFileChange" />
     </div>
 
     <!-- 站点统计 -->
@@ -306,19 +285,6 @@ function avatarText(site) {
         <polyline points="9 18 15 12 9 6" />
       </svg>
     </section>
-
-    <!-- <section class="history-entry" @click="router.push({ name: 'library' })">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
-      </svg>
-      <span>我的书架</span>
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow">
-        <polyline points="9 18 15 12 9 6" />
-      </svg>
-    </section> -->
   </div>
 </template>
 

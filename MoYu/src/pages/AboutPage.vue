@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus';
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import http from '../http/index.js';
+import { settings } from '../composables/useAppState.js';
 
 defineProps({
   isTransparent: Boolean,
@@ -26,6 +27,11 @@ function compareVersions(a, b) {
 }
 
 async function checkUpdate() {
+  // 后端在线服务已关闭：不发起版本检测请求
+  if (!settings.backendEnabled) {
+    ElMessage({ message: '后端在线服务已关闭，版本检测不可用', type: 'info' });
+    return;
+  }
   const desktopApi = window.desktop;
   if (!desktopApi?.checkForUpdate) return;
   checking.value = true;

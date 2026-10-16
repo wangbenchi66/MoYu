@@ -132,15 +132,28 @@ useDesktopApp        ← 聚合导出
 ## 快速开始
 
 ```bash
-# 安装依赖
 npm install
-
-# 开发模式（同时启动 Vite + Electron）
-npm run dev
-
-# 构建前端
-npm run build
-
-# 打包 Windows 安装包
-npm run dist:win
 ```
+
+### 运行方式
+
+| 方式 | 命令 | 说明 |
+|---|---|---|
+| 仅网页 | `npm run dev:web` | 浏览器打开 <http://127.0.0.1:5173>，**无桌面能力**（无老板键/托盘/穿透/webview） |
+| 完整软件（开发） | `npm run dev` | 并行启动 Vite + Electron，热更新，**推荐** |
+| 完整软件（产物） | `npm run build && npm start` | 以 `file://` 加载 `dist/`，最接近打包后的形态 |
+
+> `npm start` **不会**启动 Vite，必须先 `npm run build`，否则是旧产物或白屏。
+> 分开调试时可用 `npm run dev:web` + `npm run dev:electron`（后者需 5173 已监听）。
+
+### 打包
+
+```bash
+npm run pack         # 仅打包为目录（release/win-unpacked），最快
+npm run dist:win     # Windows NSIS 安装包
+npm run dist:mac     # macOS DMG
+```
+
+端口固定为 `5173` 且 `strictPort: true`，被占用时会直接报错。
+
+完整命令说明与常见问题见仓库根目录的 [`../README.md`](../README.md) 第 6 节「运行与构建」。

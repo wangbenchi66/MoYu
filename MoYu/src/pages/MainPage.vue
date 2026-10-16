@@ -19,13 +19,10 @@ import {
   syncWebviewTextColor, syncWebviewFontSize, syncWebviewAutoScroll,
   syncReaderEffects, scheduleSyncReaderEffects,
 } from '../composables/mainpage/useWebviewSync.js'
-import {
-  localReaderRef,
-  stopLocalReaderAutoScroll, syncLocalReaderAutoScroll, applyLocalReaderStyles,
-} from '../composables/mainpage/useLocalReaderAutoScroll.js'
-import { attachPauseListeners, detachPauseListeners } from '../composables/mainpage/usePauseOnBlur.js'
+import { attachPauseListeners, detachPauseListeners, reevaluatePauseState } from '../composables/mainpage/usePauseOnBlur.js'
+import ContextMenu from '../components/ContextMenu.vue'
 
-const { settings, activeTab, activeTabId, tabs, addNewTab, selectTab, closeTab, patchSetting, updateTabMetadata, siteRules, ruleProviders, pushRecentVisit } = useDesktopApp()
+const { settings, activeTab, activeTabId, tabs, addNewTab, selectTab, closeTab, patchSetting, updateTabMetadata, siteRules, ruleProviders, pushRecentVisit, addRecommendedSite, toggleSetting, recommendedSites, statusMessage } = useDesktopApp()
 
 const userAgent = ref('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
 const siteZoom = ref(1)
@@ -127,17 +124,17 @@ function onWebviewNewWindow(e) {
 function onReaderColorInput(e) {
   const v = e.target.value; patchSetting('readerTextColor', v)
   if (!settings.forceReaderTextColor) patchSetting('forceReaderTextColor', true)
-  syncWebviewTextColor(); applyLocalReaderStyles()
+  syncWebviewTextColor()
 }
 function onFontScaleInput(e) {
   const v = Number(e.target.value || 100); patchSetting('readerFontScale', v)
   if (!settings.forceReaderFont) patchSetting('forceReaderFont', true)
-  syncWebviewFontSize(); applyLocalReaderStyles()
+  syncWebviewFontSize()
 }
 function onAutoScrollSpeedInput(e) {
   const v = Number(e.target.value || 22); patchSetting('autoScrollSpeed', v)
   if (!settings.autoScrollEnabled) patchSetting('autoScrollEnabled', true)
-  syncWebviewAutoScroll(); syncLocalReaderAutoScroll()
+  syncWebviewAutoScroll()
 }
 
 // ─── dom-ready 处理 ───
@@ -161,7 +158,6 @@ function handleWebviewDomReady(e) {
   try {
     syncWebviewTransparency(tabId); syncWebviewNoImage(tabId); syncWebviewScrollbars(tabId)
     syncWebviewTextColor(tabId); syncWebviewFontSize(tabId); syncWebviewAutoScroll(tabId)
-    syncLocalReaderAutoScroll()
   } catch (e) {}
 
   // 注入媒体播放状态监听
@@ -221,6 +217,10 @@ function handleWebviewDomReady(e) {
     try {
       for (const r of siteRulesList) {
         try {
+          // 两种规则形态都要处理：
+          //   1) 函数型（内置 scripts/*.js、带 apply）—— 由规则自己决定注入什么
+          //   2) 数据型（用户规则 / 油猴导入）—— 只有 customCss / customJs 字段，
+          //      必须在这里显式注入，否则规则永远不生效
           if (typeof r.apply === 'function') {
             try {
               const maybe = r.apply({
@@ -229,6 +229,29 @@ function handleWebviewDomReady(e) {
               })
               if (maybe && typeof maybe.then === 'function') maybe.catch(() => {})
             } catch (e) {}
+          } else {
+            // 数据型规则：直接注入其 CSS / JS 字段
+            const ruleKey = r.id != null ? r.id : `idx-${siteRulesList.indexOf(r)}`
+            const cssText = typeof r.customCss === 'string' ? r.customCss.trim() : ''
+            const jsText = typeof r.customJs === 'string' ? r.customJs.trim() : ''
+            if (cssText) {
+              try {
+                runWebviewCss(`site-custom-css-${ruleKey}`, r.customCss, tabId)
+              } catch (e) {}
+            }
+            if (jsText) {
+              try {
+                runWebviewJS(r.customJs, tabId)
+              } catch (e) {}
+            }
+            if (cssText || jsText) {
+              try {
+                console.log('[rules] injected data rule', {
+                  tabId, name: r.name || '', pattern: r.pattern,
+                  cssLen: (r.customCss || '').length, jsLen: (r.customJs || '').length,
+                })
+              } catch (e) {}
+            }
           }
         } catch (e) {}
       }
@@ -241,15 +264,13 @@ watch(() => settings.pageTransparentMode, () => scheduleSyncReaderEffects())
 watch(() => settings.noImageMode, () => scheduleSyncReaderEffects())
 watch(() => settings.autoScrollEnabled, () => scheduleSyncReaderEffects())
 watch(() => settings.autoScrollSpeed, () => scheduleSyncReaderEffects())
-watch(() => settings.readerTextColor, () => { syncWebviewTextColor(); applyLocalReaderStyles() })
-watch(() => settings.forceReaderTextColor, () => { syncWebviewTextColor(); applyLocalReaderStyles() })
+watch(() => settings.readerTextColor, () => { syncWebviewTextColor() })
+watch(() => settings.forceReaderTextColor, () => { syncWebviewTextColor() })
 watch(() => settings.showScrollbars, () => syncWebviewScrollbars())
-watch(() => settings.readerFontScale, () => { syncWebviewFontSize(); applyLocalReaderStyles() })
-watch(() => settings.forceReaderFont, () => { syncWebviewFontSize(); applyLocalReaderStyles() })
+watch(() => settings.readerFontScale, () => { syncWebviewFontSize() })
+watch(() => settings.forceReaderFont, () => { syncWebviewFontSize() })
 
 watch(() => activeTabId.value, async (newId) => {
-  try { stopLocalReaderAutoScroll() } catch (e) {}
-  try { syncLocalReaderAutoScroll() } catch (e) {}
   try {
     const clearPaused = `(() => { try { if (window.__glassReaderAutoScrollPaused) window.__glassReaderAutoScrollPaused = false; } catch(e) {}; return true; })();`
     runWebviewJS(clearPaused, newId)
@@ -275,18 +296,204 @@ watch(() => settings.mobileMode, (v) => {
 
 watch(() => [settings.toolbarVisible, settings.toolbarPinned, settings.toolbarDisabled, settings.toolbarDocked], () => { try { updateEffectiveToolbar() } catch (e) {} })
 watch(() => settings.pauseOnBlurHide, (v) => { try { if (v) attachPauseListeners(); else detachPauseListeners() } catch (e) {} })
+// 「允许后台播音频」改动后立即重新评估当前暂停状态：
+// 若正处在暂停中，先恢复上一轮（按旧策略留下的标记），再按新策略重新暂停，
+// 避免新旧标记错位导致音频被误暂停或视频不被恢复。
+watch(() => settings.keepAudioPlayingInBackground, () => {
+  try { reevaluatePauseState() } catch (e) {}
+})
 
 // ─── 生命周期 ───
 defineExpose({ settings, siteZoom, patchSetting, webviewBack, webviewForward, webviewReload, zoomIn, zoomOut, resetZoom, toggleToolbarPinned, disableToolbar, effectiveToolbar })
 
 onBeforeUnmount(() => {
-  stopLocalReaderAutoScroll()
   try { detachPauseListeners() } catch (e) {}
+  try { if (_removeContextMenuListener) { _removeContextMenuListener(); _removeContextMenuListener = null } } catch (e) {}
   try { if (_forwardKeyHandler) { window.removeEventListener('keydown', _forwardKeyHandler, true); window.removeEventListener('keyup', _forwardKeyHandler, true); _forwardKeyHandler = null } } catch (e) {}
 })
 
+// ─── webview 内右键菜单 ───
+// 菜单分两层：主菜单以「摸鱼操作 + 导航」为主，其余常用项收进「更多操作」子菜单。
+const ctxMenu = ref({ visible: false, x: 0, y: 0 })
+let _removeContextMenuListener = null
+
+/**
+ * 把 guest 页面内的坐标换算成宿主窗口坐标。
+ * 主进程传来的 x/y 相对于 webview 内容区，需要叠加 webview 元素的位置，
+ * 还要考虑页面缩放（zoomFactor）——缩放后 DOM 坐标与实际像素不一致。
+ */
+function toWindowCoords(tabId, gx, gy) {
+  try {
+    const w = getWebview(tabId)
+    if (!w || typeof w.getBoundingClientRect !== 'function') return { x: gx, y: gy }
+    const r = w.getBoundingClientRect()
+    return { x: Math.round(r.left + gx), y: Math.round(r.top + gy) }
+  } catch (e) {
+    return { x: gx, y: gy }
+  }
+}
+
+function closeCtxMenu() {
+  ctxMenu.value.visible = false
+}
+
+/** 当前站点是否已在推荐站点里 */
+const currentHostInRecommended = computed(() => {
+  try {
+    const host = currentHost.value
+    if (!host) return false
+    return (recommendedSites?.value || []).some((s) => {
+      try { return new URL(s.url).hostname.replace(/^www\./i, '') === host } catch (e) { return false }
+    })
+  } catch (e) { return false }
+})
+
+// 背景透明三档状态（与 TopBar 的 transparencyLevel 同义，顺序为「软件优先」）
+const transparencyLevel = computed(() => {
+  try {
+    if (settings.fullWindowTransparent) return 2
+    if (settings.shellOnlyTransparent) return 1
+    return 0
+  } catch (e) { return 0 }
+})
+const transparencyLabel = computed(() => {
+  const lv = transparencyLevel.value
+  return lv === 2 ? '软件+网页' : lv === 1 ? '软件透明' : '关闭'
+})
+
+const contextMenuItems = computed(() => {
+  const tab = activeTab.value
+  const canNav = !!(tab && tab.kind === 'page')
+
+  return [    // ── 背景透明（三档，与顶栏按钮同一套语义）──
+    {
+      key: 'bgTransparent', label: '背景透明',
+      hint: transparencyLabel.value,
+      children: [
+        {
+          key: 'bg0', label: '关闭',
+          hint: transparencyLevel.value === 0 ? '当前' : '',
+          action: () => {
+            patchSetting('shellOnlyTransparent', false)
+            patchSetting('pageTransparentMode', false)
+            patchSetting('fullWindowTransparent', false)
+          },
+        },
+        {
+          key: 'bg1', label: '软件透明',
+          hint: transparencyLevel.value === 1 ? '当前' : '',
+          action: () => {
+            patchSetting('fullWindowTransparent', false)
+            patchSetting('pageTransparentMode', false)
+            patchSetting('shellOnlyTransparent', true)
+          },
+        },
+        {
+          key: 'bg2', label: '软件+网页都透明',
+          hint: transparencyLevel.value === 2 ? '当前' : '',
+          action: () => {
+            patchSetting('shellOnlyTransparent', false)
+            patchSetting('pageTransparentMode', true)
+            patchSetting('fullWindowTransparent', true)
+          },
+        },
+      ],
+    },
+    {
+      key: 'transparency', label: '窗口透明度', hint: `${settings.transparency}%`,
+      children: [
+        { key: 't0', label: '不透明', hint: '0%', action: () => patchSetting('transparency', 0) },
+        { key: 't20', label: '20%', action: () => patchSetting('transparency', 20) },
+        { key: 't50', label: '50%', action: () => patchSetting('transparency', 50) },
+        { key: 't85', label: '85%', action: () => patchSetting('transparency', 85) },
+        { key: 't100', label: '全透明', hint: '100%', action: () => patchSetting('transparency', 100) },
+      ],
+    },
+    {
+      key: 'grayscale', label: '灰度模式',
+      hint: settings.grayscaleMode ? '已开启' : '',
+      action: () => toggleSetting('grayscaleMode'),
+    },
+
+    { type: 'separator' },
+
+    // ── 站点相关 ──
+    {
+      key: 'addRecommended', label: '将本页加入推荐站点',
+      disabled: !canNav || !tab?.url || currentHostInRecommended.value,
+      action: () => {
+        try {
+          addRecommendedSite({ name: tab.title || currentHost.value, url: tab.url })
+        } catch (e) { }
+      },
+    },
+
+    { type: 'separator' },
+
+    // ── 站点工具 ──
+    // 注：后退/前进/刷新/无图/缩放 已移除——右下角工具栏已有等价入口，
+    // 右键菜单只保留那边没有的「站点级」能力（排查规则、开 DevTools）。
+    {
+      key: 'rules', label: '查看本站生效的规则',
+      disabled: !canNav,
+      action: showEffectiveRules,
+    },
+    {
+      key: 'devtools', label: '打开开发者工具',
+      disabled: !canNav,
+      action: () => {
+        try {
+          const w = getActiveWebview?.()
+          if (w && typeof w.openDevTools === 'function') w.openDevTools()
+        } catch (e) { }
+      },
+    },
+  ]
+})
+
+/** 在状态栏列出当前 URL 命中的站点规则，便于确认规则/油猴脚本是否生效 */
+function showEffectiveRules() {
+  try {
+    const url = activeTab.value?.url || ''
+    const combined = ruleProviders?.getCombinedRulesForUrl
+      ? ruleProviders.getCombinedRulesForUrl(url)
+      : null
+    const list = combined?.site || []
+    if (!list.length) {
+      statusMessageText('当前站点没有命中的规则')
+      return
+    }
+    const names = list.map((r) => r.name || (Array.isArray(r.pattern) ? r.pattern.join('/') : r.pattern) || '未命名')
+    statusMessageText(`生效规则（${list.length}）：${names.join('、')}`)
+  } catch (e) {
+    statusMessageText('读取规则失败')
+  }
+}
+
+function statusMessageText(msg) {
+  try { statusMessage.value = msg } catch (e) { }
+}
+
+function onContextMenuItem(item) {
+  closeCtxMenu()
+  try { item?.action?.() } catch (e) { }
+}
+
+function handleContextMenuFromMain(payload) {
+  try {
+    if (!payload) return
+    const coords = toWindowCoords(activeTabId.value, Number(payload.x) || 0, Number(payload.y) || 0)
+    ctxMenu.value = { visible: true, x: coords.x, y: coords.y }
+  } catch (e) { }
+}
+
 onMounted(() => {
   try { updateEffectiveToolbar() } catch (e) {}
+  try {
+    if (window.desktop?.onContextMenu) {
+      _removeContextMenuListener = window.desktop.onContextMenu(handleContextMenuFromMain)
+    }
+  } catch (e) {}
   try { if (settings.pauseOnBlurHide) attachPauseListeners() } catch (e) {}
   try {
     _forwardKeyHandler = (ev) => {
@@ -339,21 +546,11 @@ onMounted(() => {
               @dom-ready="handleWebviewDomReady"
               allowpopups></webview>
 
-            <!-- 仪表盘与本地阅读视图作为覆盖层显示：改为 v-if 以在非活跃时从 DOM 中移除，避免遮挡问题 -->
+            <!-- 仪表盘作为覆盖层显示：改为 v-if 以在非活跃时从 DOM 中移除，避免遮挡问题 -->
             <console-page
               v-if="activeTab?.kind === 'dashboard'"
               class="overlay-panel" />
 
-            <article
-              ref="localReaderRef"
-              v-if="activeTab?.kind === 'local-text'"
-              class="local-reader overlay-panel">
-              <header class="local-reader-head">
-                <strong>{{ activeTab?.fileName }}</strong>
-                <span>本地文本阅读视图</span>
-              </header>
-              <pre class="local-reader-content">{{ activeTab?.content }}</pre>
-            </article>
             <!-- 底部工具栏已移到父组件 App.vue 以避免覆盖页面底部内容 -->
           </div>
         </section>
@@ -361,6 +558,15 @@ onMounted(() => {
     </section>
 
     <!-- 站点规则快速编辑弹窗已移除（由自定义规则文件管理） -->
+
+    <!-- webview 内右键菜单（由主进程转发触发） -->
+    <ContextMenu
+      :visible="ctxMenu.visible"
+      :x="ctxMenu.x"
+      :y="ctxMenu.y"
+      :items="contextMenuItems"
+      @select="onContextMenuItem"
+      @close="closeCtxMenu" />
   </section>
 </template>
 

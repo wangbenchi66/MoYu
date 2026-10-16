@@ -17,7 +17,6 @@ const activeTabId = ref(1)
 const tabs = ref([
     { id: 0, title: '工作台', url: 'about:blank', subtitle: '新标签页', kind: 'dashboard' },
 ])
-const localDocuments = ref([])
 const recentVisits = ref([])
 const updateInfo = ref(null)
 
@@ -79,7 +78,7 @@ function generateUniqueTabId() {
 export {
     desktopApi,
     settings, urlInput, searchKeyword, siteSearchKeyword, statusMessage,
-    activeTabId, tabs, activeTab, localDocuments, recentVisits, updateInfo,
+    activeTabId, tabs, activeTab, recentVisits, updateInfo,
     leftToggleKeys, rightToggleKeys,
     normalizeUrl, getTitleFromUrl, displayInputUrlForUI, generateUniqueTabId,
 }

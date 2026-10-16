@@ -22,7 +22,13 @@ function matchesRule(rule, rawUrl) {
     // 支持数组 pattern：任一匹配即算匹配
     if (Array.isArray(patternVal)) {
         for (const p of patternVal) {
-            try { if (matchesRule(Object.assign({}, rule, { pattern: p }), rawUrl)) return true } catch (e) {}
+            try {
+                // 数组内允许混入 "/正则/" 形式的字符串：这类条目应走 regex 判定，
+                // 否则会被当成字面 hostname，永远不会命中（静默失效）。
+                const isSlashRegex = typeof p === 'string' && p.length > 2 && p.startsWith('/') && p.endsWith('/')
+                const override = isSlashRegex ? { pattern: p, matchType: 'regex' } : { pattern: p }
+                if (matchesRule(Object.assign({}, rule, override), rawUrl)) return true
+            } catch (e) { }
         }
         return false
     }

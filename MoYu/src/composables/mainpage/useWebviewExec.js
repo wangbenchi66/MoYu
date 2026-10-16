@@ -146,7 +146,7 @@ function runWebviewJS(script, tabId) {
   const execOn = async (w, tid) => {
     if (!w) return Promise.resolve()
     const tab = tabs.value.find((t) => String(t.id) === String(tid))
-    if (!tab || tab.kind === 'dashboard' || tab.kind === 'local-text') return Promise.resolve()
+    if (!tab || tab.kind === 'dashboard') return Promise.resolve()
     if (!webviewReadyMap[String(tid)]) return Promise.resolve()
 
     try {
@@ -192,7 +192,7 @@ async function runWebviewCss(styleId, css, tabId) {
   const applyTo = async (w, tid) => {
     if (!w) return
     const tab = tabs.value.find((t) => String(t.id) === String(tid))
-    if (!tab || tab.kind === 'dashboard' || tab.kind === 'local-text') return
+    if (!tab || tab.kind === 'dashboard') return
     if (!webviewReadyMap[String(tid)]) return
 
     try {

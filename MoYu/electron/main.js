@@ -1,5 +1,5 @@
 // electron/main.js — 主进程：窗口管理、设置持久化、Tray、全局快捷键、IPC 处理
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, screen, session, shell, Tray, webContents } from 'electron'
 import Store from 'electron-store'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
@@ -31,6 +31,7 @@ let _tempTopTimer = null
 let bossKeyHidden = false
 
 // 不持久化的临时字段（例如窗口透明度、临时 UI 状态等）
+// 每次启动从 defaultSettings 重置——这些属于「本次会话」状态，不该跨重启保留。
 const nonPersistentKeys = new Set([
     'transparency',
     'autoHide',
@@ -38,6 +39,10 @@ const nonPersistentKeys = new Set([
     'hoverHeaderMode',
     'pageTransparentMode',
     'forcePageTransparent',
+    // 顶栏「背景透明」三态按钮操作的键。此前遗漏 fullWindowTransparent，
+    // 导致重启后仍保留上次的透明状态。
+    'fullWindowTransparent',
+    'shellOnlyTransparent',
     'clickThroughMode',
     'alwaysOnTop',
     'autoScrollEnabled',
@@ -184,6 +189,7 @@ function normalizeSettings(partial = {}) {
         mobileMode: Boolean(partial.mobileMode ?? defaultSettings.mobileMode),
         hoverHeaderMode: Boolean(partial.hoverHeaderMode ?? defaultSettings.hoverHeaderMode),
         pageTransparentMode: Boolean(partial.pageTransparentMode ?? defaultSettings.pageTransparentMode),
+        shellOnlyTransparent: Boolean(partial.shellOnlyTransparent ?? defaultSettings.shellOnlyTransparent),
         forcePageTransparent: Boolean(partial.forcePageTransparent ?? defaultSettings.forcePageTransparent),
         forceReaderFont: Boolean(partial.forceReaderFont ?? defaultSettings.forceReaderFont),
         toolbarDocked: Boolean(partial.toolbarDocked ?? defaultSettings.toolbarDocked),
@@ -197,6 +203,16 @@ function normalizeSettings(partial = {}) {
         alwaysOnTop: Boolean(partial.alwaysOnTop ?? defaultSettings.alwaysOnTop),
         autoScrollEnabled: Boolean(partial.autoScrollEnabled ?? defaultSettings.autoScrollEnabled),
         autoScrollSpeed: clamp(Number(partial.autoScrollSpeed ?? defaultSettings.autoScrollSpeed), 5, 80),
+        // 隐私相关：保留天数只接受白名单值，其它输入一律回落到默认（0 = 永久）
+        historyRetentionDays: [0, 1, 3, 7, 30].includes(Number(partial.historyRetentionDays))
+            ? Number(partial.historyRetentionDays)
+            : Number(defaultSettings.historyRetentionDays),
+        autoCleanOnStartup: Boolean(partial.autoCleanOnStartup ?? defaultSettings.autoCleanOnStartup),
+        keepAudioPlayingInBackground: Boolean(partial.keepAudioPlayingInBackground ?? defaultSettings.keepAudioPlayingInBackground),
+        backendEnabled: Boolean(partial.backendEnabled ?? defaultSettings.backendEnabled),
+        restoreTabsOnStartup: Boolean(partial.restoreTabsOnStartup ?? defaultSettings.restoreTabsOnStartup),
+        muteOnBossKey: Boolean(partial.muteOnBossKey ?? defaultSettings.muteOnBossKey),
+        clearCacheOnExit: Boolean(partial.clearCacheOnExit ?? defaultSettings.clearCacheOnExit),
         readerTextColor: normalizeReaderColor(partial.readerTextColor ?? defaultSettings.readerTextColor),
         readerFontScale: clamp(Number(partial.readerFontScale ?? defaultSettings.readerFontScale), 80, 160),
         statusBarColor: normalizeColor(partial.statusBarColor),
@@ -369,6 +385,24 @@ function isPointInsideBounds(point, bounds, margin = 0) {
 }
 
 /**
+ * 静音/取消静音所有 webContents（含各 webview 的 guest 实例）。
+ * 老板键隐藏窗口时使用——否则窗口藏了、声音还在放。
+ * 参数: muted - true 静音，false 还原
+ */
+function setAllAudioMuted(muted) {
+    try {
+        const all = webContents.getAllWebContents()
+        for (const wc of all) {
+            try {
+                if (wc && !wc.isDestroyed()) wc.setAudioMuted(Boolean(muted))
+            } catch (e) { }
+        }
+    } catch (e) {
+        console.warn('[audio] setAllAudioMuted failed:', e)
+    }
+}
+
+/**
  * 隐藏主窗口并刷新托盘菜单
  */
 function hideMainWindow() {
@@ -378,6 +412,10 @@ function hideMainWindow() {
 
     rememberWindowBounds()
     mainWindow.hide()
+    // 老板键/自动隐藏时静音，避免「窗口藏了但声音还在放」
+    if (currentSettings.muteOnBossKey) {
+        setAllAudioMuted(true)
+    }
     refreshTrayMenu()
 }
 
@@ -410,6 +448,11 @@ function showMainWindow(focus = true, opts = {}) {
 
     if (focus) {
         mainWindow.focus()
+    }
+
+    // 窗口重新可见时还原音频（与 hideMainWindow 的静音配对）
+    if (currentSettings.muteOnBossKey) {
+        setAllAudioMuted(false)
     }
 
     // 如果要求短暂置顶：在显示时先临时置顶一小段时间，然后恢复到当前设置的 alwaysOnTop
@@ -1023,6 +1066,30 @@ function createWindow() {
                 })
             } catch (e) { }
 
+            // 接管 webview 内的右键菜单。
+            // guest 是独立 webContents，渲染进程拿不到它的 contextmenu DOM 事件，
+            // 只能由主进程监听并转发；同时拦掉 Chromium 默认的英文菜单。
+            try {
+                wc.on('context-menu', (ctxEvent, params) => {
+                    try {
+                        if (ctxEvent && typeof ctxEvent.preventDefault === 'function') ctxEvent.preventDefault()
+                    } catch (e) { }
+                    try {
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.webContents.send('contextmenu:show', {
+                                x: params.x,
+                                y: params.y,
+                                isEditable: !!params.isEditable,
+                                linkURL: params.linkURL || '',
+                                selectionText: params.selectionText || '',
+                                mediaType: params.mediaType || '',
+                                pageURL: params.pageURL || '',
+                            })
+                        }
+                    } catch (e) { }
+                })
+            } catch (e) { }
+
         } catch (e) { }
     })
 
@@ -1141,15 +1208,60 @@ app.whenReady().then(() => {
     })
 })
 
+/**
+ * 清理 webview 的浏览数据（缓存 / Cookie / 本地存储 / IndexedDB 等）。
+ * 只在设置开启时于退出阶段调用。属于强隐私选项——会清掉所有网站的登录态。
+ * 返回: Promise<boolean> 是否成功
+ */
+async function clearAllWebviewData() {
+    const storages = [
+        'cookies',
+        'filesystem',
+        'indexdb',
+        'localstorage',
+        'shadercache',
+        'websql',
+        'serviceworkers',
+        'cachestorage',
+    ]
+    try {
+        // webview 默认使用 default session（项目未配置 partition）
+        await session.defaultSession.clearStorageData({ storages })
+        await session.defaultSession.clearCache()
+        console.log('[privacy] webview 浏览数据已清理')
+        return true
+    } catch (e) {
+        console.warn('[privacy] 清理 webview 数据失败:', e)
+        return false
+    }
+}
+
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit()
     }
 })
 
-app.on('will-quit', () => {
-    endMoyuNow()
+let _privacyCleanupDone = false
+
+app.on('will-quit', (event) => {
     isQuitting = true
+
+    // 退出时清理 webview 浏览数据：这是异步操作，必须先拦住退出，清理完再放行。
+    // 用 _privacyCleanupDone 防止二次进入造成死循环。
+    if (currentSettings.clearCacheOnExit && !_privacyCleanupDone) {
+        _privacyCleanupDone = true
+        event.preventDefault()
+        clearAllWebviewData().finally(() => {
+            endMoyuNow()
+            stopAutoHideMonitor()
+            globalShortcut.unregisterAll()
+            app.quit()
+        })
+        return
+    }
+
+    endMoyuNow()
     stopAutoHideMonitor()
     globalShortcut.unregisterAll()
 })

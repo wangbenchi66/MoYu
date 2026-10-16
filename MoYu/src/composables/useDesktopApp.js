@@ -9,7 +9,7 @@ import * as siteRules from '../rules'
 // ─── 子模块 ───
 import {
     settings, urlInput, searchKeyword, siteSearchKeyword, statusMessage,
-    activeTabId, tabs, activeTab, localDocuments, recentVisits, updateInfo,
+    activeTabId, tabs, activeTab, recentVisits, updateInfo,
     leftToggleKeys, rightToggleKeys, desktopApi,
     displayInputUrlForUI,
 } from './useAppState.js'
@@ -20,19 +20,19 @@ import {
     recentVisibleCount, RECENT_MAX,
     flushRecentVisits, clearRecentTimer,
     pushRecentVisit, loadMoreRecentVisits, resetRecentVisible,
+    pruneExpiredVisits,
 } from './useRecentVisits.js'
 
 import {
     createPageTab, handleOpenUrl, addNewTab, selectTab, updateTabMetadata,
     closeTab, closeTabsToLeft, closeTabsToRight, closeAllTabs,
+    flushSession, restoreSession, clearSavedSession,
 } from './useTabManager.js'
 
 import {
     recommendedSites, filteredRecommendedSites,
     useRecommendedSite, addRecommendedSite, editRecommendedSite, removeRecommendedSite,
 } from './useRecommendedSites.js'
-
-import { uploadLocalFiles, openLocalDocument } from './useLocalFiles.js'
 
 // ─── 计算属性 ───
 const filteredRecentVisits = computed(() => {
@@ -73,6 +73,15 @@ const themeVars = computed(() => {
             '--reader-font-scale': `${settings.readerFontScale}%`,
         }
     }
+    // 仅软件外壳透明：shell/surface 全透明，但网页区域保持原样（--page-alpha: 1）。
+    // 注意必须放在 fullWindowTransparent 之后判断——后者优先级更高。
+    if (settings.shellOnlyTransparent) {
+        return {
+            '--header-tint': '#f5f5f7', '--shell-alpha': '0', '--surface-alpha': '0',
+            '--page-alpha': '1', '--reader-text-color': settings.readerTextColor,
+            '--reader-font-scale': `${settings.readerFontScale}%`,
+        }
+    }
     if (!settings.fullWindowTransparent && !settings.pageTransparentMode) {
         return {
             '--header-tint': '#f5f5f7', '--shell-alpha': '1', '--surface-alpha': '1',
@@ -93,10 +102,6 @@ const themeVars = computed(() => {
 
 // ─── 最近访问打开 ───
 function openRecentVisit(item) {
-    if ((item.type ?? 'site') === 'file') {
-        const documentItem = localDocuments.value.find((doc) => `local://${doc.fileName}` === item.url || doc.url === item.url)
-        if (documentItem) { openLocalDocument(documentItem); return }
-    }
     urlInput.value = displayInputUrlForUI(item.url)
     createPageTab(item.url, { title: item.title })
 }
@@ -118,6 +123,50 @@ function handleClose() {
     closeAction().catch(() => { statusMessage.value = '关闭窗口失败，请重试' })
 }
 
+// ─── 隐私：痕迹清理 ───
+
+/** 会被「清除所有痕迹」清空的 localStorage 键（只含本应用自己的键） */
+const TRACE_KEYS = [
+    'glass_reader_recent_visits',      // 最近访问 / 历史记录
+    'glass_reader_recommended_sites',  // 推荐站点（用户自定义）
+    'moyu_tabs_session',               // 标签会话（重启恢复用）
+]
+
+/**
+ * 立即清除所有本地痕迹。
+ * 范围：历史记录 + 最近访问 + 自定义推荐站点。
+ * 返回: { cleared: string[] } 实际清理的项目名
+ */
+function clearAllTraces(options = {}) {
+    const cleared = []
+    try {
+        recentVisits.value = []
+        recentVisibleCount.value = 10
+        flushRecentVisits()
+        cleared.push('历史记录')
+    } catch (e) { }
+
+    try {
+        localStorage.removeItem('glass_reader_recommended_sites')
+        cleared.push('自定义推荐站点')
+    } catch (e) { }
+
+    try {
+        clearSavedSession()
+        cleared.push('标签会话')
+    } catch (e) { }
+
+    return { cleared }
+}
+
+/**
+ * 按「保留最近 N 天」清理过期的历史记录。
+ * 返回: 被移除的条数
+ */
+function cleanExpiredTraces() {
+    return pruneExpiredVisits()
+}
+
 // ─── 生命周期 ───
 let removeSettingsListener = null
 let initialized = false
@@ -129,6 +178,13 @@ function initializeDesktopApp() {
         desktopApi.getSettings().then((nextSettings) => {
             Object.assign(settings, nextSettings)
             urlInput.value = displayInputUrlForUI(settings.defaultUrl ?? '')
+            // 启动时按保留策略清理一次过期痕迹
+            if (settings.autoCleanOnStartup) {
+                try { cleanExpiredTraces() } catch (e) { }
+            }
+            // 恢复上次标签会话。必须放在 settings 加载之后 ——
+            // restoreTabsOnStartup 在拿到主进程设置前仍是默认值，提前恢复会判断错误。
+            try { restoreSession() } catch (e) { }
         })
     }
     try { siteRules.loadRules() } catch (e) { }
@@ -141,6 +197,8 @@ function initializeDesktopApp() {
 }
 
 function disposeDesktopApp() {
+    // 退出前把当前标签会话落盘，下次启动恢复
+    try { flushSession() } catch (e) { }
     flushRecentVisits()
     clearRecentTimer()
     clearSyncTimers()
@@ -165,12 +223,13 @@ export function useDesktopApp() {
         // 标签
         handleOpenUrl, addNewTab, selectTab, closeTab, updateTabMetadata,
         createPageTab, closeTabsToLeft, closeTabsToRight, closeAllTabs,
+        flushSession,
         // 最近访问
         pushRecentVisit, loadMoreRecentVisits, resetRecentVisible, openRecentVisit,
+        // 隐私：痕迹清理
+        clearAllTraces, cleanExpiredTraces, TRACE_KEYS,
         // 推荐站点
         useRecommendedSite, addRecommendedSite, editRecommendedSite, removeRecommendedSite,
-        // 本地文件
-        uploadLocalFiles, openLocalDocument,
         // 窗口
         handleMinimize, handleMaximize, handleClose,
         // 生命周期

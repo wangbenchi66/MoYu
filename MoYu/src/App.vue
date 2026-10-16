@@ -41,7 +41,10 @@ const {
   toggleSetting,
   urlInput,
   handleOpenUrl,
-  updateInfo
+  updateInfo,
+  clearAllTraces,
+  cleanExpiredTraces,
+  flushSession
 } = useDesktopApp();
 const desktopApi = typeof window !== 'undefined' ? window.desktop : null;
 
@@ -71,6 +74,7 @@ const showPrivacyConsent = ref(!hasPrivacyConsent);
 let removeOpenSettingsListener = null;
 let _globalErrorHandler = null;
 let _globalRejectionHandler = null;
+let _sessionFlushHandler = null;
 const editingShortcut = ref(null);
 const capturedAccel = ref('');
 const autoRangeRef = ref(null);
@@ -674,6 +678,52 @@ function handlePrivacyAgreed() {
   reportDevice();
 }
 
+/**
+ * 切换历史记录保留天数
+ * 参数: e - select 的 change 事件
+ */
+function onRetentionChange(e) {
+  const v = Number(e?.target?.value ?? 0);
+  patchSetting('historyRetentionDays', v);
+  // 立刻按新策略清理一次，让用户马上看到效果
+  const removed = cleanExpiredTraces();
+  if (v > 0) {
+    ElMessage({
+      message: removed > 0 ? `已保留最近 ${v} 天，清理了 ${removed} 条记录` : `已设为保留最近 ${v} 天`,
+      type: 'success',
+    });
+  } else {
+    ElMessage({ message: '历史记录将永久保留', type: 'info' });
+  }
+}
+
+/**
+ * 手动清理过期记录
+ */
+function handleCleanExpired() {
+  const removed = cleanExpiredTraces();
+  ElMessage({
+    message: removed > 0 ? `已清理 ${removed} 条过期记录` : '没有需要清理的记录',
+    type: removed > 0 ? 'success' : 'info',
+  });
+}
+
+/**
+ * 清除所有本地痕迹（二次确认）
+ */
+function handleClearAllTraces() {
+  ElMessageBox.confirm(
+    '将清除历史记录、最近访问、自定义推荐站点、阅读进度与阅读器设置。此操作不可撤销。',
+    '清除所有痕迹',
+    { type: 'warning', confirmButtonText: '确认清除', cancelButtonText: '取消' },
+  )
+    .then(() => {
+      const { cleared } = clearAllTraces();
+      ElMessage({ message: `已清除：${cleared.join('、') || '无'}`, type: 'success' });
+    })
+    .catch(() => {});
+}
+
 // 未同意：仅关闭本次弹窗，下次启动继续提示
 function handlePrivacyDismissed() {
   showPrivacyConsent.value = false;
@@ -744,8 +794,9 @@ onMounted(() => {
     window.addEventListener('blur', onWindowBlur);
   } catch (e) {}
 
-  // 版本更新检测
-  if (desktopApi?.checkForUpdate) {
+  // 版本更新检测（受 defaultSettings.backendEnabled 控制；关闭时不发起任何请求，
+  // 也就不会因接口不可达而强制跳转更新页）
+  if (settings.backendEnabled && desktopApi?.checkForUpdate) {
     desktopApi
       .checkForUpdate()
       .then(async (info) => {
@@ -805,6 +856,15 @@ onMounted(() => {
   };
   window.addEventListener('error', _globalErrorHandler);
   window.addEventListener('unhandledrejection', _globalRejectionHandler);
+
+  // 退出前落盘标签会话。
+  // 注意：closeToTray 开启时关闭窗口只是 hide()，不会触发 Vue 的 onBeforeUnmount，
+  // 因此必须额外监听 pagehide / beforeunload 兜底。
+  try {
+    _sessionFlushHandler = () => { try { flushSession() } catch (e) {} };
+    window.addEventListener('pagehide', _sessionFlushHandler);
+    window.addEventListener('beforeunload', _sessionFlushHandler);
+  } catch (e) {}
 });
 
 onBeforeUnmount(() => {
@@ -857,6 +917,13 @@ onBeforeUnmount(() => {
     window.removeEventListener('unhandledrejection', _globalRejectionHandler);
     _globalRejectionHandler = null;
   }
+  try {
+    if (_sessionFlushHandler) {
+      window.removeEventListener('pagehide', _sessionFlushHandler);
+      window.removeEventListener('beforeunload', _sessionFlushHandler);
+      _sessionFlushHandler = null;
+    }
+  } catch (e) {}
 });
 
 /**
@@ -1086,6 +1153,100 @@ function localShortcutHandler(e) {
             </div>
           </section>
 
+          <!-- 隐私与痕迹 -->
+          <section class="settings-block privacy-block section-panel">
+            <div class="shortcut-title">隐私与痕迹</div>
+
+            <div class="privacy-row">
+              <span class="privacy-label">历史记录保留</span>
+              <select
+                class="privacy-select"
+                :value="settings.historyRetentionDays ?? 0"
+                @change="onRetentionChange($event)">
+                <option :value="0">永久保留</option>
+                <option :value="1">最近 1 天</option>
+                <option :value="3">最近 3 天</option>
+                <option :value="7">最近 7 天</option>
+                <option :value="30">最近 30 天</option>
+              </select>
+            </div>
+
+            <BaseButton
+              class="toggle-row"
+              @click="toggleSetting('autoCleanOnStartup')">
+              <span>启动时自动清理过期记录</span>
+              <span
+                class="switch"
+                :class="{ on: settings.autoCleanOnStartup }"></span>
+            </BaseButton>
+
+            <BaseButton
+              class="toggle-row"
+              @click="toggleSetting('restoreTabsOnStartup')">
+              <span>启动时恢复上次标签页</span>
+              <span
+                class="switch"
+                :class="{ on: settings.restoreTabsOnStartup }"></span>
+            </BaseButton>
+
+            <BaseButton
+              class="toggle-row"
+              @click="toggleSetting('muteOnBossKey')">
+              <span>老板键隐藏时静音</span>
+              <span
+                class="switch"
+                :class="{ on: settings.muteOnBossKey }"></span>
+            </BaseButton>
+
+            <BaseButton
+              class="toggle-row"
+              @click="toggleSetting('keepAudioPlayingInBackground')">
+              <span>后台继续播放音频</span>
+              <span
+                class="switch"
+                :class="{ on: settings.keepAudioPlayingInBackground }"></span>
+            </BaseButton>
+
+            <BaseButton
+              class="toggle-row"
+              @click="toggleSetting('clearCacheOnExit')">
+              <span>退出时清理网页缓存与 Cookie</span>
+              <span
+                class="switch"
+                :class="{ on: settings.clearCacheOnExit }"></span>
+            </BaseButton>
+
+            <BaseButton
+              class="toggle-row"
+              @click="toggleSetting('backendEnabled')">
+              <span>启用后端在线服务（版本检测 / 匿名上报）</span>
+              <span
+                class="switch"
+                :class="{ on: settings.backendEnabled }"></span>
+            </BaseButton>
+
+            <div class="privacy-actions">
+              <el-button
+                size="small"
+                @click="handleCleanExpired"
+                :disabled="!(settings.historyRetentionDays > 0)">
+                立即清理过期记录
+              </el-button>
+              <el-button
+                size="small"
+                type="danger"
+                @click="handleClearAllTraces">
+                清除所有痕迹
+              </el-button>
+            </div>
+
+            <p class="privacy-hint">
+              「清除所有痕迹」会清空历史记录、最近访问、自定义推荐站点与已保存的标签会话。
+              关闭「老板键隐藏时静音」后，隐藏窗口不会影响正在播放的声音。
+              「退出时清理网页缓存与 Cookie」会清掉所有网站的登录态，请谨慎开启。
+            </p>
+          </section>
+
           <!-- 站点规则管理已移除（按需在页面内快速编辑弹窗保留） -->
 
           <section class="settings-block shortcut-block section-panel">
@@ -1266,6 +1427,43 @@ function localShortcutHandler(e) {
   font-size: 11px;
   color: var(--el-text-color-secondary);
 }
+
+/* 隐私与痕迹 */
+.privacy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+}
+.privacy-label {
+  font-size: 11px;
+}
+.privacy-select {
+  font-size: 11px;
+  padding: 3px 6px;
+  border: 1px solid var(--el-border-color, #dcdfe6);
+  border-radius: 4px;
+  background: var(--el-fill-color-blank, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+.privacy-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.privacy-actions .el-button {
+  flex: 1;
+  margin-left: 0 !important;
+}
+.privacy-hint {
+  margin: 8px 0 0;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--el-text-color-secondary, #909399);
+}
+
 @media (max-width: 600px) {
   .settings-modal {
     width: 96%;
