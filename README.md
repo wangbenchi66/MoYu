@@ -780,22 +780,20 @@ npm run dist:win
 
 | 方式 | 条件 |
 |---|---|
-| **推送 tag**（推荐） | tag 名形如 `v0.0.6`，且**与 `MoYu/package.json` 的 version 一致** |
+| **推送 tag**（推荐） | tag 名形如 `v0.0.6`。**版本号以 tag 为准**，不必先改 `package.json` |
 | 手动触发 | Actions 页面点 *Run workflow*，用于重跑失败的构建 |
 
 **发布步骤**：
 
 ```bash
-# 1. 改版本号（必须与即将打的 tag 一致）
-#    MoYu/package.json → "version": "0.0.6"
-# 2. 提交并推送
-git add MoYu/package.json
-git commit -m "chore: 版本号提升至 0.0.6"
-git push
-# 3. 打 tag 并推送 —— 这一步会触发自动打包
+# 打 tag 并推送 —— 这一步会触发自动打包
 git tag v0.0.6
 git push origin v0.0.6
 ```
+
+就这两步。CI 会自己把 tag 版本（`v0.0.6` → `0.0.6`）写进 `MoYu/package.json`，
+再据此生成 `latest.yml`。**`package.json` 里长期停留在旧版本号是正常的**，
+不要为了"对齐"而手动去改它。
 
 **流水线结构**：
 
@@ -805,12 +803,14 @@ guard（ubuntu）★ 权限校验
   └─ 触发者必须等于 wangbenchi66
        ↓ allowed == 'true' 才继续
 create-release（ubuntu）
-  ├─ 校验 tag 与 package.json 版本一致（不一致直接失败）
+  ├─ 从 tag 推导版本号（去掉 v 前缀），校验是合法 semver
   └─ 创建正式 Release（draft: false）
        ↓
 build（矩阵并行）
+  ├─ 用 tag 版本覆写 package.json ← 关键，保证 latest.yml 带上正确版本
   ├─ macos-latest / universal → .dmg + latest-mac.yml
-  └─ windows-latest / x64     → .exe + latest.yml + *.blockmap
+  ├─ windows-latest / x64     → .exe + latest.yml + *.blockmap
+  └─ 打包后校验 latest.yml 的 version 与发布版本一致
 ```
 
 > **为什么需要 `guard`**：`on.push.tags` 是仓库级配置，别人 fork 之后那份副本里
@@ -826,9 +826,12 @@ build（矩阵并行）
 > ⚠️ **必须是非 draft Release**。electron-updater 通过 GitHub API 查 latest release，
 > draft 版本对它不可见,会导致客户端「检查更新」永远返回已是最新。
 
-> ⚠️ **tag 与 package.json 版本必须一致**。`latest.yml` 里的版本号取自
-> package.json,而 Release 挂在 tag 上;两者不一致时 electron-updater 会认为
-> "没有新版本",自动更新**静默失效**——这类问题很难排查,所以流水线会直接拦下。
+> ⚠️ **为什么必须覆写 `package.json`**：`latest.yml` 由 electron-builder 生成，
+> 其中的 `version` 取自 `package.json`——**它看不到 git tag**。
+> 若不覆写，tag 与清单版本就会分叉，electron-updater 认为"没有新版本"，
+> 自动更新**静默失效**（客户端毫无报错，是最难排查的一类问题）。
+> 覆写只发生在 CI 工作区，不会提交回仓库；打包后还有一道校验兜底，
+> 万一覆写没生效会直接让流水线失败，而不是把坏产物发出去。
 
 ---
 

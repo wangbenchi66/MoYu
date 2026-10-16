@@ -517,21 +517,48 @@ computeOverflow(availableH, itemH)
 |---|---|
 | **`guard` job 校验仓库与触发者** | `on.push.tags` 是仓库级配置，别人 fork 后打 tag 也会跑。用「仓库名 + `github.actor`」双重判断挡掉 |
 | `draft: false` | **draft release 对 electron-updater 不可见**，会导致「检查更新」永远返回已是最新 |
-| **tag 与 `package.json` 版本必须一致** | `latest.yml` 的版本号取自 package.json 而 Release 挂在 tag 上；不一致时 electron-updater 认为无新版本，**静默失效**。流水线会直接拦下 |
+| **`build` 前用 tag 版本覆写 `package.json`** | `latest.yml` 由 electron-builder 生成，版本取自 `packager.appInfo.version`（即 package.json），**它看不到 git tag**。不覆写则 tag 与清单版本分叉，electron-updater 认为无新版本而**静默失效** |
+| **打包后校验 `latest.yml` 的 version** | 最后一道防线。覆写若因故没生效，这一步会直接 fail，而不是把坏产物发出去 |
 | 上传 `latest.yml` / `latest-mac.yml` | 这是更新清单，缺了它 electron-updater 无法判断版本 |
 | 上传 `*.blockmap` | 增量更新所需 |
 | Windows 目标为 `nsis` | 自动更新的前提；portable 版不支持 |
 
-**发版步骤**：
+#### 版本号以 tag 为唯一真相
+
+**发版步骤（只需两步，不必先改 package.json）**：
 
 ```bash
-# 1. 改 MoYu/package.json 的 version（必须与 tag 一致）
-git add MoYu/package.json && git commit -m "chore: 版本号提升至 0.0.6" && git push
-# 2. 打 tag 推送 → 触发自动打包
 git tag v0.0.6 && git push origin v0.0.6
 ```
 
-**流水线**：`guard`（权限校验）→ `create-release`（版本校验 + 建 Release）→ `build`（macOS/Windows 矩阵并行）。
+CI 会自己把 tag 版本（`v0.0.6` → `0.0.6`）写进 `MoYu/package.json`，再让 electron-builder
+据此生成 `latest.yml`。`package.json` 里长期停留在旧版本号是**预期行为**，
+不要为了"对齐"而手动去改它。
+
+> ⚠️ **为什么不反过来要求"tag 必须等于 package.json 版本"**：
+> tags 是发布时决定的，package.json 是提交时固定的，两者天然容易分叉。
+> 早先的实现用「强制一致 + 不一致就报错」防错，代价是每次发版都要
+> 先改 package.json、提交、再打 tag，多一次无意义的提交。
+> 现在改成让 tag 单向驱动版本，覆写只发生在 CI 工作区，**不会提交回仓库**。
+
+实现要点：
+
+```yaml
+# create-release：版本从 tag 推导（手动触发时退回读 package.json）
+VERSION="${TAG#v}"
+# 校验是合法 semver，否则 electron-updater 无法比较大小
+echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+
+# build：打包前覆写
+npm version ${{ needs.create-release.outputs.version }} \
+  --no-git-tag-version --allow-same-version
+```
+
+> `--no-git-tag-version` 阻止 npm 顺手打 tag / 提交；
+> `--allow-same-version` 让重跑工作流（版本号恰好相同）不报错。
+
+**流水线**：`guard`（权限校验）→ `create-release`（从 tag 定版本 + 建 Release）
+→ `build`（覆写 package.json → 打包 → 校验 latest.yml → 上传，macOS/Windows 矩阵并行）。
 
 > **guard 的边界**：它是**软性保护**——对方能改掉自己 fork 里的判断。
 > 它防的是"无意触发"与"产物看起来像官方发布"，不是恶意篡改。

@@ -67,7 +67,16 @@ jobs:
           echo "::notice::校验通过，开始打包"
 
   # ───────────────────────────────────────────────────────────────────
-  #  校验版本一致性 + 创建 Release
+  #  确定发布版本 + 创建 Release
+  #
+  #  版本号以 **tag 为唯一真相**，不再要求 package.json 与之保持一致。
+  #  原因：tags 是发布时决定的，而 package.json 是提交时固定的，
+  #  两者天然容易分叉。此前用"强制一致 + 不一致就报错"来防错，
+  #  代价是每次发版都要先改 package.json、提交、再打 tag。
+  #
+  #  现在改成：tag 是什么版本，发布就是什么版本。
+  #  打包前由 build job 用 tag 版本覆写 package.json，
+  #  从而让 electron-builder 生成的 latest.yml 也带上正确的版本号。
   # ───────────────────────────────────────────────────────────────────
   create-release:
     needs: guard
@@ -79,28 +88,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 读取并校验版本号
+      - name: 解析版本号（以 tag 为准）
         id: get_version
         run: |
           set -euo pipefail
 
-          VERSION=$(node -p "require('./MoYu/package.json').version")
-          echo "package.json 版本 = $VERSION"
-
-          # tag 推送时，tag 名必须与 package.json 版本一致。
-          # 否则 electron-builder 生成的 latest.yml 里写的是 package.json
-          # 的版本，而 Release 挂在另一个 tag 上，electron-updater 会
-          # 认为"没有新版本"，自动更新静默失效——这种问题很难排查。
           if [ "${{ github.ref_type }}" = "tag" ]; then
             TAG="${{ github.ref_name }}"
-            echo "tag = $TAG"
-            if [ "v$VERSION" != "$TAG" ]; then
-              echo "::error::tag ($TAG) 与 MoYu/package.json 的版本 (v$VERSION) 不一致"
-              echo "::error::请先把 package.json 的 version 改成 ${TAG#v}，提交后再打 tag"
-              exit 1
-            fi
+            # 去掉前缀 v，得到纯版本号：v0.0.6 → 0.0.6
+            VERSION="${TAG#v}"
+            echo "来源: tag  $TAG"
+          else
+            # 手动触发（workflow_dispatch）时没有 tag，退回读 package.json
+            VERSION=$(node -p "require('./MoYu/package.json').version")
+            echo "来源: package.json（手动触发，无 tag）"
           fi
 
+          # 版本号必须是合法 semver，否则 electron-updater 无法比较大小。
+          # 允许 1.2.3 / 1.2.3-beta.1 这类形式。
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::版本号 '$VERSION' 不是合法的 semver"
+            echo "::error::tag 应形如 v1.2.3 或 v1.2.3-beta.1"
+            exit 1
+          fi
+
+          echo "发布版本 = $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: 创建 Release
@@ -160,6 +172,37 @@ jobs:
         run: npm run build
         working-directory: MoYu
 
+      # ── 关键步骤：把 tag 版本写进 package.json ──
+      #
+      # 为什么需要：latest.yml / latest-mac.yml 由 electron-builder 生成，
+      # 其中的 version 字段取自 `packager.appInfo.version`，也就是
+      # **package.json 的 version**——它看不到 git tag。
+      #
+      # 若不改写，tag v0.0.6 打出来但 package.json 还写着 0.0.5 时，
+      # latest.yml 会写 0.0.5，electron-updater 比对后认为"没有新版本"，
+      # 自动更新**静默失效**（用户端毫无报错，最难排查的一类问题）。
+      #
+      # 这里用 tag 推导出的版本覆写，保证 latest.yml 与 Release 一致。
+      # 只改 CI 工作区里的文件，不会提交回仓库。
+      #
+      # --no-git-tag-version: 不让 npm 顺手打 tag / 提交；
+      # --allow-same-version: 版本号恰好相同时不报错（重跑工作流会遇到）。
+      #
+      # 注意：npm version 会连带把 package-lock.json 里的 version 也改掉。
+      # 这没有影响——依赖早已由上面的 `npm ci` 装好，且改动只留在 CI 工作区。
+      - name: 用 tag 版本覆写 package.json
+        run: |
+          npm version ${{ needs.create-release.outputs.version }} \
+            --no-git-tag-version --allow-same-version
+        working-directory: MoYu
+
+      - name: 确认版本已同步
+        shell: bash
+        run: |
+          echo "create-release 输出的版本: ${{ needs.create-release.outputs.version }}"
+          echo "package.json 实际版本   : $(node -p "require('./MoYu/package.json').version")"
+        working-directory: .
+
       # 用 GitHub 官方 token 发布，避免 electron-builder 自己发布时
       # 与 create-release 步骤冲突（--publish never），
       # 但仍会生成 latest.yml / latest-mac.yml —— 这两个清单文件是
@@ -169,6 +212,27 @@ jobs:
         working-directory: MoYu
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 打包完成后再核对一次：electron-builder 写进 latest.yml 的版本
+      # 必须与发布版本一致，否则自动更新会失效。这是最后一道防线。
+      - name: 校验 latest.yml 版本
+        shell: bash
+        run: |
+          EXPECTED="${{ needs.create-release.outputs.version }}"
+          for f in MoYu/release/latest.yml MoYu/release/latest-mac.yml; do
+            if [ -f "$f" ]; then
+              ACTUAL=$(grep -E '^version:' "$f" | head -1 | sed 's/^version:[[:space:]]*//' | tr -d '\r')
+              echo "$f -> version: $ACTUAL"
+              if [ "$ACTUAL" != "$EXPECTED" ]; then
+                echo "::error::$f 的版本 ($ACTUAL) 与发布版本 ($EXPECTED) 不一致"
+                echo "::error::这会导致 electron-updater 认为没有新版本，自动更新静默失效"
+                exit 1
+              fi
+            else
+              echo "::warning::$f 不存在（该平台可能不产出此清单）"
+            fi
+          done
+          echo "✓ 更新清单版本校验通过"
 
       - name: 上传产物到 Release
         uses: softprops/action-gh-release@v2
