@@ -315,8 +315,8 @@ onBeforeUnmount(() => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  background: rgba(240, 242, 247, 0.92);
+  border: 1px solid var(--overlay-weak);
+  background: rgba(var(--bg-rgb), 0.92);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 2px 10px rgba(16, 23, 32, 0.1);
@@ -352,11 +352,11 @@ onBeforeUnmount(() => {
   position: absolute;
   pointer-events: auto;
   display: flex;
-  background: rgba(240, 242, 247, 0.94);
+  background: rgba(var(--bg-rgb), 0.94);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 2px 12px rgba(16, 23, 32, 0.12);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--overlay-weak);
 }
 
 /* 垂直臂 */
@@ -424,11 +424,11 @@ onBeforeUnmount(() => {
 }
 
 .mini-pop-panel {
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(var(--bg-rgb), 0.96);
   border-radius: 8px;
   padding: 8px;
   box-shadow: 0 8px 24px rgba(16, 23, 32, 0.12);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--overlay-weak);
 }
 
 .mini-pop-panel input[type='color'] {
@@ -453,8 +453,8 @@ onBeforeUnmount(() => {
   font-size: 8px;
   font-weight: 700;
   line-height: 1;
-  background: #409eff;
-  color: #fff;
+  background: var(--primary);
+  color: rgb(var(--bg-rgb));
   border-radius: 5px;
   padding: 1px 2px;
   pointer-events: none;
@@ -494,12 +494,12 @@ onBeforeUnmount(() => {
 }
 
 .icon-btn:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--overlay-weak);
 }
 
 .icon-btn.on {
-  background: rgba(64, 158, 255, 0.1);
-  color: #409eff;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 /* 状态圆点：与 TopBar 保持同一套视觉语言（4px 蓝点 + 白描边）。
@@ -515,8 +515,8 @@ onBeforeUnmount(() => {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #2f78ff;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  background: var(--primary);
+  box-shadow: 0 0 0 1px rgba(var(--bg-rgb), 0.9);
   pointer-events: none;
 }
 

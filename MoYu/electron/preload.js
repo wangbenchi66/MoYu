@@ -32,6 +32,15 @@ contextBridge.exposeInMainWorld('desktop', {
             ipcRenderer.removeListener('ui:open-settings', handler)
         }
     },
+    // 窗口被老板键/托盘唤出：用于短暂高亮，帮助用户在"全透明"状态下找到窗口
+    onWindowRevealed: (callback) => {
+        const handler = () => callback()
+        ipcRenderer.on('window:revealed', handler)
+
+        return () => {
+            ipcRenderer.removeListener('window:revealed', handler)
+        }
+    },
     // webview 内的右键：主进程转发 params，渲染进程自行渲染菜单
     onContextMenu: (callback) => {
         const handler = (_, payload) => callback(payload)
@@ -41,15 +50,34 @@ contextBridge.exposeInMainWorld('desktop', {
             ipcRenderer.removeListener('contextmenu:show', handler)
         }
     },
+    // 主题：读取当前生效值，及订阅变化（含系统深浅色切换）
+    getTheme: () => ipcRenderer.invoke('theme:get'),
+    onThemeChanged: (callback) => {
+        const handler = (_, payload) => callback(payload)
+        ipcRenderer.on('theme:changed', handler)
+
+        return () => {
+            ipcRenderer.removeListener('theme:changed', handler)
+        }
+    },
     // 在外部浏览器中打开链接
     openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
     // 摸鱼时间统计
     getMoyuStats: () => ipcRenderer.invoke('moyu:get-stats'),
     clearMoyuStats: () => ipcRenderer.invoke('moyu:clear-stats'),
-    // 版本更新检测
+    // 版本更新（GitHub Releases）
+    getUpdateVersion: () => ipcRenderer.invoke('update:get-version'),
     checkForUpdate: () => ipcRenderer.invoke('update:check'),
-    // 获取持久化的匿名设备 ID（存于 userData 文件，不随缓存清理）
-    getDeviceId: () => ipcRenderer.invoke('device:get-id'),
+    downloadUpdate: () => ipcRenderer.invoke('update:download'),
+    installUpdate: () => ipcRenderer.invoke('update:install'),
+    onUpdateProgress: (callback) => {
+        const handler = (_, payload) => callback(payload)
+        ipcRenderer.on('update:download-progress', handler)
+
+        return () => {
+            ipcRenderer.removeListener('update:download-progress', handler)
+        }
+    },
 })
 
 // 在 preload 加载时通知主进程，便于确认 preload 是否注入到渲染器

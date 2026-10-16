@@ -61,8 +61,8 @@ const isReaderPage = computed(() => route.name === 'reader');
   display: flex;
   align-items: center;
   justify-content: center;
-  border-top: 1px solid #f0f0f0;
-  background: var(--surface, #fff);
+  border-top: 1px solid var(--fill-soft);
+  background: var(--surface, rgb(var(--bg-rgb)));
   padding: 0;
 }
 
@@ -82,18 +82,18 @@ const isReaderPage = computed(() => route.name === 'reader');
   border: none;
   background: transparent;
   cursor: pointer;
-  color: #999;
+  color: var(--muted);
   font-size: 9px;
   line-height: 1;
   transition: color 0.15s;
 }
 
 .tab-btn:hover {
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .tab-btn.active {
-  color: #409eff;
+  color: var(--primary);
 }
 
 .tab-btn svg {

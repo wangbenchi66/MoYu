@@ -1,11 +1,14 @@
 // electron/main.js — 主进程：窗口管理、设置持久化、Tray、全局快捷键、IPC 处理
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, screen, session, shell, Tray, webContents } from 'electron'
 import Store from 'electron-store'
-import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import defaultSettings from '../src/shared/defaultSettings.js'
+
+// 本文件是 ESM，而 electron-updater 是 CJS，需借助 createRequire 加载
+const require = createRequire(import.meta.url)
 
 // 多 webview tab 时 Electron 内部 guest WebContents 会超出默认 10 个监听器上限
 // 仅在需要时按实例设置，而非全局覆盖
@@ -29,6 +32,21 @@ let currentSettings = { ...defaultSettings }
 let _tempTopTimer = null
 // 老板键主动隐藏标志：为 true 时 autoHide 监控不自动显示窗口
 let bossKeyHidden = false
+
+// F11 全屏状态与进入前的窗口 bounds。
+//
+// ⚠️ 为什么需要自己维护 `_isFullScreen`，而不是查 win.isFullScreen()：
+//
+// 本窗口是 `transparent: true` + `frame: false`，在 Windows 上这类窗口
+// **全屏后 win.isFullScreen() 仍返回 false**（实测：bounds 已变成整屏 2048×1152、
+// 窗口确实全屏了，但 isFullScreen() 是 false）。
+//
+// 后果：若用 isFullScreen() 判断该进还是该退，两次 F11 都会走"进入全屏"分支，
+// 永远退不出来 —— 这正是「按 F11 全屏后再按一下没恢复」的根因。
+//
+// 所以这里自己记状态，只把它当作唯一真相来源。
+let _isFullScreen = false
+let _boundsBeforeFullScreen = null
 
 // 不持久化的临时字段（例如窗口透明度、临时 UI 状态等）
 // 每次启动从 defaultSettings 重置——这些属于「本次会话」状态，不该跨重启保留。
@@ -54,6 +72,46 @@ const DEFAULT_WIDTH = 820
 const DEFAULT_HEIGHT = 860
 const MIN_SAFE_WIDTH = 360
 const MIN_SAFE_HEIGHT = 240
+
+// ─── 主题 ───
+// 三态：light / dark / system（默认 system）
+const THEME_MODES = ['light', 'dark', 'system']
+
+function normalizeThemeMode(v) {
+    return THEME_MODES.includes(v) ? v : 'system'
+}
+
+/** 把设置项同步到 nativeTheme，并广播实际生效的主题给渲染进程 */
+function applyThemeSource() {
+    try {
+        const mode = normalizeThemeMode(currentSettings?.themeMode)
+        nativeTheme.themeSource = mode
+        broadcastTheme()
+    } catch (e) { }
+}
+
+/** 当前"实际生效"的主题（system 时解析为系统当前值） */
+function effectiveTheme() {
+    try {
+        return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+    } catch (e) {
+        return 'light'
+    }
+}
+
+function broadcastTheme() {
+    try {
+        const payload = {
+            mode: normalizeThemeMode(currentSettings?.themeMode),
+            effective: effectiveTheme(),
+        }
+        for (const w of BrowserWindow.getAllWindows()) {
+            try {
+                if (!w.isDestroyed()) w.webContents.send('theme:changed', payload)
+            } catch (e) { }
+        }
+    } catch (e) { }
+}
 
 // 摸鱼时间统计
 let moyuStart = null
@@ -196,6 +254,8 @@ function normalizeSettings(partial = {}) {
         forceReaderTextColor: Boolean(partial.forceReaderTextColor ?? defaultSettings.forceReaderTextColor),
         showScrollbars: Boolean(partial.showScrollbars ?? defaultSettings.showScrollbars),
         grayscaleMode: Boolean(partial.grayscaleMode ?? defaultSettings.grayscaleMode),
+        themeMode: normalizeThemeMode(partial.themeMode ?? defaultSettings.themeMode),
+        darkenWebPages: Boolean(partial.darkenWebPages ?? defaultSettings.darkenWebPages),
         clickThroughMode: Boolean(partial.clickThroughMode ?? defaultSettings.clickThroughMode),
         fullWindowTransparent: Boolean(partial.fullWindowTransparent ?? defaultSettings.fullWindowTransparent),
         closeToTray: Boolean(partial.closeToTray ?? defaultSettings.closeToTray),
@@ -209,9 +269,9 @@ function normalizeSettings(partial = {}) {
             : Number(defaultSettings.historyRetentionDays),
         autoCleanOnStartup: Boolean(partial.autoCleanOnStartup ?? defaultSettings.autoCleanOnStartup),
         keepAudioPlayingInBackground: Boolean(partial.keepAudioPlayingInBackground ?? defaultSettings.keepAudioPlayingInBackground),
-        backendEnabled: Boolean(partial.backendEnabled ?? defaultSettings.backendEnabled),
         restoreTabsOnStartup: Boolean(partial.restoreTabsOnStartup ?? defaultSettings.restoreTabsOnStartup),
         muteOnBossKey: Boolean(partial.muteOnBossKey ?? defaultSettings.muteOnBossKey),
+        revealHintOnShow: Boolean(partial.revealHintOnShow ?? defaultSettings.revealHintOnShow),
         clearCacheOnExit: Boolean(partial.clearCacheOnExit ?? defaultSettings.clearCacheOnExit),
         readerTextColor: normalizeReaderColor(partial.readerTextColor ?? defaultSettings.readerTextColor),
         readerFontScale: clamp(Number(partial.readerFontScale ?? defaultSettings.readerFontScale), 80, 160),
@@ -364,10 +424,20 @@ function broadcastSettings() {
 
 /**
  * 记录当前可见窗口的边界（用于自动隐藏逻辑）
+ *
+ * ⚠️ 全屏时不记录：此时 getBounds() 返回整个屏幕，
+ * 会把 lastVisibleBounds 撑成屏幕大小，影响「鼠标是否在窗口内」的判断。
  */
 function rememberWindowBounds() {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return
+    }
+    try {
+        if (mainWindow.isFullScreen()) {
+            return
+        }
+    } catch (e) {
+        // isFullScreen 不可用时按原逻辑继续
     }
 
     lastVisibleBounds = mainWindow.getBounds()
@@ -480,6 +550,18 @@ function showMainWindow(focus = true, opts = {}) {
     } catch (e) { }
 
     refreshTrayMenu()
+
+    // 通知渲染进程「窗口刚被唤出」。
+    //
+    // 为什么需要：当「软件背景透明 + 网页背景透明 + 标题栏悬停隐藏」同时开启时，
+    // 窗口虽然显示了，但视觉上和桌面背景几乎无从区分——用户连按几次老板键后
+    // 会完全不知道窗口在哪。渲染进程收到后会短暂高亮一次，让用户一眼看到位置，
+    // 几秒后自动恢复原来的透明设置。
+    try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('window:revealed')
+        }
+    } catch (e) { }
 }
 
 /**
@@ -583,6 +665,64 @@ function applyWindowSettings(win) {
 
     if (process.platform === 'win32') {
         applyWindowsAcrylic(win, currentSettings.transparentBackground)
+    }
+}
+
+/**
+ * 切换全屏（F11 用）。
+ *
+ * ⚠️ 与 Chromium 内建 F11 的两点不同，都是被透明窗口的实测行为逼出来的：
+ *
+ * 1. **用自维护的 `_isFullScreen` 判断方向，不查 `win.isFullScreen()`**。
+ *    透明 + 无边框窗口在 Windows 上全屏后 `isFullScreen()` 仍返回 false，
+ *    若据此判断，两次 F11 都会执行"进入全屏"，用户永远退不出来。
+ *
+ * 2. **退出时用进入前记录的 bounds 精确还原**，而不是依赖 Electron 自己恢复。
+ *
+ * 参数: win - BrowserWindow
+ */
+function toggleFullScreen(win) {
+    if (!win || win.isDestroyed()) {
+        return
+    }
+
+    try {
+        if (_isFullScreen) {
+            // ── 退出全屏 ──
+            _isFullScreen = false
+            win.setFullScreen(false)
+
+            // 用进入前的 bounds 还原。setTimeout(0) 让全屏状态先提交，
+            // 否则紧随其后的 setBounds 可能被忽略。
+            const restore = _boundsBeforeFullScreen
+            _boundsBeforeFullScreen = null
+            if (restore) {
+                setTimeout(() => {
+                    try {
+                        if (!win.isDestroyed()) {
+                            win.setBounds(restore)
+                            // 回到窗口态后重新记录，供自动隐藏逻辑使用
+                            rememberWindowBounds()
+                            // 把还原后的尺寸同步到 store，避免下次启动沿用旧值
+                            const [w, h] = win.getSize()
+                            store.set('width', w)
+                            store.set('height', h)
+                        }
+                    } catch (e) {
+                        console.warn('[fullscreen] restore bounds failed:', e)
+                    }
+                }, 0)
+            }
+        } else {
+            // ── 进入全屏 ──
+            _isFullScreen = true
+            _boundsBeforeFullScreen = win.getBounds()
+            win.setFullScreen(true)
+        }
+    } catch (e) {
+        // 出错时回滚状态，避免卡在"以为在全屏"的假象里
+        _isFullScreen = false
+        console.warn('[fullscreen] toggle failed:', e)
     }
 }
 
@@ -711,6 +851,8 @@ function updateSettingsFromTray(partial) {
         saveSettings()
         registerGlobalShortcuts()
         refreshAutoHideMonitor()
+        // 从托盘改主题时也要同步 nativeTheme 并广播
+        if (partial && 'themeMode' in partial) applyThemeSource()
         if (mainWindow && !mainWindow.isDestroyed()) {
             applyWindowSettings(mainWindow)
         }
@@ -748,10 +890,29 @@ function buildTrayMenuTemplate() {
         click: () => updateSettingsFromTray({ readerFontScale: v }),
     }))
 
+    // 主题：三态单选（跟随系统 / 浅色 / 深色）
+    const themeSubmenu = [
+        { label: '跟随系统', type: 'radio', checked: currentSettings.themeMode === 'system', click: () => updateSettingsFromTray({ themeMode: 'system' }) },
+        { label: '浅色', type: 'radio', checked: currentSettings.themeMode === 'light', click: () => updateSettingsFromTray({ themeMode: 'light' }) },
+        { label: '深色', type: 'radio', checked: currentSettings.themeMode === 'dark', click: () => updateSettingsFromTray({ themeMode: 'dark' }) },
+        { type: 'separator' },
+        {
+            label: '深色模式下让网页也变深',
+            type: 'checkbox',
+            checked: !!currentSettings.darkenWebPages,
+            click: (item) => updateSettingsFromTray({ darkenWebPages: item.checked }),
+        },
+    ]
+
     return [
         {
             label: isVisible ? '隐藏主窗口' : '显示主窗口',
             click: () => toggleMainWindow(),
+        },
+        // 主题放在顶层便于快速切换（高频操作）
+        {
+            label: `主题：${currentSettings.themeMode === 'dark' ? '深色' : currentSettings.themeMode === 'light' ? '浅色' : '跟随系统'}`,
+            submenu: themeSubmenu,
         },
         {
             label: '快速设置',
@@ -928,7 +1089,10 @@ function createWindow() {
 
     console.log('[main] created BrowserWindow id=', win.id, 'webContentsId=', win.webContents.id)
 
-    nativeTheme.themeSource = 'system'
+    // 主题来源跟随设置项（'light' / 'dark' / 'system'）。
+    // nativeTheme.themeSource 会影响 Chromium 的 prefers-color-scheme，
+    // 因此设成 'dark' 时，webview 里的网站也会收到深色偏好（配合 shouldUseDarkColors 生效）。
+    applyThemeSource()
     applyWindowSettings(win)
 
     win.loadURL(getWindowUrl('/'))
@@ -939,12 +1103,55 @@ function createWindow() {
         rememberWindowBounds()
     })
 
+    // ── F11 全屏接管 ──────────────────────────────────────────────
+    //
+    // 为什么要接管而不是用 Chromium 内建的 F11：
+    //   本窗口是 `transparent: true` + `frame: false` + `backgroundColor: #00000000`。
+    //   在 Windows 上，这类窗口由 DWM 合成器处理，退出全屏时**不保证**恢复原尺寸
+    //   （实测会出现停在屏幕大小、或透明度失效）。内建 F11 是为标准窗口设计的。
+    //
+    // 做法：拦截 F11 → 自己记录进入前的 bounds → setFullScreen
+    //       → 退出时用记录的 bounds 精确还原。
+    win.webContents.on('before-input-event', (event, input) => {
+        if (input.type !== 'keyDown') return
+        if (input.key !== 'F11') return
+        // 输入框里按 F11 也应触发全屏（F11 本身不是文本输入键），无需额外判断
+        event.preventDefault()
+        toggleFullScreen(win)
+    })
+
     win.on('resize', () => {
+        // ⚠️ 全屏/最大化时必须跳过。
+        //
+        // F11 会触发 resize，此时 getBounds() 返回的是**整个屏幕**尺寸
+        // （实测：窗口 901×600 → 全屏时 2048×1152）。
+        // 若照单全收，store 里存的"窗口尺寸"就变成了屏幕分辨率，
+        // 下次启动（或恢复）窗口会按屏幕大小打开 ——
+        // 用户看到的现像就是「按 F11 全屏后，再按一下没有恢复原尺寸」。
+        if (win.isFullScreen() || win.isMaximized()) {
+            return
+        }
         rememberWindowBounds()
         try {
             const [w, h] = win.getSize()
             store.set('width', w)
             store.set('height', h)
+        } catch (e) {
+            // ignore
+        }
+    })
+
+    // 退出全屏时补记一次尺寸：因为全屏期间的 resize 都被上面跳过了，
+    // 若用户在退出全屏后又拖动窗口，正常路径会记到；但若直接关闭窗口，
+    // 需要这里兜底，避免把全屏尺寸留成最后一次记录。
+    win.on('leave-full-screen', () => {
+        try {
+            if (!win.isMaximized()) {
+                rememberWindowBounds()
+                const [w, h] = win.getSize()
+                store.set('width', w)
+                store.set('height', h)
+            }
         } catch (e) {
             // ignore
         }
@@ -1134,25 +1341,132 @@ ipcMain.handle('window:open-settings', () => {
     openSettingsPanel()
 })
 
-// ── 版本更新检测 ──
+// ── 版本更新（GitHub Releases + electron-updater）──
+//
+// 更新源来自 package.json 的 build.publish（provider: github, owner, repo），
+// electron-updater 会去读 GitHub Release 里的 latest.yml 比对版本。
+// 不使用任何自建后端地址。
 
-ipcMain.handle('update:check', () => ({
-    currentVersion: app.getVersion(),
-    platform: process.platform === 'darwin' ? 'mac' : 'win',
-    isDev,
-}))
+let autoUpdater = null
+let updaterInitError = null
 
-// ── 匿名设备 ID（持久化到 userData，不随缓存清理）──
-ipcMain.handle('device:get-id', () => {
-    const idPath = path.join(app.getPath('userData'), '.moyu_device_id')
+function getAutoUpdater() {
+    if (autoUpdater || updaterInitError) return autoUpdater
     try {
-        const id = fs.readFileSync(idPath, 'utf-8').trim()
-        if (id) return id
-    } catch (_) {}
-    const id = randomUUID()
-    fs.writeFileSync(idPath, id, 'utf-8')
-    return id
-})
+        // 延迟 require：dev 环境下未打包时也能安全加载
+        const { autoUpdater: u } = require('electron-updater')
+        u.autoDownload = false            // 由用户确认后再下载
+        u.autoInstallOnAppQuit = true
+        u.logger = null
+        autoUpdater = u
+    } catch (e) {
+        updaterInitError = e?.message || String(e)
+        console.warn('[updater] 加载 electron-updater 失败:', updaterInitError)
+    }
+    return autoUpdater
+}
+
+/** 返回本地版本信息（纯本地，不联网） */
+function getLocalVersionInfo() {
+    return {
+        currentVersion: app.getVersion(),
+        platform: process.platform === 'darwin' ? 'mac' : 'win',
+        isDev,
+        releasesUrl: 'https://github.com/wangbenchi66/MoYu/releases',
+    }
+}
+
+/**
+ * 检查更新（联网，仅在用户主动点击时调用）。
+ * 返回统一结构，便于渲染进程展示：
+ *   { ok, hasUpdate, currentVersion, latestVersion, releaseNotes, releasesUrl, error }
+ */
+async function checkForUpdates() {
+    const base = getLocalVersionInfo()
+    if (isDev) {
+        return { ok: false, hasUpdate: false, ...base, error: '开发环境不支持检查更新' }
+    }
+    const u = getAutoUpdater()
+    if (!u) {
+        return { ok: false, hasUpdate: false, ...base, error: '更新组件不可用：' + (updaterInitError || '未知原因') }
+    }
+    try {
+        const r = await u.checkForUpdates()
+        const info = r?.updateInfo || {}
+        const hasUpdate = !!info.version && info.version !== base.currentVersion
+        return {
+            ok: true,
+            hasUpdate,
+            currentVersion: base.currentVersion,
+            latestVersion: info.version || base.currentVersion,
+            releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : '',
+            releasesUrl: base.releasesUrl,
+        }
+    } catch (e) {
+        const msg = e?.message || String(e)
+        // GitHub API 有速率限制，未登录时约 60 次/小时，这里给出可读提示
+        const friendly = /rate limit|403/i.test(msg)
+            ? 'GitHub 访问频率超限，请稍后再试'
+            : /net|ENOTFOUND|ETIMEDOUT|ECONNREFUSED/i.test(msg)
+                ? '网络不可用，请检查连接'
+                : msg
+        return { ok: false, hasUpdate: false, ...base, error: friendly }
+    }
+}
+
+/** 下载更新；进度通过 'update:download-progress' 广播 */
+async function downloadUpdate() {
+    const u = getAutoUpdater()
+    if (!u) return { ok: false, error: '更新组件不可用' }
+    try {
+        const r = await u.downloadUpdate()
+        return { ok: true, files: (r || []).length }
+    } catch (e) {
+        return { ok: false, error: e?.message || String(e) }
+    }
+}
+
+/** 退出并安装已下载的更新 */
+function installUpdate() {
+    const u = getAutoUpdater()
+    if (!u) return { ok: false, error: '更新组件不可用' }
+    try {
+        u.quitAndInstall(false, true)
+        return { ok: true }
+    } catch (e) {
+        return { ok: false, error: e?.message || String(e) }
+    }
+}
+
+function initUpdaterEvents() {
+    const u = getAutoUpdater()
+    if (!u) return
+    try {
+        u.on('download-progress', (p) => {
+            for (const w of BrowserWindow.getAllWindows()) {
+                try {
+                    if (!w.isDestroyed()) {
+                        w.webContents.send('update:download-progress', {
+                            percent: Math.round(p?.percent || 0),
+                            transferred: p?.transferred || 0,
+                            total: p?.total || 0,
+                            bytesPerSecond: p?.bytesPerSecond || 0,
+                        })
+                    }
+                } catch (e) { }
+            }
+        })
+    } catch (e) { }
+}
+
+// ── 旧的自建后端版本检测 IPC 已移除（改为上面的 GitHub 方案）──
+
+ipcMain.handle('update:get-version', () => getLocalVersionInfo())
+ipcMain.handle('update:check', () => checkForUpdates())
+ipcMain.handle('update:download', () => downloadUpdate())
+ipcMain.handle('update:install', () => installUpdate())
+
+// ── 匿名设备 ID 已随匿名上报功能一起移除 ──
 
 ipcMain.handle('moyu:get-stats', () => getMoyuStats())
 
@@ -1165,8 +1479,13 @@ ipcMain.handle('moyu:clear-stats', () => {
 
 ipcMain.handle('settings:get', () => currentSettings)
 
-ipcMain.handle('settings:update', (_, partial) => {
-    //输出设置变更日志，帮助排查设置更新流程
+// 主题：返回设置模式与当前实际生效的深浅色
+ipcMain.handle('theme:get', () => ({
+    mode: normalizeThemeMode(currentSettings?.themeMode),
+    effective: effectiveTheme(),
+}))
+
+ipcMain.handle('settings:update', (_, partial) => {    //输出设置变更日志，帮助排查设置更新流程
     //console.log('[ipc] settings:update', { partial })
     currentSettings = normalizeSettings({
         ...currentSettings,
@@ -1176,6 +1495,8 @@ ipcMain.handle('settings:update', (_, partial) => {
     saveSettings()
     registerGlobalShortcuts()
     refreshAutoHideMonitor()
+    // 主题可能变化：同步 nativeTheme 并广播
+    applyThemeSource()
 
     if (mainWindow && !mainWindow.isDestroyed()) {
         applyWindowSettings(mainWindow)
@@ -1189,10 +1510,18 @@ ipcMain.handle('settings:update', (_, partial) => {
 app.whenReady().then(() => {
     loadSettings()
 
+    // 系统深浅色变化时通知渲染进程（仅在 themeMode = 'system' 时视觉上会变，
+    // 但effective 值始终广播，便于渲染进程保持状态一致）
+    try {
+        nativeTheme.on('updated', () => { broadcastTheme() })
+    } catch (e) { }
+
     createWindow()
     createTray()
     registerGlobalShortcuts()
     refreshAutoHideMonitor()
+    // 注册更新下载进度等事件（不触发联网，仅挂监听）
+    initUpdaterEvents()
 
     app.on('activate', () => {
         // macOS 点击 Dock 图标时：有隐藏窗口则显示，没有则新建

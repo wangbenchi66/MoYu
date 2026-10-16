@@ -46,6 +46,12 @@ const defaultSettings = {
     // 灰度渲染模式（将页面颜色变为灰色）
     grayscaleMode: false,
 
+    // 主题模式：'light' | 'dark' | 'system'（默认跟随系统）
+    themeMode: 'system',
+
+    // 深色模式下是否让网页也变深（注入 CSS，仅对未自适应深色的站点生效）
+    darkenWebPages: true,
+
     // 鼠标穿透（窗口忽略鼠标事件，允许点击穿透到桌面或下层窗口）
     clickThroughMode: false,
 
@@ -154,21 +160,24 @@ const defaultSettings = {
     // 摸鱼场景下建议开启——否则藏了窗口声音还在放。
     muteOnBossKey: true,
 
+    // 老板键/托盘唤出窗口时，是否短暂高亮一次（临时恢复不透明 + 显示顶栏 + 画描边）。
+    //
+    // 为什么需要：开启「软件背景透明 + 网页背景透明 + 标题栏悬停隐藏」后，
+    // 窗口虽然显示了，但视觉上和桌面没有区别，连按几次老板键就会找不到窗口。
+    // 高亮只是视觉提示，2 秒后自动褪去，**不会修改用户的透明设置**。
+    //
+    // 默认开启（这是防止用户"把自己锁在外面"的兜底）；
+    // 如果觉得高亮打扰，可以关掉——关掉后仍有设置页的警告提示与托盘菜单可用。
+    revealHintOnShow: true,
+
     // 退出应用时是否清理 webview 的浏览数据（缓存 / Cookie / 本地存储等）。
     // 属于强隐私选项，会清掉所有网站的登录态，默认关闭。
     clearCacheOnExit: false,
 
-    // ── 后端接口开关 ──
-    // 是否启用「后端在线服务」。关闭后应用**完全不发起任何后端请求**：
-    //   - GET  /api/MoYu/CheckVersion   （版本检测）
-    //   - POST /api/MoYu/ReportDevice   （匿名设备上报）
-    // 关闭时：
-    //   1. 启动不再做版本检测，也就不会因接口不可达而强制跳转更新页
-    //   2. 隐私弹窗的「同意」只记录本地标记，不再上报任何数据
-    //   3. 关于页的「检查更新」按钮给出禁用提示
-    // 注意：window.desktop.checkForUpdate() 是**本地 IPC**（只返回版本号/平台），
-    // 不属于网络请求，因此不受此开关影响。
-    backendEnabled: false,
+    // 注：匿名设备上报（POST /api/MoYu/ReportDevice）与首次启动的隐私同意弹窗
+    // 已整体移除，相关设置项 backendEnabled 一并删除。
+    // window.desktop.checkForUpdate() 是**本地 IPC**（只返回版本号/平台），
+    // 不属于网络请求，仍被「关于」页的检查更新使用。
 }
 
 export default defaultSettings

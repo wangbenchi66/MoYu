@@ -19,12 +19,9 @@
     "dist:mac": "npm run build && electron-builder --mac dmg"
   },
   "dependencies": {
-    "axios": "^1.16.0",
-    "dompurify": "^3.4.2",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.8.9",
     "element-plus": "^2.3.10",
-    "epubjs": "^0.3.93",
-    "marked": "^18.0.3",
     "vue": "^3.5.32",
     "vue-router": "^5.0.6"
   },
@@ -81,9 +78,21 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "wangbenchi66",
+        "repo": "MoYu"
+      }
+    ]
   },
   "publish": {
     "provider": "github"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wangbenchi66/MoYu.git"
+  },
+  "homepage": "https://github.com/wangbenchi66/MoYu"
 }

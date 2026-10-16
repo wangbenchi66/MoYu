@@ -31,7 +31,55 @@ npm run dist:win     # Windows NSIS 安装包
 npm run dist:mac     # macOS DMG
 ```
 
+**仓库根目录的快捷脚本**（双击即可，不必手敲命令）：
+
+| 文件 | 作用 |
+|---|---|
+| `run.bat` | 启动开发模式（`cd MoYu && npm run dev`） |
+| `build.bat` | 打包 Windows 安装包（`cd MoYu && npm run dist:win`） |
+| `scripts/check-build-lock.ps1` | 由 `build.bat` 调用的打包前置检查 |
+
+> ⚠️ **不要手敲 `electron-builder`**。它在 `node_modules/.bin/`，**不在系统 PATH**，
+> 直接调用会报 `'electron-builder' 不是内部或外部命令`。
+> 必须经 `npm run`（npm 会临时把 `.bin` 加进 PATH）或 `npx`。
+>
+> **`npm run dist:win` 已包含 `npm run build`**，不要写成
+> `npm run build && electron-builder --win nsis` —— 后半段没有 npm 前缀，必然失败。
+> 最易踩的形态就是先跑通 `npm run build`（`vite` 也在 `.bin` 里，所以能跑），
+> 然后顺手用 `&&` 接上 `electron-builder`。
+
+> ⚠️ **打包报 `being used by another process`**：electron-builder 要清空
+> `MoYu/release/win-unpacked/`，但有进程占着它——通常是之前从那里启动过 `MoYu.exe`
+> （句柄未释放），或上次中断留下了卡住的 `7za.exe`。
+> `build.bat` 会**自动检测并报出 PID**，不必手动排查。
+
+> ⚠️ **`.bat` 文件必须满足两点**，否则会出问题：
+> 1. **CRLF 换行**（LF 会导致批处理解析错误）
+> 2. **注释只用 ASCII**——实测中文注释会显示成乱码（UTF-8 被按 GBK 解读），
+>    `chcp 65001` 并不能完全避免
+>
+> 另外，**不要在 `if (...)` 块内的 `echo` 里用裸 `|`**：`^|` 转义在块内不可靠，
+> 且 `echo ... "引号"` 会提前闭合块，报 `: was unexpected at this time`。
+> 需要管道时改用 `powershell -File` 调外部脚本。
+
 没有测试框架。
+
+**换行符约定：全部使用 CRLF。**
+
+本仓库是 Windows 项目，工作区所有文本文件必须是 **CRLF**（`\r\n`）：
+
+| 文件 | 作用 |
+|---|---|
+| `.gitattributes` | `* text=auto eol=crlf`——仓库内存 LF，检出时转 CRLF |
+| `.editorconfig` | `end_of_line = crlf`——编辑器写入时用 CRLF |
+
+**新增或重写文件时，必须写入 CRLF**，不要用 `\n`。
+若发现某个文件是 LF，用 `git add --renormalize <file>` 或手动转换修正。
+
+例外（**不要**转成 CRLF）：
+- 二进制文件（`.png` / `.ico` / `.icns` / `.exe` 等）——转换会损坏文件
+- `package-lock.json` / `*.lock`——已在 `.gitattributes` 中标为 `-text`
+- `*.sh`——必须是 LF
 
 **两个容易踩的点**：
 
@@ -59,7 +107,6 @@ src/
     BaseButton.vue      通用按钮（自动判断渲染为 el-button 或原生 button）
     BottomToolbar.vue   底部工具栏（后退/前进/缩放/透明度/自动滚动控制）
     ContextMenu.vue     右键菜单（支持图标、子菜单、分隔线、禁用态、边缘避让）
-    PrivacyConsent.vue  首次启动隐私知情同意弹窗
     ShortcutRow.vue     快捷键设置行（录制/显示/清除快捷键绑定）
     TabBar.vue          顶部标签栏（标签页切换/关闭/右键菜单）
     TopBar.vue          顶部标题栏（窗口控制、透明度快速切换、品牌图标）
@@ -71,15 +118,12 @@ src/
     useRecentVisits.js  最近访问（localStorage，上限 200，2s 防抖；支持按天保留）
     useTabManager.js    标签 CRUD + 会话持久化（persistSession / restoreSession）
     useRecommendedSites.js  推荐站点 CRUD（6 个内置 + 用户自定义）
-    useDeviceReport.js  匿名设备上报（受 backendEnabled 门禁，默认关闭）
+    useTheme.js         主题（light/dark/system），写 data-theme 与 .dark 类
     mainpage/           MainPage 专用子模块
       useWebviewRefs.js     webview 引用管理（实例生命周期、事件监听绑定）
       useWebviewExec.js     脚本/CSS 注入工具（runWebviewJS / runWebviewCss）
       useWebviewSync.js     webview 样式/效果同步（透明、无图、滚动条、字号、自动滚动）
       usePauseOnBlur.js     失焦/隐藏时暂停媒体与自动滚动
-
-  http/
-    index.js            Axios 封装（拦截器、Loading 管理、GET/POST/PUT/DELETE）
 
   pages/                页面组件
     ConsolePage.vue     控制台布局（底部 Tab 栏 + <router-view>）
@@ -88,9 +132,8 @@ src/
     HistoryPage.vue     历史记录（搜索 + 分页 + 右键菜单）
     StatsPage.vue       摸鱼时间统计（今日/历史/累计 + 7 天柱状图 + 24h 热力图）
     RulesPage.vue       站点规则备份/恢复 + 油猴脚本导入
-    AboutPage.vue       关于（版本信息 + 手动检查更新）
+    AboutPage.vue       关于（版本信息 + 检查更新 / 下载安装）
     HelpPage.vue        使用说明（纯静态）
-    UpdatePage.vue      版本更新页（强制更新时跳转）
     MainPage.vue        多 webview 管理（标签渲染、规则注入调度、快捷键转发）
 
   rules/                站点规则注入系统
@@ -135,10 +178,14 @@ src/main.js             渲染进程入口：挂载 Vue 应用
 | `ui:set-ignore-mouse-events` | invoke | 鼠标穿透（不改持久设置） |
 | `shell:open-external` | invoke | 外部浏览器打开链接（仅允许 http/https） |
 | `moyu:get-stats` / `moyu:clear-stats` | invoke | 摸鱼时间统计读取与清空 |
-| `update:check` | invoke | 返回 `{ currentVersion, platform, isDev }`（**本地 IPC，非网络请求**） |
-| `device:get-id` | invoke | 读取/生成持久化匿名设备 ID |
+| `update:get-version` | invoke | 纯本地返回 `{ currentVersion, platform, isDev, releasesUrl }`（**不联网**） |
+| `update:check` | invoke | 联网检查 GitHub Releases，返回 `{ ok, hasUpdate, latestVersion, ... }` |
+| `update:download` / `update:install` | invoke | 下载更新 / 退出并安装 |
+| `update:download-progress` | main→renderer | 下载进度广播 |
 | `renderer:log` | send | 渲染进程日志转发到主进程写文件 |
 | `contextmenu:show` | main→renderer | webview 内右键，转发 guest 的 `params` 给渲染进程渲染菜单 |
+| `theme:get` | invoke | 返回 `{ mode, effective }`（mode 是设置值，effective 是 nativeTheme 解析结果） |
+| `theme:changed` | main→renderer | 主题变化广播（含系统深浅色切换） |
 | `preload:loaded` | send | preload 注入自检信号 |
 
 ### 状态管理
@@ -175,11 +222,10 @@ useDesktopApp        ← 聚合导出（对外 API 不变）+ 隐私清理
 | `/profile/rules` | `rules` | RulesPage | 站点规则备份/恢复 |
 | `/profile/about` | `about` | AboutPage | 关于 |
 | `/profile/help` | `help` | HelpPage | 使用说明 |
-| `/update` | `update` | UpdatePage | 版本更新 |
-
-路由守卫：`forceUpdateActive` 为真时，任何导航都被重定向到 `update`。
 
 **添加新页面**：在 `src/router/index.js` 的路由数组中注册，通过 `router.push({ name })` 导航。ConsolePage 底部 Tab 按 `route.path` 自动高亮。
+
+> `/update` 与 `forceUpdateActive` 守卫已随自建后端一起移除（版本更新改走 GitHub Releases）。
 
 ### 摸鱼时间统计
 
@@ -314,11 +360,297 @@ computeOverflow(availableH, itemH)
 
 窗口 `resize` 时会重算（摸鱼窗口常被拉伸）。子菜单定位同样使用 `metrics.itemH` 估算，不再硬编码。
 
+### 顶栏（TopBar）布局与主题适配
+
+**响应式原则：窗口变窄时压缩标题，绝不隐藏快捷操作。**
+
+| 元素 | flex | 效果 |
+|---|---|---|
+| `.title-drag` | `1 1 0` + `min-width: 0` | 空间不足时**先收缩到 0** |
+| `.window-controls` | `0 0 auto` | **永不收缩**，按钮始终保留 |
+| `.ctrl-group` | `0 0 auto` | 同上 |
+
+```css
+@media (max-width: 360px) {
+  .drag-title { display: none; }               /* 标题让位（用户接受不要标题） */
+  .ctrl-btn   { padding: 0 3px !important; }   /* 压缩内边距而非隐藏 */
+  .opacity-label { min-width: 22px; font-size: 9px; }
+}
+```
+
+实测：**窄到 260px 时 8 个按钮仍全部完整可见**。
+
+> ⚠️ **不要用媒体查询隐藏按钮组**。曾写 `@media (max-width: 420px) { .grp-collapsible-a { display:none } }`，
+> 结果窗口一小快捷操作整片消失——这是用户反馈的实际问题。
+>
+> ⚠️ **也不要依赖 `overflow: hidden` 静默裁切**。`.ctrl-btn` 有 `min-width: 22px !important`
+> 无法被压缩到 0，裁切只会把按钮切掉一半，看起来像渲染故障。
+
+**图标颜色走语义变量**（深色下自动翻转）：
+
+| 变量 | 浅色 | 深色 |
+|---|---|---|
+| `--icon` | `rgba(0,0,0,0.5)` | `rgba(255,255,255,0.62)` |
+| `--icon-hover` | `rgba(0,0,0,0.8)` | `rgba(255,255,255,0.92)` |
+| `--icon-strong` | `rgba(0,0,0,0.35)` | `rgba(255,255,255,0.45)` |
+
+原先写死 `rgba(0,0,0,0.5)`——深色下等于**黑图标画在深色底上**，几乎不可见。
+激活态用 `var(--primary)`，两套主题下都自动得到合适的蓝色。
+
+> **验证提示**：手工改 `data-theme` 后**立即**读 `getComputedStyle` 可能拿到未重算的缓存值
+> （实测过：变量已变白、按钮 `color` 却仍报黑色）。可靠做法是让应用以目标主题**启动**后再读。
+
+### 主题系统（浅色 / 深色 / 跟随系统）
+
+三态由设置项 `themeMode`（`'light'` / `'dark'` / `'system'`，**默认 `system`**）决定。
+实际生效的深浅色写入 `<html data-theme="light|dark">` 与 `.dark` 类。
+
+**三个入口，共用同一条链路**：
+
+| 入口 | 交互 |
+|---|---|
+| 设置面板 →「外观」→ 主题 | 下拉三选一 |
+| **顶栏**主题按钮（组2） | 点击循环 `跟随系统 → 浅色 → 深色`；跟随时显示灰点 |
+| **托盘菜单** →「主题：xxx」 | 顶层子菜单，radio 三选一 + 网页跟随开关 |
+
+```
+任一入口
+  └→ applyTheme(mode)
+       ├─ patchSetting('themeMode', mode)   ← 持久化 + IPC
+       └─ setThemeMode(mode) → applyToDom() ← 本地立即生效，避免闪烁
+            ↓ IPC settings:update
+         主进程 applyThemeSource() → nativeTheme.themeSource = mode
+              └→ broadcastTheme() → 'theme:changed' → 所有窗口
+```
+
+顶栏与托盘是三条独立路径，**都汇聚到 `applyTheme` / `updateSettingsFromTray`**。
+注意 `updateSettingsFromTray` 里有专门的判断——只有 `partial` 含 `themeMode` 时才调
+`applyThemeSource()`，否则每次托盘操作都会白白同步一次 nativeTheme。
+
+**双通道写 DOM**（`useTheme.js` 的 `applyToDom`）：
+
+| 写入 | 消费者 |
+|---|---|
+| `data-theme` 属性 | 自有变量体系 `:root[data-theme='dark']` |
+| `.dark` 类 | **Element Plus** 的暗色主题（选择器是 `html.dark`） |
+| `style.colorScheme` | 浏览器原生控件（滚动条、表单） |
+
+**变量体系的两个关键设计**：
+
+1. **通道变量** `--bg-rgb` / `--fg-rgb` 承载底/前景色。组件里大量 `rgba(255,255,255,0.88)` 这类半透明白，改写成 `rgba(var(--bg-rgb), 0.88)`，深色下只需翻转通道，所有半透明层次自动跟随。
+2. **语义变量** `--line` / `--fill-soft` / `--surface-tint` / `--primary` 等，深色块只覆盖这些。
+
+> ⚠️ **深色下描边必须用白色透明度，不能用 `rgba(var(--bg-rgb), a)`**。
+> 深色下 `--bg-rgb` 是深色，用它做线条会让边框几乎不可见。
+> 正确写法见 `--line: rgba(255, 255, 255, 0.14)`。
+
+> ⚠️ **`themeVars`（内联样式）里绝不能出现硬编码颜色**。
+> 内联样式优先级高于样式表，曾出现「顶栏变深但整个窗口仍白」——
+> 原因是那段 `background: '#fff'` 与 `--header-tint: '#f5f5f7'` 写死了。
+> 现已改为 `var(--surface-tint)`，且 `.window-shell` 补了 `background: rgb(var(--bg-rgb))` 兜底
+> （`html`/`body`/`#app` 都是 `transparent`，外壳底色只能在这里给）。
+
+> ⚠️ **`--shell-alpha` / `--page-alpha` 必须真的被 CSS 消费，且必须带 alpha 通道。**
+>
+> `.window-shell` 的底色曾写成 `background: rgb(var(--bg-rgb))` —— `rgb()` 没有 alpha 通道，
+> 外壳永远是实心色块。**结果「软件背景透明 / 网页背景透明」全部失效**：变量值是对的
+> （`--shell-alpha: 0`），但渲染出来仍是 `rgb(255,255,255)`，后面所有透明处理都被挡住。
+>
+> 正确写法：
+> ```css
+> .window-shell { background: rgba(var(--bg-rgb), var(--shell-alpha, 1)); }
+> ```
+> 做深色主题迁移时，`rgba(255,255,255,var(--shell-alpha))` → `rgb(var(--bg-rgb))` 这种
+> 「只换颜色、丢掉 alpha」的改法很容易发生。改完务必确认**变量仍在表达式里**。
+
+> ⚠️ **透明规则会被后出现的同特异性规则覆盖**。
+> `.mode-transparent-page .webview-frame { background: transparent }` 与
+> `.webview-wrap .webview-frame { background: var(--page-surface) }` **都是 2 个 class**，
+> 特异性相同时**后出现的胜出**，透明被覆盖成不透明底。
+> 现已显式加 `!important` 并提升选择器，同时补上 `webview` 元素本身的透明 —— 
+> Electron 的 `<webview>` 默认有不透明底，只清 frame 不够。
+
+> ⚠️ **选择器特异性会覆盖主题**。设置弹窗曾出现「深色下整块白底」——
+> 根因是 `.settings-modal-layer.settings-floating .settings-modal` 这条**比 `.panel` 更具体**的规则
+> 写了 `rgba(255, 255, 255, ...)`。现已改为 `rgba(var(--bg-rgb), ...)`。
+> 新增样式时若发现"某个元素在深色下没变"，先查是不是被更具体的选择器覆盖。
+
+**跟随系统能实时响应**：主进程监听 `nativeTheme.on('updated')` → `broadcastTheme()`；
+渲染进程还有 `matchMedia('(prefers-color-scheme: dark)')` 作为纯浏览器环境的降级。
+
+**网页跟随**（`darkenWebPages`，默认开）：深色模式下给 webview 注入
+`html { filter: invert(1) hue-rotate(180deg) }`，并对 `img/video/canvas` 等媒体元素
+**二次反色**还原，避免照片变负片。仅有内容脚本级能力，已自适应深色的站点会显得过深。
+
+### 版本更新（GitHub Releases）
+
+**不使用任何自建后端**。更新源是 GitHub Releases，由 `electron-updater` 读取 Release 里的
+`latest.yml` / `latest-mac.yml` 比对版本。
+
+```
+关于页「检查更新」→ window.desktop.checkForUpdate()
+  → 主进程 ipcMain 'update:check' → checkForUpdates()
+       └→ autoUpdater.checkForUpdates()   ← 读 GitHub Release 的 latest.yml
+            ├─ hasUpdate → About 页显示「下载并安装」+「手动下载」
+            ├─ 下载 → downloadUpdate()，进度经 'update:download-progress' 广播
+            └─ 安装 → installUpdate() → quitAndInstall()
+```
+
+**配置位置**（`MoYu/package.json`）：
+
+```json
+"repository": { "url": "https://github.com/wangbenchi66/MoYu.git" },
+"build": { "publish": [{ "provider": "github", "owner": "wangbenchi66", "repo": "MoYu" }] }
+```
+
+> ⚠️ **主进程是 ESM，`electron-updater` 是 CJS**，必须用 `createRequire(import.meta.url)`
+> 加载。直接 `require()` 会报 `require is not defined in ES module scope`
+> （`package.json` 里有 `"type": "module"`，`.js` 一律按 ESM 解析）。
+
+**为什么 `autoDownload = false`**：检查到新版本后由用户决定是否下载，避免在后台默默消耗流量。
+
+**发布流程要点**（`.github/workflows/main.yml`）：
+
+**触发**：推送 `v*` tag 自动触发；也可在 Actions 页面手动触发（重跑用）。
+
+| 要点 | 原因 |
+|---|---|
+| **`guard` job 校验仓库与触发者** | `on.push.tags` 是仓库级配置，别人 fork 后打 tag 也会跑。用「仓库名 + `github.actor`」双重判断挡掉 |
+| `draft: false` | **draft release 对 electron-updater 不可见**，会导致「检查更新」永远返回已是最新 |
+| **tag 与 `package.json` 版本必须一致** | `latest.yml` 的版本号取自 package.json 而 Release 挂在 tag 上；不一致时 electron-updater 认为无新版本，**静默失效**。流水线会直接拦下 |
+| 上传 `latest.yml` / `latest-mac.yml` | 这是更新清单，缺了它 electron-updater 无法判断版本 |
+| 上传 `*.blockmap` | 增量更新所需 |
+| Windows 目标为 `nsis` | 自动更新的前提；portable 版不支持 |
+
+**发版步骤**：
+
+```bash
+# 1. 改 MoYu/package.json 的 version（必须与 tag 一致）
+git add MoYu/package.json && git commit -m "chore: 版本号提升至 0.0.6" && git push
+# 2. 打 tag 推送 → 触发自动打包
+git tag v0.0.6 && git push origin v0.0.6
+```
+
+**流水线**：`guard`（权限校验）→ `create-release`（版本校验 + 建 Release）→ `build`（macOS/Windows 矩阵并行）。
+
+> **guard 的边界**：它是**软性保护**——对方能改掉自己 fork 里的判断。
+> 它防的是"无意触发"与"产物看起来像官方发布"，不是恶意篡改。
+> 需要更强时可再加一道只有仓库所有者知道的 secret 校验。
+
+**兜底入口**：About 页保留了「GitHub Releases」一行，自动更新不可用时（平台不支持、
+无权限安装等）用户仍可手动下载。
+
+**IPC**：`update:get-version`（纯本地，返回版本号/平台/Releases 地址）、
+`update:check`、`update:download`、`update:install`，
+以及主进程→渲染进程的 `update:download-progress`。
+
+> **已移除**：自建网关版本检测（`GET /api/MoYu/CheckVersion`）、`src/http/`（axios 封装）、
+> `axios` 依赖、`UpdatePage.vue` 与 `/update` 路由、`forceUpdateActive` 守卫。
+> 原实的强制更新路径会在接口不可达时把用户锁在更新页，已彻底去掉。
+
+### F11 全屏（主进程接管）
+
+#### ⚠️ 为什么必须自己接管，而不是用 Chromium 内建 F11
+
+窗口配置是 `transparent: true` + `frame: false` + `backgroundColor: '#00000000'`。
+**在这类窗口上，Windows 的内建 F11 有严重缺陷**（均为实测结论）：
+
+| 现象 | 实测数据 |
+|---|---|
+| 全屏后 **`win.isFullScreen()` 仍返回 `false`** | bounds 已变成整屏 `2048×1152`，但 API 报 false |
+| 退出全屏后**不恢复原尺寸** | 停在 `2048×1152`，用户看到的就是「按 F11 后再按一下没反应」 |
+| 触发 `resize` 时 `getBounds()` 返回**整个屏幕** | 若照单存进 store，窗口尺寸会被写成屏幕分辨率 |
+
+**根因**：内建 F11 是为标准窗口设计的；透明窗口由 DWM 合成器处理，
+全屏状态与 Chromium 的窗口状态不同步。
+
+#### 实现要点（`toggleFullScreen()`）
+
+1. **用自维护的 `_isFullScreen` 判断方向，不查 `win.isFullScreen()`**。
+   这是最关键的一点——因为该 API 恒为 false，若据此判断，
+   两次 F11 都会走「进入全屏」分支，**永远退不出来**。
+2. **进入前记录 `_boundsBeforeFullScreen`，退出时 `setBounds()` 精确还原**，
+   不依赖 Electron 自己恢复。用 `setTimeout(0)` 让全屏状态先提交，
+   否则紧随其后的 `setBounds` 可能被忽略。
+3. **`resize` 里跳过全屏/最大化状态**，避免把屏幕分辨率存成窗口尺寸。
+4. **`rememberWindowBounds()` 在全屏时早退**，避免 `lastVisibleBounds`
+   被撑成屏幕大小（那会影响自动隐藏的「鼠标是否在窗口内」判断）。
+
+拦截方式：
+
+```js
+win.webContents.on('before-input-event', (event, input) => {
+  if (input.type !== 'keyDown' || input.key !== 'F11') return
+  event.preventDefault()
+  toggleFullScreen(win)
+})
+```
+
+> **实测验证**（两轮完整切换）：
+> `901×600` → 全屏 `2048×1152` → **还原 `903×600`** → 再全屏 → **再还原 `904×600`**。
+> 1–2px 差异是 Windows 窗口边框对齐，正常。
+
+### 老板键与「窗口找不到」的兜底
+
+**问题场景**：`fullWindowTransparent`（软件透明）+ `pageTransparentMode`（网页透明）
++ `hoverHeaderMode`（标题栏悬停隐藏）**同时开启**时，窗口虽然显示了，但视觉上与桌面背景
+几乎无法区分。用户连按几次老板键后完全不知道窗口在哪。
+
+**三层兜底**：
+
+| 机制 | 实现 | 作用 |
+|---|---|---|
+| **唤出闪烁** | 主进程 `showMainWindow()` 广播 `window:revealed` → `useRevealHint.js` | 窗口四周**闪一条 1px 细描边**，150ms 内闪灭 |
+| **设置页风险提示** | `App.vue` 的 `showVisibilityWarning` computed | 两个开关都开时，在「外观」分组显示警告条（文案随高亮开关状态变化） |
+| **托盘菜单** | 已有的「显示主窗口」 | 最后手段 |
+
+**开关**：`revealHintOnShow`（默认 **true**），在设置面板「隐私与痕迹」分组，
+位于「老板键隐藏时静音」下方。关掉后不再闪烁，提示文案会改为强调"只能靠托盘找回"。
+
+> **为什么默认开启**：这是防止用户「把自己锁在外面」的兜底——透明开满 + 标题栏隐藏时，
+> 关掉提示会让窗口真的无处可寻。但仍给开关，因为提示对部分人是打扰。
+
+#### ⚠️ 设计基线：摸鱼场景下的「视觉暴露风险」
+
+用户的原话是「**这是摸鱼软件，时间长容易被发现**」。这条约束决定了提示的形态：
+
+| 演进 | 时长 | 视觉元素 | 问题 |
+|---|---|---|---|
+| 最初 | 2200ms | 恢复不透明 + 弹顶栏 + 2px 描边 + 呼吸动画×2 | 又慢又显眼 |
+| 中间 | 520ms | 同上，改单次闪灭 | 仍然显眼 |
+| **现在** | **150ms** | **仅 1px 细描边** | — |
+
+**刻意不做的两件事**（都曾实现过，后按上述理由移除）：
+
+1. **不临时恢复外壳不透明** —— 「一个突然出现的实心方块」是整屏最显眼的东西，
+   暴露风险远高于一条细线。现在保持透明，只在边缘画线。
+2. **不强制显示顶栏** —— 顶栏弹出同样显眼，还会带出一整条控制栏。
+
+**原则**：「看到的时候已经结束了」。改动此处时请保持这个基调——
+任何"更醒目"的调整都是在增加用户被发现的风险。
+
+**`useRevealHint.js` 的关键设计**：
+
+- **只改视觉，不改设置** —— 加 `.reveal-hint` class（仅 `outline` + 极轻 `box-shadow`），
+  不写 settings、不落盘。
+- **只在真需要时闪烁** —— 先看 `revealHintOnShow !== false`（用户允许），
+  再看 `fullWindowTransparent || hoverHeaderMode`（窗口真的可能看不见）。
+- **用户一操作就结束** —— 监听 `pointerdown` / `keydown` / `wheel`（capture），
+  说明他已经找到窗口，不必再等。
+- **重复唤出重新计时**，不叠加多个定时器。
+
+> ⚠️ **`onWindowRevealed` 可能不存在**（纯浏览器环境 `npm run dev:web`），
+> 渲染进程必须做存在性判断。`preload.cjs` 的降级实现里也加了同名方法。
+
+> **调试提示**：直接调 `window.desktop.updateSettings()` 改设置**不会广播回渲染进程**，
+> 渲染进程的 `settings` 仍是旧值。验证依赖 `settings` 的 UI 逻辑时，
+> 必须走真实交互（点击开关 → `patchSetting`），否则会误判成"逻辑没生效"。
+
 ### 设置持久化
 
 - 持久化到磁盘（`userData/glass-reader-settings.json`）：大部分配置项（写入前备份 `.bak`）
 - **不持久化**（每次启动从 `defaultSettings` 重置）：`transparency`、`autoHide`、`transparentBackground`、`hoverHeaderMode`、`pageTransparentMode`、`forcePageTransparent`、`clickThroughMode`、`alwaysOnTop`、`autoScrollEnabled`
-- 推荐站点 / 最近访问 / 站点规则 / 标签会话 / 隐私同意：存 `localStorage`
+- 推荐站点 / 最近访问 / 站点规则 / 标签会话：存 `localStorage`
 - 窗口尺寸、摸鱼统计：存 `electron-store`
 
 **新增设置项的完整步骤**：改 `shared/defaultSettings.js` → 在 `electron/main.js` 的 `normalizeSettings` 中加校验（clamp / Boolean / 白名单）→ 若要立即同步，加进 `useSettings.js` 的 `immediateSyncKeys`。
@@ -333,7 +665,15 @@ computeOverflow(availableH, itemH)
 | 退出清理网页数据 | `clearCacheOnExit` | 关 | `clearAllWebviewData()`，`will-quit` 需 `preventDefault` 后再 `app.quit()` |
 | 历史保留天数 | `historyRetentionDays` | 0（永久） | `useRecentVisits.js`；主进程白名单校验只接受 `0/1/3/7/30` |
 | 启动清理过期 | `autoCleanOnStartup` | 开 | `useDesktopApp.initializeDesktopApp` |
-| 后端在线服务 | `backendEnabled` | **关** | 门禁 `CheckVersion` 与 `ReportDevice` 两个端点 |
+
+> **匿名上报已整体移除**：`PrivacyConsent.vue`（首次启动的隐私同意弹窗）、
+> `useDeviceReport.js`、`ReportDevice` 端点、`device:get-id` IPC、`getDeviceId`、
+> 设置项 `backendEnabled` 全部删除。`App.vue` 启动时还会 `removeItem('moyu-privacy-consent')`
+> 清理历史遗留标记。
+>
+> **`update:get-version` 是本地 IPC**（只返回版本号/平台/Releases 地址，**不联网**），
+> 「关于」页显示版本号用它。真正联网的是 `update:check`（读 GitHub Releases），
+> **仅在用户点击「检查更新」时触发**。启动时不做任何自动版本检测。
 
 > `restoreSession()` 必须在 `settings` 加载**之后**调用，否则读到的开关还是默认值。
 
@@ -351,7 +691,6 @@ computeOverflow(availableH, itemH)
 - `settingsRules` provider 实现了完整的按站点覆盖设置，但 `MainPage` **从不读 `combined.settings`**，`customSettings` 是死路径——接上或删除
 - `MainPage.onWebviewNewWindow` 已定义但模板未绑定
 - `App.vue` 的 `autoRangeRef`、`openDefaultUrl()` 未被引用
-- `http/index.js` 的 Bearer token 分支无写入方
 - `defaultSettings` 中 `forcePageTransparent` 与 `pageTransparentMode` 语义重叠，仅在 `patchSetting` 内联动
 
 ### Vite 配置注意事项

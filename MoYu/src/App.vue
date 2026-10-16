@@ -1,19 +1,17 @@
 <!-- App.vue — 根组件：快捷键处理、设置面板、热区悬停、窗口级 UI 布局 -->
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import ShortcutRow from './components/ShortcutRow.vue';
-import PrivacyConsent from './components/PrivacyConsent.vue';
 import { useDesktopApp } from './composables/useDesktopApp';
-import http from './http/index.js';
 import TopBar from './components/TopBar.vue';
 import MainPage from './pages/MainPage.vue';
 import BottomToolbar from './components/BottomToolbar.vue';
 import TabBar from './components/TabBar.vue';
-import { setForceUpdateActive } from './router/index.js';
 import defaultSettings from './shared/defaultSettings.js';
-import { reportDevice } from './composables/useDeviceReport.js';
+import { isRevealing, useRevealHint } from './composables/useRevealHint.js';
+import { themeMode, effectiveTheme, isDark, setThemeMode, syncThemeFromMain, attachThemeListener, detachThemeListener } from './composables/useTheme.js';
 
 const {
   settings,
@@ -41,7 +39,6 @@ const {
   toggleSetting,
   urlInput,
   handleOpenUrl,
-  updateInfo,
   clearAllTraces,
   cleanExpiredTraces,
   flushSession
@@ -53,24 +50,10 @@ const desktopApi = typeof window !== 'undefined' ? window.desktop : null;
 // 2. 主要职责包括：管理设置面板、捕获与匹配快捷键、协调 BottomToolbar 与 MainPage 的交互、以及窗口热区/悬停逻辑。
 // 3. 关键事件：window 的 keydown（快捷键捕获）、pointermove（热区检测）、mouseout/blur（失焦/移出回退处理）。
 
-function compareVersions(a, b) {
-  const pa = String(a || '0')
-    .split('.')
-    .map(Number);
-  const pb = String(b || '0')
-    .split('.')
-    .map(Number);
-  const len = Math.max(pa.length, pb.length);
-  for (let i = 0; i < len; i++) {
-    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
-    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
-  }
-  return 0;
-}
-
 const isSettingsOpen = ref(false);
-const hasPrivacyConsent = !!localStorage.getItem('moyu-privacy-consent');
-const showPrivacyConsent = ref(!hasPrivacyConsent);
+// 匿名上报功能已移除（连同首次启动的隐私同意弹窗）。
+// 这里清理历史版本遗留的同意标记，避免 localStorage 里留无用数据。
+try { localStorage.removeItem('moyu-privacy-consent'); } catch (e) { }
 let removeOpenSettingsListener = null;
 let _globalErrorHandler = null;
 let _globalRejectionHandler = null;
@@ -489,6 +472,8 @@ function clearCaptured(key) {
 function openSettingsModal() {
   // 当打开设置时，临时确保窗口可接收鼠标事件，避免被鼠标穿透挡住设置交互
   isSettingsOpen.value = true;
+  // 恢复上次的分区展开状态
+  restoreSectionState();
   if (desktopApi?.setIgnoreMouseEvents) {
     try {
       desktopApi.setIgnoreMouseEvents(false);
@@ -558,6 +543,68 @@ async function restoreDefaults() {
     // 用户取消或出错，什么也不做
   }
 }
+
+/**
+ * 设置面板的分区折叠。
+ *
+ * 为什么需要：面板里有 19 个控件（含 7 行快捷键），内容实测约 2050px，
+ * 而摸鱼窗口常常只有 200~500px 高——平铺时用户要滚很久才能找到一项。
+ * 折叠后默认只展开最常用的两组，其余按需展开。
+ *
+ * 展开状态存 localStorage：用户展开过的分组下次打开仍是展开的。
+ */
+const SETTINGS_SECTIONS_KEY = 'moyu-settings-sections';
+
+/**
+ * 设置面板的分区折叠状态。
+ *
+ * key 必须与模板里各折叠头的 toggleSection('xxx') 一一对应，
+ * 且**每个区块一个独立 key**——曾把「窗口与显示」和「外观」都写成 appearance，
+ * 结果点一个另一个跟着动。新增区块时记得同时改这里和模板。
+ */
+const settingsSections = reactive({
+  transparency: true,  // 透明度与窗口行为 —— 高频，默认展开
+  appearance: true,    // 窗口与显示（双列开关）—— 高频，默认展开
+  theme: false,        // 外观（主题 / 网页深色）
+  privacy: false,      // 隐私与痕迹
+  shortcuts: false,    // 快捷键（7 行，最长的一块，默认收起）
+  reset: false,        // 恢复默认（破坏性操作，保持收起以免误触）
+});
+
+function toggleSection(key) {
+  try {
+    settingsSections[key] = !settingsSections[key];
+    localStorage.setItem(SETTINGS_SECTIONS_KEY, JSON.stringify({ ...settingsSections }));
+  } catch (e) { }
+}
+
+function restoreSectionState() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_SECTIONS_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    for (const k of Object.keys(settingsSections)) {
+      if (typeof saved[k] === 'boolean') settingsSections[k] = saved[k];
+    }
+  } catch (e) { }
+}
+
+/**
+ * 是否需要提示「窗口可能找不到」。
+ *
+ * 触发条件：全透明（外壳不可见）+ 标题栏悬停隐藏（顶栏也不可见）同时开启。
+ * 此时窗口在视觉上与桌面无异，用户按了老板键也不知道窗口在哪。
+ *
+ * 这里只做提示，不阻止用户开启 —— 这是他们的选择；
+ * 真正的兜底是 useRevealHint 的唤出高亮。
+ */
+const showVisibilityWarning = computed(() => {
+  try {
+    return !!(settings.fullWindowTransparent && settings.hoverHeaderMode);
+  } catch (e) {
+    return false;
+  }
+});
 
 /**
  * 关闭设置模态并恢复 clickThroughMode 状态
@@ -672,16 +719,43 @@ function goHome() {
   } catch (e) {}
 }
 
-// 已同意：关闭弹窗并上报；刚同意也走此路径
-function handlePrivacyAgreed() {
-  showPrivacyConsent.value = false;
-  reportDevice();
+
+/**
+ * 应用主题：写设置 + 本地立即生效（避免等待 IPC 往返的闪烁）
+ *
+ * 刻意**不弹提示**：主题切换的效果是整屏可见的，再弹一个「已切换为深色」
+ * 属于多余反馈，反而遮挡界面（顶栏按钮还是连点循环，连续弹窗更烦）。
+ */
+function applyTheme(mode) {
+  const next = ['light', 'dark', 'system'].includes(mode) ? mode : 'system';
+  patchSetting('themeMode', next);
+  setThemeMode(next);
 }
 
 /**
- * 切换历史记录保留天数
- * 参数: e - select 的 change 事件
+ * 顶栏主题按钮：在「跟随系统 → 浅色 → 深色」间循环。
+ * 与设置面板的下拉选择共用同一条链路。
  */
+function cycleTopbarTheme() {
+  try {
+    const order = ['system', 'light', 'dark'];
+    const cur = order.includes(themeMode.value) ? themeMode.value : 'system';
+    applyTheme(order[(order.indexOf(cur) + 1) % order.length]);
+  } catch (e) { }
+}
+
+/**
+ * 设置面板的主题下拉
+ */
+function onThemeModeChange(e) {
+  applyTheme(String(e?.target?.value || 'system'));
+}
+
+// 设置项被其它入口（托盘/快捷键/同步）改动时，保持 DOM 一致
+watch(() => settings.themeMode, (m) => {
+  try { setThemeMode(m || 'system'); } catch (e) { }
+});
+
 function onRetentionChange(e) {
   const v = Number(e?.target?.value ?? 0);
   patchSetting('historyRetentionDays', v);
@@ -724,16 +798,21 @@ function handleClearAllTraces() {
     .catch(() => {});
 }
 
-// 未同意：仅关闭本次弹窗，下次启动继续提示
-function handlePrivacyDismissed() {
-  showPrivacyConsent.value = false;
-}
-
 onMounted(() => {
   initializeDesktopApp();
 
-  // 已同意过隐私协议，每次启动静默上报
-  if (hasPrivacyConsent) reportDevice();
+  // 窗口被老板键/托盘唤出时的短暂高亮。
+  // 全透明 + 标题栏悬停隐藏时，窗口显示出来也可能看不见；高亮一次帮用户定位。
+  try {
+    useRevealHint(() => settings);
+  } catch (e) { }
+
+  // 主题：先按设置同步，再订阅主进程广播（含系统深浅色切换）
+  try {
+    setThemeMode(settings.themeMode || 'system');
+    syncThemeFromMain();
+    attachThemeListener();
+  } catch (e) { }
 
   // 暴露给主进程：blur 时判断是否应继续摸鱼计时
   window.__moyuShouldKeepTracking = () => {
@@ -794,43 +873,10 @@ onMounted(() => {
     window.addEventListener('blur', onWindowBlur);
   } catch (e) {}
 
-  // 版本更新检测（受 defaultSettings.backendEnabled 控制；关闭时不发起任何请求，
-  // 也就不会因接口不可达而强制跳转更新页）
-  if (settings.backendEnabled && desktopApi?.checkForUpdate) {
-    desktopApi
-      .checkForUpdate()
-      .then(async (info) => {
-        //TODO:开发环境关闭更新检查，避免频繁访问接口
-        if (!info || info.isDev) return;
-        //console.log('[update] checkForUpdate result:', info);
-        await http
-          .get('/api/MoYu/CheckVersion', { platform: info.platform })
-          .then((res) => {
-            if (!res || !res.success || !res.data?.version) return;
-            const { version, downloadUrl, content } = res.data;
-            const hasUpdate = compareVersions(version, info.currentVersion) > 0;
-            if (hasUpdate) {
-              updateInfo.value = { currentVersion: info.currentVersion, latestVersion: version, downloadUrl, updateContent: content };
-              setForceUpdateActive(true);
-              router.replace({ name: 'update' });
-            }
-          })
-          .catch(() => {
-            //如果更新检查失败（如网络问题），接口访问不到就强提示不允许进入
-            setForceUpdateActive(true);
-            //然后设置一个保底的更新信息，提示用户检查网络或联系管理员
-            updateInfo.value = {
-              currentVersion: info.currentVersion,
-              latestVersion: '9999.9.9',
-              downloadUrl:
-                'http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=Fv7fD8vuvKubhvE0hYSRM2OrkoCLepgr&authKey=QSFki9D1JsetAc7Znyz4ho9n%2FwKBw0YgvELOzr4ASKAP6HEuw%2FJ33owpwrQS8ttJ&noverify=0&group_code=1039337282',
-              updateContent: '更新检查失败，点击下方按钮进入qq群(1039337282)获取。'
-            };
-            router.replace({ name: 'update' });
-          });
-      })
-      .catch((e) => {});
-  }
+  // 启动时的自动版本检测已移除。
+  // 原实现会在接口不可达时把 forceUpdateActive 置真并强制跳转更新页，
+  // 导致「启动即被锁在更新页」；且它依赖的后端接口已不再维护。
+  // 版本检测改为仅在「关于」页由用户主动触发（checkUpdate）。
 
   if (desktopApi?.onOpenSettingsRequest) {
     removeOpenSettingsListener = desktopApi.onOpenSettingsRequest(() => {
@@ -869,6 +915,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   disposeDesktopApp();
+  try { detachThemeListener(); } catch (e) { }
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('keydown', _onCaptureKeydown);
   try {
@@ -1018,7 +1065,7 @@ function localShortcutHandler(e) {
 <template>
   <div
     class="window-shell"
-    :class="[shellClasses, { 'hide-scrollbars': !settings.showScrollbars, 'header-hover-active': headerHoverActive }]"
+    :class="[shellClasses, { 'hide-scrollbars': !settings.showScrollbars, 'header-hover-active': headerHoverActive, 'reveal-hint': isRevealing }]"
     :style="themeVars">
     <!-- top hotzone: when hoverHeaderMode enabled, this invisible strip triggers header/tab reveal -->
     <div
@@ -1044,7 +1091,9 @@ function localShortcutHandler(e) {
         :handleClose="handleClose"
         :goHome="goHome"
         :activeTab="activeTab"
-        :statusMessage="statusMessage" />
+        :statusMessage="statusMessage"
+        :themeMode="themeMode"
+        :cycleTheme="cycleTopbarTheme" />
     </div>
     <template v-else>
       <TopBar
@@ -1059,7 +1108,9 @@ function localShortcutHandler(e) {
         :handleClose="handleClose"
         :goHome="goHome"
         :activeTab="activeTab"
-        :statusMessage="statusMessage" />
+        :statusMessage="statusMessage"
+        :themeMode="themeMode"
+        :cycleTheme="cycleTopbarTheme" />
     </template>
 
     <TabBar
@@ -1099,9 +1150,17 @@ function localShortcutHandler(e) {
             </div>
           </div>
 
-          <section class="settings-block slider-block section-panel">
+          <!-- 折叠头：点击展开/收起。小窗口下默认收起，避免长列表难找 -->
+          <button
+            type="button"
+            class="section-toggle"
+            :class="{ open: settingsSections.transparency }"
+            @click="toggleSection('transparency')">
+            <span class="section-toggle-arrow">▸</span>
+            <span class="section-toggle-title">透明度</span>
+          </button>
+          <section v-show="settingsSections.transparency" class="settings-block slider-block section-panel">
             <div style="display: flex; justify-content: space-between; align-items: center">
-              <label class="field-label">透明度</label>
               <span class="slider-value">{{ settings.transparency }}% 透明度</span>
             </div>
             <input
@@ -1113,7 +1172,16 @@ function localShortcutHandler(e) {
               @input="handleTransparencyInput($event)" />
           </section>
 
-          <section class="toggle-grid section-panel">
+          <!-- 折叠头：点击展开/收起。小窗口下默认收起，避免长列表难找 -->
+          <button
+            type="button"
+            class="section-toggle"
+            :class="{ open: settingsSections.appearance }"
+            @click="toggleSection('appearance')">
+            <span class="section-toggle-arrow">▸</span>
+            <span class="section-toggle-title">窗口与显示</span>
+          </button>
+          <section v-show="settingsSections.appearance" class="toggle-grid section-panel">
             <div class="toggle-column">
               <h3 class="toggle-title">窗口行为</h3>
               <BaseButton
@@ -1153,9 +1221,70 @@ function localShortcutHandler(e) {
             </div>
           </section>
 
+          <!-- 外观（主题） -->
+          <!-- 折叠头：点击展开/收起。小窗口下默认收起，避免长列表难找 -->
+          <button
+            type="button"
+            class="section-toggle"
+            :class="{ open: settingsSections.theme }"
+            @click="toggleSection('theme')">
+            <span class="section-toggle-arrow">▸</span>
+            <span class="section-toggle-title">外观</span>
+          </button>
+          <section v-show="settingsSections.theme" class="settings-block section-panel">
+
+            <!-- 风险提示：全透明 + 顶栏悬停隐藏 时，窗口在视觉上等同消失 -->
+            <div v-if="showVisibilityWarning" class="visibility-warning">
+              <span class="visibility-warning-icon">!</span>
+              <span v-if="settings.revealHintOnShow !== false">
+                「软件背景透明」与「标题栏悬停显示」都已开启，窗口会和桌面背景混在一起。
+                按老板键唤出时会自动短暂高亮一次帮你定位；若仍找不到，
+                可用托盘菜单的「显示主窗口」。
+              </span>
+              <span v-else>
+                「软件背景透明」与「标题栏悬停显示」都已开启，窗口会和桌面背景混在一起。
+                你已关闭「唤出时短暂高亮」，找回窗口只能靠托盘菜单的「显示主窗口」，
+                建议保留该高亮，或关闭上面两个透明开关之一。
+              </span>
+            </div>
+
+            <div class="privacy-row">
+              <span class="privacy-label">主题</span>
+              <select
+                class="privacy-select"
+                :value="themeMode"
+                @change="onThemeModeChange($event)">
+                <option value="system">跟随系统</option>
+                <option value="light">浅色</option>
+                <option value="dark">深色</option>
+              </select>
+            </div>
+
+            <BaseButton
+              class="toggle-row"
+              :class="{ disabled: themeMode !== 'system' }"
+              @click="themeMode === 'system' && toggleSetting('darkenWebPages')">
+              <span>深色模式下让网页也变深</span>
+              <span
+                class="switch"
+                :class="{ on: settings.darkenWebPages }"></span>
+            </BaseButton>
+            <p class="theme-hint">
+              当前生效：{{ effectiveTheme === 'dark' ? '深色' : '浅色' }}<template v-if="themeMode === 'system'">（跟随系统）</template>
+            </p>
+          </section>
+
           <!-- 隐私与痕迹 -->
-          <section class="settings-block privacy-block section-panel">
-            <div class="shortcut-title">隐私与痕迹</div>
+          <!-- 折叠头：点击展开/收起。小窗口下默认收起，避免长列表难找 -->
+          <button
+            type="button"
+            class="section-toggle"
+            :class="{ open: settingsSections.privacy }"
+            @click="toggleSection('privacy')">
+            <span class="section-toggle-arrow">▸</span>
+            <span class="section-toggle-title">隐私与痕迹</span>
+          </button>
+          <section v-show="settingsSections.privacy" class="settings-block privacy-block section-panel">
 
             <div class="privacy-row">
               <span class="privacy-label">历史记录保留</span>
@@ -1198,6 +1327,16 @@ function localShortcutHandler(e) {
                 :class="{ on: settings.muteOnBossKey }"></span>
             </BaseButton>
 
+            <!-- 唤出高亮：全透明 + 标题栏隐藏时，帮用户找到窗口 -->
+            <BaseButton
+              class="toggle-row"
+              @click="toggleSetting('revealHintOnShow')">
+              <span>唤出时短暂高亮（便于找到窗口）</span>
+              <span
+                class="switch"
+                :class="{ on: settings.revealHintOnShow !== false }"></span>
+            </BaseButton>
+
             <BaseButton
               class="toggle-row"
               @click="toggleSetting('keepAudioPlayingInBackground')">
@@ -1214,15 +1353,6 @@ function localShortcutHandler(e) {
               <span
                 class="switch"
                 :class="{ on: settings.clearCacheOnExit }"></span>
-            </BaseButton>
-
-            <BaseButton
-              class="toggle-row"
-              @click="toggleSetting('backendEnabled')">
-              <span>启用后端在线服务（版本检测 / 匿名上报）</span>
-              <span
-                class="switch"
-                :class="{ on: settings.backendEnabled }"></span>
             </BaseButton>
 
             <div class="privacy-actions">
@@ -1249,8 +1379,16 @@ function localShortcutHandler(e) {
 
           <!-- 站点规则管理已移除（按需在页面内快速编辑弹窗保留） -->
 
-          <section class="settings-block shortcut-block section-panel">
-            <div class="shortcut-title">快捷键</div>
+          <!-- 折叠头：点击展开/收起。小窗口下默认收起，避免长列表难找 -->
+          <button
+            type="button"
+            class="section-toggle"
+            :class="{ open: settingsSections.shortcuts }"
+            @click="toggleSection('shortcuts')">
+            <span class="section-toggle-arrow">▸</span>
+            <span class="section-toggle-title">快捷键</span>
+          </button>
+          <section v-show="settingsSections.shortcuts" class="settings-block shortcut-block section-panel">
             <div class="shortcut-grid">
               <ShortcutRow
                 label="老板键（电脑全局）"
@@ -1331,8 +1469,16 @@ function localShortcutHandler(e) {
             </div>
           </section>
 
-          <section class="settings-block section-panel">
-            <div class="field-label">恢复</div>
+          <!-- 折叠头：点击展开/收起。小窗口下默认收起，避免长列表难找 -->
+          <button
+            type="button"
+            class="section-toggle"
+            :class="{ open: settingsSections.reset }"
+            @click="toggleSection('reset')">
+            <span class="section-toggle-arrow">▸</span>
+            <span class="section-toggle-title">恢复</span>
+          </button>
+          <section v-show="settingsSections.reset" class="settings-block section-panel">
             <div style="margin-top: 8px; display: flex; gap: 8px; align-items: center">
               <el-button
                 type="danger"
@@ -1346,11 +1492,155 @@ function localShortcutHandler(e) {
       </section>
     </div>
 
-    <PrivacyConsent v-if="showPrivacyConsent" @agreed="handlePrivacyAgreed" @dismissed="handlePrivacyDismissed" />
+    <!-- 隐私同意弹窗已移除：匿名上报功能整体下线 -->
   </div>
 </template>
 
+<!-- 窗口唤出提示：**不加 scoped**。
+     这里只需要 outline（内联样式没有 outline，本来不必 !important），
+     但保留全局样式是为了避免 scoped 的 [data-v-xxx] 影响后续维护者的判断。 -->
+<style>
+/*
+ * 老板键唤出时的「一闪」提示。
+ *
+ * 场景：软件透明 + 网页透明 + 标题栏悬停隐藏 全开时，窗口虽然显示了，
+ * 但看起来和桌面没有区别，连按几次老板键后完全找不到窗口在哪。
+ *
+ * ⚠️ 设计基线：**这是摸鱼软件，任何持续的视觉异常都可能被人发现**。
+ * 因此这里刻意只做最轻的提示 —— 四周一圈细描边，150ms 内闪灭。
+ *
+ * 刻意**不做**的两件事（都曾被实现过，后按上述理由移除）：
+ *   1. 不临时恢复外壳不透明 —— 「一个突然出现的实心方块」是整屏最显眼的
+ *      东西，风险远高于一条细线。保持透明，只在边缘画线。
+ *   2. 不强制显示顶栏 —— 顶栏弹出来同样显眼，且会带出一整条控制栏。
+ *
+ * 全程只改视觉（一个 class），不改设置、不落盘。
+ */
+.window-shell.reveal-hint {
+  /* 细描边：1px，位置内缩避免被父级 overflow 裁掉 */
+  outline: 1px solid var(--primary) !important;
+  outline-offset: -1px;
+  /* 极轻的外发光，只为让线条在浅色/深色背景上都能看清，不形成"光晕块" */
+  box-shadow: 0 0 6px 0 var(--primary-soft, rgba(91, 147, 255, 0.28)) !important;
+  /* 不要 transition：闪烁本身是瞬时效果，渐变会拖长可感知时长 */
+  transition: none !important;
+}
+
+/* 闪灭：亮 → 灭，单次，150ms。
+ * 与 useRevealHint.js 的 REVEAL_DURATION_MS 对齐（那边略长一点做兜底移除 class）。 */
+@keyframes reveal-flash {
+  0% {
+    outline-color: var(--primary);
+    box-shadow: 0 0 6px 0 var(--primary-soft, rgba(91, 147, 255, 0.28));
+  }
+  100% {
+    outline-color: rgba(91, 147, 255, 0);
+    box-shadow: 0 0 0 0 rgba(91, 147, 255, 0);
+  }
+}
+
+.window-shell.reveal-hint {
+  animation: reveal-flash 0.15s ease-out 1 forwards;
+}
+
+/* 用户要求减少动效时：不闪，只短暂显示一条静态细线 */
+@media (prefers-reduced-motion: reduce) {
+  .window-shell.reveal-hint {
+    animation: none;
+  }
+}
+</style>
+
 <style scoped>
+/* ── 风险提示（全透明 + 顶栏隐藏 时） ── */
+.visibility-warning {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(240, 180, 94, 0.42);
+  background: rgba(240, 180, 94, 0.12);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.visibility-warning-icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--warning, #f0b45e);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+/* ── 分区折叠头 ──
+ * 设置面板有 19 个控件（含 7 行快捷键），内容实测约 2050px；
+ * 摸鱼窗口常只有 200~500px 高，平铺时用户要滚很久才找到一项。
+ * 折叠后默认只展开最常用的两组，显著缩短滚动距离。 */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 7px;
+  background: var(--fill-soft);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  /* 点击热区。虽然视觉上变小了，但仍保留 24px，
+     低于这个值在触控板上很难点中。 */
+  min-height: 24px;
+}
+
+.section-toggle:hover {
+  background: var(--fill-strong);
+}
+
+.section-toggle.open {
+  color: var(--primary);
+  background: var(--primary-faint);
+}
+
+.section-toggle-arrow {
+  display: inline-block;
+  width: 12px;
+  font-size: 10px;
+  transition: transform 0.18s ease;
+  transform-origin: 50% 50%;
+  flex: 0 0 auto;
+}
+
+.section-toggle.open .section-toggle-arrow {
+  transform: rotate(90deg);
+}
+
+.section-toggle-title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 折叠头之后的区块不再需要顶部外边距（间距由折叠头负责） */
+.section-toggle + .settings-block,
+.section-toggle + .toggle-grid {
+  margin-top: 6px !important;
+}
+
 /* 设置面板：摸鱼风格，紧凑低调 */
 .settings-modal {
   width: min(480px, 94%);
@@ -1396,17 +1686,21 @@ function localShortcutHandler(e) {
 .settings-modal :deep(.slider) {
   margin-top: 6px;
 }
+/* ⚠️ 这里的规则带 scoped 属性选择器（.toggle-row[data-v-xxx]），
+   特异性 (0,2,0) 高于 style.css 里的纯 class 规则 (0,1,0)，
+   因此**会覆盖 style.css 中的同名设置**。
+   调整开关行尺寸时要同时改这里，否则改了 style.css 却不生效。 */
 .toggle-row {
-  min-height: 30px;
-  padding: 4px 8px;
-  font-size: 12px;
+  min-height: 26px;
+  padding: 3px 7px;
+  font-size: 11.5px;
 }
 .toggle-grid {
   gap: 6px;
 }
 .toggle-title {
   font-size: 11px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .text-field {
   height: 28px;
@@ -1442,11 +1736,25 @@ function localShortcutHandler(e) {
 .privacy-select {
   font-size: 11px;
   padding: 3px 6px;
-  border: 1px solid var(--el-border-color, #dcdfe6);
+  border: 1px solid var(--el-border-color, var(--line-strong));
   border-radius: 4px;
-  background: var(--el-fill-color-blank, #fff);
+  background: var(--el-fill-color-blank, rgb(var(--bg-rgb)));
   color: inherit;
   cursor: pointer;
+}
+
+/* 主题说明文字：次要信息，弱化显示 */
+.theme-hint {
+  margin: 4px 0 0;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* 禁用态（如非 system 模式下的网页跟随开关） */
+.toggle-row.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .privacy-actions {
   display: flex;
@@ -1476,6 +1784,42 @@ function localShortcutHandler(e) {
   }
   .shortcut-row .shortcut-input {
     width: 100%;
+  }
+}
+
+/* ── 小窗口自适应 ──
+ * 摸鱼场景下窗口常被拉到很小（实测有 360×240、320×200 的用法）。
+ * 这里按**高度**收紧间距与字号：矮窗口最缺的是垂直空间，
+ * 只按宽度适配不够（窗口可能很宽但很矮）。
+ * 用 vh 而非固定 px，保证在各种窗口尺寸下都平滑过渡。 */
+@media (max-height: 480px) {
+  .section-toggle {
+    margin-top: 7px;
+    padding: 5px 9px;
+    min-height: 26px;
+    font-size: 11.5px;
+  }
+  .settings-modal .settings-header {
+    padding-bottom: 3px;
+  }
+  .settings-modal .settings-header h2 {
+    font-size: 12px !important;
+  }
+}
+
+@media (max-height: 360px) {
+  .section-toggle {
+    margin-top: 5px;
+    padding: 4px 8px;
+    min-height: 24px;
+    font-size: 11px;
+  }
+  /* 极矮时隐藏副标题，把空间留给控件 */
+  .settings-modal .settings-header p {
+    display: none;
+  }
+  .settings-modal {
+    padding: 4px 6px;
   }
 }
 </style>

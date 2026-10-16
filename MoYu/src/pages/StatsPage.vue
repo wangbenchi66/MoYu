@@ -318,7 +318,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 .page-header h2 {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text, #333);
+  color: var(--text, var(--text));
   margin: 0;
 }
 
@@ -332,18 +332,18 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
   border: none;
   background: transparent;
   cursor: pointer;
-  color: #666;
+  color: var(--text-secondary);
   transition: background 0.12s;
 }
 
 .back-btn:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--overlay-weak);
 }
 
 .stats-card {
-  background: var(--surface, #fff);
+  background: var(--surface, rgb(var(--bg-rgb)));
   border-radius: 8px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--fill-soft);
   padding: 10px 12px;
 }
 
@@ -356,14 +356,14 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 .card-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text, #333);
+  color: var(--text, var(--text));
 }
 
 .today-total,
 .grand-total {
   font-size: 15px;
   font-weight: 700;
-  color: #409eff;
+  color: var(--primary);
 }
 
 .active-badge {
@@ -372,7 +372,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
   gap: 6px;
   margin-top: 6px;
   font-size: 12px;
-  color: #67c23a;
+  color: var(--success);
   font-weight: 500;
 }
 
@@ -380,7 +380,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #67c23a;
+  background: var(--success);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -402,7 +402,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
   justify-content: space-between;
   padding: 4px 8px;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--overlay-weak);
   font-size: 12px;
 }
 
@@ -411,17 +411,17 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 }
 
 .session-time {
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .session-dur {
-  color: #999;
+  color: var(--muted);
   font-size: 11px;
 }
 
 .total-card .total-days {
   font-size: 11px;
-  color: #999;
+  color: var(--muted);
   margin-top: 4px;
 }
 
@@ -443,12 +443,12 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 }
 
 .day-header:hover {
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--overlay-weak);
 }
 
 .expand-icon {
   flex-shrink: 0;
-  color: #ccc;
+  color: var(--muted);
   transition: transform 0.2s;
 }
 
@@ -459,7 +459,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 .day-date {
   font-size: 12px;
   font-weight: 500;
-  color: var(--text, #333);
+  color: var(--text, var(--text));
 }
 
 .day-total {
@@ -467,12 +467,12 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
   text-align: right;
   font-size: 12px;
   font-weight: 600;
-  color: #409eff;
+  color: var(--primary);
 }
 
 .day-count {
   font-size: 11px;
-  color: #bbb;
+  color: var(--muted);
   flex-shrink: 0;
 }
 
@@ -487,7 +487,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 .empty-tip {
   text-align: center;
   padding: 16px 0;
-  color: rgba(0, 0, 0, 0.25);
+  color: var(--overlay);
   font-size: 12px;
 }
 
@@ -495,9 +495,9 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
   align-self: center;
   padding: 5px 16px;
   border-radius: 4px;
-  border: 1px solid #f56c6c;
+  border: 1px solid var(--danger);
   background: transparent;
-  color: #f56c6c;
+  color: var(--danger);
   font-size: 12px;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
@@ -505,8 +505,8 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 }
 
 .clear-btn:hover {
-  background: #f56c6c;
-  color: #fff;
+  background: var(--danger);
+  color: rgb(var(--bg-rgb));
 }
 
 /* 柱状图 */
@@ -529,7 +529,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 
 .bar-value {
   font-size: 9px;
-  color: #999;
+  color: var(--muted);
   height: 16px;
   line-height: 16px;
   white-space: nowrap;
@@ -540,7 +540,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
   flex: 1;
   width: 100%;
   max-width: 28px;
-  background: #f0f0f0;
+  background: var(--fill-soft);
   border-radius: 3px 3px 0 0;
   display: flex;
   align-items: flex-end;
@@ -549,7 +549,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 
 .bar-fill {
   width: 100%;
-  background: linear-gradient(180deg, #409eff, #66b1ff);
+  background: linear-gradient(180deg, var(--primary), #66b1ff);
   border-radius: 3px 3px 0 0;
   min-height: 2px;
   transition: height 0.3s ease;
@@ -557,13 +557,13 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 
 .bar-label {
   font-size: 10px;
-  color: #666;
+  color: var(--text-secondary);
   margin-top: 4px;
 }
 
 .bar-weekday {
   font-size: 9px;
-  color: #bbb;
+  color: var(--muted);
 }
 
 /* 热力图 */
@@ -576,7 +576,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 
 .heat-cell {
   aspect-ratio: 1;
-  background: #409eff;
+  background: var(--primary);
   border-radius: 3px;
   display: flex;
   align-items: center;
@@ -587,7 +587,7 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
 
 .heat-hour {
   font-size: 9px;
-  color: #fff;
+  color: rgb(var(--bg-rgb));
   font-weight: 600;
 }
 
@@ -598,13 +598,13 @@ const hourlyMax = computed(() => Math.max(1, ...hourlyData.value));
   gap: 6px;
   margin-top: 8px;
   font-size: 10px;
-  color: #bbb;
+  color: var(--muted);
 }
 
 .legend-gradient {
   width: 60px;
   height: 8px;
   border-radius: 4px;
-  background: linear-gradient(90deg, rgba(64, 158, 255, 0.1), rgba(64, 158, 255, 1));
+  background: linear-gradient(90deg, var(--primary-soft), rgba(64, 158, 255, 1));
 }
 </style>

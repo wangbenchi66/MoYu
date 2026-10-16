@@ -1,6 +1,6 @@
 <!-- TopBar.vue — 顶部标题栏（窗口控制、透明度快速切换、品牌图标） -->
 <script setup>
-import { CloseBold, Hide, House, Lock, Monitor, Moon, Setting, Top, Unlock, View } from '@element-plus/icons-vue';
+import { CloseBold, Document, Files, Hide, House, Lock, Moon, Mouse, Setting, Sunny, Sunrise, Unlock, View } from '@element-plus/icons-vue';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 
@@ -21,6 +21,22 @@ const props = defineProps({
   goHome: Function,
   activeTab: Object,
   statusMessage: String,
+  // 主题：当前设置的模式 + 切换回调（由 App.vue 传入，保持本组件无状态依赖）
+  themeMode: { type: String, default: 'system' },
+  cycleTheme: Function,
+});
+
+/** 主题按钮的图标与提示：跟随系统/浅色/深色 */
+const themeIcon = computed(() => {
+  const m = props.themeMode;
+  if (m === 'light') return 'sunny';
+  if (m === 'dark') return 'moon';
+  return 'system';
+});
+
+const themeTitle = computed(() => {
+  const label = props.themeMode === 'light' ? '浅色' : props.themeMode === 'dark' ? '深色' : '跟随系统';
+  return `主题：${label}（点击切换 跟随系统 → 浅色 → 深色）`;
 });
 
 // 透明度在预设值间循环：15 → 40 → 60 → 85
@@ -137,60 +153,6 @@ const cycleAutoHide = () => {
   } catch (e) {}
 };
 
-/**
- * 背景透明三态循环（把原先的两个按钮合并成一个）：
- *   0 = 关闭              ：外壳与网页都不透明
- *   1 = 软件透明        ：shellOnlyTransparent = true（外壳/面板透明，网页保持不透明）
- *   2 = 软件+网页都透明  ：fullWindowTransparent + pageTransparentMode 同时为真
- *
- * 之所以合并：两个旧按钮只差「网页是否也透明」，普通用户难以区分，
- * 却占了顶栏两个位置（顶栏很窄）。
- *
- * 顺序为「软件优先」：先只让外壳透明，再叠加网页透明。
- *
- * 注意三档是**递进叠加**而非互斥：
- *   useDesktopApp 的 themeVars 里 fullWindowTransparent 优先级最高（提前 return），
- *   因此进入第 2 档时必须保留低档位效果，否则从第 1 档切上去会「看起来没变化」。
- */
-const transparencyLevel = computed(() => {
-  try {
-    if (props.settings?.fullWindowTransparent) return 2;
-    if (props.settings?.shellOnlyTransparent) return 1;
-    return 0;
-  } catch (e) { return 0; }
-});
-
-const transparencyTitle = computed(() => {
-  const lv = transparencyLevel.value;
-  if (lv === 2) return '背景透明：软件+网页都透明｜点击关闭';
-  if (lv === 1) return '背景透明：软件透明（外壳/面板）｜点击切为「软件+网页都透明」';
-  return '背景透明：关闭｜点击切为「软件透明」';
-});
-
-function cycleTransparency() {
-  try {
-    const next = (transparencyLevel.value + 1) % 3;
-    const set = props.patchSetting;
-    if (!set) return;
-    // 递进叠加：进入更高档位时保留低档位的效果
-    if (next === 0) {
-      set('shellOnlyTransparent', false);
-      set('fullWindowTransparent', false);
-      set('pageTransparentMode', false);
-    } else if (next === 1) {
-      // 档 1：只让外壳/面板透明，网页保持原样
-      set('fullWindowTransparent', false);
-      set('pageTransparentMode', false);
-      set('shellOnlyTransparent', true);
-    } else {
-      // 档 2：外壳 + 网页一起透明
-      set('shellOnlyTransparent', false);
-      set('pageTransparentMode', true);
-      set('fullWindowTransparent', true);
-    }
-  } catch (e) {}
-}
-
 const showStatus = ref(false);
 let _statusTimer = null;
 
@@ -248,25 +210,41 @@ function dragAreaText() {
           @dblclick="onOpacityDblClick">
           <span class="opacity-label">{{ props.settings?.transparency ?? 0 }}%</span>
         </BaseButton>
+        <!-- 软件背景透明：只让外壳/面板透明（fullWindowTransparent）
+             拆成两个按钮而不是循环：循环一次要改多个设置项，
+             切换过程中容易出现"点了却像没生效"的错觉，分开更直观可控。 -->
         <BaseButton
-          class="ctrl-btn transparency-btn"
-          :class="['lv' + transparencyLevel, { active: transparencyLevel > 0 }]"
-          :title="transparencyTitle"
-          @click="cycleTransparency">
-          <el-icon v-if="transparencyLevel === 0"><Monitor /></el-icon>
-          <el-icon v-else-if="transparencyLevel === 1"><Moon /></el-icon>
-          <el-icon v-else><View /></el-icon>
-          <!-- 小圆点标记：小窗口下靠图标难辨状态，用一个点明确「已开启」 -->
-          <span
-            v-if="transparencyLevel > 0"
-            class="state-dot"
-            :class="{ double: transparencyLevel === 2 }"></span>
+          class="ctrl-btn"
+          :class="{ active: !!props.settings?.fullWindowTransparent }"
+          :title="props.settings?.fullWindowTransparent ? '软件背景透明（已开启，点击关闭）' : '软件背景透明（点击开启）'"
+          @click="() => props.toggleSetting && props.toggleSetting('fullWindowTransparent')">
+          <el-icon><Files /></el-icon>
+        </BaseButton>
+        <!-- 网页背景透明：让嵌入的网页也透明（pageTransparentMode） -->
+        <BaseButton
+          class="ctrl-btn"
+          :class="{ active: !!props.settings?.pageTransparentMode }"
+          :title="props.settings?.pageTransparentMode ? '网页背景透明（已开启，点击关闭）' : '网页背景透明（点击开启）'"
+          @click="() => props.toggleSetting && props.toggleSetting('pageTransparentMode')">
+          <el-icon><Document /></el-icon>
         </BaseButton>
         <span class="ctrl-sep"></span>
       </div>
 
       <!-- 组2：可见性控制（空间不足时次优先隐藏） -->
       <div class="ctrl-group grp-collapsible-b">
+        <!-- 主题：点击在「跟随系统 → 浅色 → 深色」间循环 -->
+        <BaseButton
+          class="ctrl-btn theme-btn"
+          :title="themeTitle"
+          @click="() => props.cycleTheme && props.cycleTheme()">
+          <el-icon v-if="themeIcon === 'sunny'"><Sunny /></el-icon>
+          <el-icon v-else-if="themeIcon === 'moon'"><Moon /></el-icon>
+          <el-icon v-else><Sunrise /></el-icon>
+          <span
+            v-if="props.themeMode === 'system'"
+            class="state-dot system"></span>
+        </BaseButton>
         <BaseButton
           class="ctrl-btn"
           :class="{ active: props.settings.hoverHeaderMode }"
@@ -283,7 +261,9 @@ function dragAreaText() {
           :class="{ active: !!props.settings.autoHide }"
           :title="autoHideTitle"
           @click="cycleAutoHide">
-          <el-icon><Top /></el-icon>
+          <!-- 移出隐藏：用鼠标图标直指触发条件（鼠标移出窗口），
+               比原先的 Top（向上箭头）更不易被误读成「置顶」 -->
+          <el-icon><Mouse /></el-icon>
           <span
             v-if="props.settings.autoHide"
             class="state-dot"></span>
@@ -343,8 +323,8 @@ function dragAreaText() {
 .dev-badge {
   font-size: 9px;
   font-weight: 700;
-  color: #fff;
-  background: #e6a23c;
+  color: rgb(var(--bg-rgb));
+  background: var(--warning);
   padding: 1px 4px;
   border-radius: 3px;
   line-height: 1.2;
@@ -364,14 +344,14 @@ function dragAreaText() {
   box-shadow: none !important;
   border-radius: 4px !important;
   min-width: 0 !important;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--icon);
   transition: background 0.1s ease, color 0.1s ease !important;
   cursor: pointer;
 }
 
 .home-btn:hover {
-  background: rgba(0, 0, 0, 0.06) !important;
-  color: rgba(0, 0, 0, 0.8) !important;
+  background: var(--overlay-weak) !important;
+  color: var(--icon-hover) !important;
 }
 
 .home-btn .el-icon svg {
@@ -380,9 +360,15 @@ function dragAreaText() {
   display: block;
 }
 
-/* 中间拖拽区 */
+/* 中间拖拽区
+ *
+ * flex 说明（重要）：这里是 1 1 0 —— 允许「生长」也允许「收缩到 0」。
+ * 原先只写 flex:1（等价 1 1 0%）时标题区会与按钮区争夺空间；
+ * 现在配合 .window-controls 的 flex-shrink:0，窗口变窄时**先压缩标题**，
+ * 快捷操作始终留在原位（用户明确要求：标题可以不显示，按钮必须保留）。 */
 .title-drag {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -392,7 +378,7 @@ function dragAreaText() {
 
 .drag-title {
   font-size: 11px;
-  color: rgba(0, 0, 0, 0.35);
+  color: var(--icon-strong);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -407,39 +393,45 @@ function dragAreaText() {
   font-weight: 500;
 }
 
-/* 窗口控制区：允许收缩，overflow hidden 使内容静默消失而非溢出 */
+/* 窗口控制区
+ *
+ * flex-shrink: 0 —— **永不收缩**。窗口变窄时由 .title-drag（flex:1 1 0）先让位，
+ * 快捷操作始终保留。这是用户明确要求的优先级：标题可以不显示，按钮必须在。
+ * 注意不要写 overflow:hidden 后依赖它「静默裁切」，那会把按钮切一半。 */
 .window-controls {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 0;
-  overflow: hidden;
 }
 
 /* 通用组容器 */
 .ctrl-group {
   display: flex;
   align-items: center;
-  overflow: hidden;
   min-width: 0;
+  flex: 0 0 auto;
 }
 
 /*
- * 响应式：窗口变窄时按优先级整组隐藏（而非靠 flex 收缩）。
+ * 响应式：窄窗口下**不再隐藏任何按钮组**。
  *
- * 为什么不用 flex 收缩：.ctrl-btn 有 min-width: 22px !important，
- * 按钮无法被压缩到 0，flex 收缩实际不会让按钮「消失」，
- * 只会让 overflow:hidden 从右侧把按钮切掉——可能切到一半、也看不清剩了什么。
- * 实测即使窗口窄到 360px，8 个按钮仍完整可见，因此这里用明确的宽度阈值整组隐藏。
+ * 历史：曾用 @media 在 <=420px 隐藏透明度组、<=340px 隐藏可见性组，
+ * 结果窗口一小快捷操作就整组消失（用户反馈的实际问题）。
+ * 现在改为「压缩标题 + 保留全部按钮」：
+ *   - .title-drag { flex: 1 1 0 }      → 空间不足时先缩小到 0
+ *   - .window-controls { flex: 0 0 auto } → 按钮区不参与收缩
+ * 实测窗口窄到 360px 时全部按钮仍完整可见。
  *
- * 优先级：组1（透明度）最先消失 → 组2（可见性）次之 → 组3（设置/关闭）永不隐藏。
+ * 极窄时（< 300px）仅把标题隐藏、按钮缩小间距，功能不丢。
  */
-@media (max-width: 420px) {
-  .grp-collapsible-a { display: none; }
-}
-@media (max-width: 340px) {
-  .grp-collapsible-b { display: none; }
+@media (max-width: 360px) {
+  /* 标题让位（用户接受「不要标题」） */
+  .drag-title { display: none; }
+  /* 压缩按钮内边距而非隐藏 */
+  .ctrl-btn { padding: 0 3px !important; }
+  .opacity-label { min-width: 22px; font-size: 9px; }
 }
 
 /* 组3（设置/最小化/关闭）：始终完整显示 */
@@ -462,7 +454,7 @@ function dragAreaText() {
   border-radius: 4px !important;
   transition: background 0.1s ease, color 0.1s ease !important;
   cursor: pointer;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--icon);
 }
 
 .ctrl-btn .el-icon svg {
@@ -472,18 +464,18 @@ function dragAreaText() {
 }
 
 .ctrl-btn:hover {
-  background: rgba(0, 0, 0, 0.06) !important;
-  color: rgba(0, 0, 0, 0.8) !important;
+  background: var(--overlay-weak) !important;
+  color: var(--icon-hover) !important;
 }
 
 /* 激活状态：蓝色图标 + 浅蓝背景 */
 .ctrl-btn.active {
   background: rgba(59, 130, 246, 0.12) !important;
-  color: #2f78ff !important;
+  color: var(--primary) !important;
 }
 
 .ctrl-btn.active .el-icon {
-  color: #2f78ff !important;
+  color: var(--primary) !important;
 }
 
 /* 状态圆点：小窗口下图标语义难辨，用一个点明确「此项已开启」
@@ -499,8 +491,8 @@ function dragAreaText() {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #2f78ff;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  background: var(--primary);
+  box-shadow: 0 0 0 1px rgba(var(--bg-rgb), 0.9);
   pointer-events: none;
 }
 
@@ -508,6 +500,11 @@ function dragAreaText() {
   /* 双点：并排两个点，表示「全部透明」这一档 */
   width: 9px;
   border-radius: 3px;
+}
+
+/* 「跟随系统」用灰色点，与「已固定为某主题」的蓝点区分 */
+.state-dot.system {
+  background: #9aa3b2;
 }
 
 .ctrl-btn.active:hover {
@@ -525,7 +522,7 @@ function dragAreaText() {
   display: inline-block;
   width: 1px;
   height: 12px;
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--overlay);
   margin: 0 3px;
   flex-shrink: 0;
 }

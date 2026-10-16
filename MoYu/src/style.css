@@ -1,5 +1,19 @@
-/* style.css — 全局样式（CSS 变量、基础排版、主题色） */
+/* style.css — 全局样式（CSS 变量、基础排版、主题色）
+ *
+ * 主题机制
+ * ─────────
+ * 通过 <html data-theme="light|dark"> 切换。渲染进程的 useTheme.js 负责写入该属性，
+ * 取值来自设置项 themeMode（'light' / 'dark' / 'system'，默认 system）。
+ *
+ * 核心技巧：用 --bg-rgb / --fg-rgb 两个"通道变量"承载底/前景色。
+ * 组件里大量 rgba(var(--bg-rgb), 0.88) 这类带透明度的白，改为 rgba(var(--bg-rgb), 0.88)，
+ * 于是深色模式只需翻转这两个通道，所有半透明层次自动跟随，不必逐个改数值。
+ */
 :root {
+  /* 主题通道（浅色：白底深字） */
+  --bg-rgb: 255, 255, 255;
+  --fg-rgb: 40, 50, 71;
+
   --text: #283247;
   --text-secondary: #6f7a90;
   --muted: #8a93a5;
@@ -10,11 +24,27 @@
   --surface-alpha: 1;
   --shell-alpha: 1;
   --page-alpha: 1;
-  --surface: rgba(255, 255, 255, var(--surface-alpha, 1));
-  --page-surface: rgba(255, 255, 255, var(--page-alpha, 1));
+  --surface: rgba(var(--bg-rgb), var(--surface-alpha, 1));
+  --page-surface: rgba(var(--bg-rgb), var(--page-alpha, 1));
+  /* 标题栏/浮层底色：浅色是极淡灰，深色下是比底色稍亮的层级色 */
+  --surface-tint: #f5f5f7;
   --primary: #2f78ff;
   --primary-soft: rgba(47, 120, 255, 0.14);
+  --primary-faint: rgba(47, 120, 255, 0.05);
   --danger: #eb5454;
+  --success: #67c23a;
+  --warning: #e6a23c;
+  /* 填充与边框层次：组件里大量浅灰底/淡边框统一走这几个 */
+  --fill-soft: rgba(40, 50, 71, 0.05);
+  --fill-strong: rgba(40, 50, 71, 0.09);
+  --line-strong: rgba(40, 50, 71, 0.16);
+  /* 遮罩（半透明黑，深色下需要更重） */
+  --overlay-weak: rgba(0, 0, 0, 0.02);
+  --overlay: rgba(0, 0, 0, 0.08);
+  /* 图标/次要控件的前景色：深色下必须翻转，否则黑图标画在深色底上会看不见 */
+  --icon: rgba(0, 0, 0, 0.5);
+  --icon-hover: rgba(0, 0, 0, 0.8);
+  --icon-strong: rgba(0, 0, 0, 0.35);
   --shadow: 0 18px 50px rgba(132, 145, 170, 0.18);
   /* 滚动条变量 */
   --scrollbar-width: 6px;
@@ -32,12 +62,62 @@
   --tab-padding-horizontal: 10px;
   font-family: 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
 }
+
+/* ── 深色主题 ──
+ * 只覆盖"语义变量"与两个通道，组件样式无需感知主题。
+ */
+:root[data-theme='dark'] {
+  --bg-rgb: 32, 36, 44;
+  --fg-rgb: 232, 236, 244;
+
+  --text: #e8ecf4;
+  --text-secondary: #a9b3c6;
+  --muted: #8b95a7;
+  /* 深色下描边用白色低透明度（不能用 --bg-rgb，那是深色） */
+  --line: rgba(255, 255, 255, 0.14);
+  --line-soft: rgba(255, 255, 255, 0.08);
+  --surface-tint: #262b34;
+  --primary: #5b93ff;
+  --primary-soft: rgba(91, 147, 255, 0.2);
+  --primary-faint: rgba(91, 147, 255, 0.08);
+  --danger: #ff6b6b;
+  --success: #7ed957;
+  --warning: #f0b45e;
+  --fill-soft: rgba(255, 255, 255, 0.06);
+  --fill-strong: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --overlay-weak: rgba(0, 0, 0, 0.14);
+  --overlay: rgba(0, 0, 0, 0.3);
+  /* 深色下图标改用白色系（浅色的黑图标在这里等于隐形） */
+  --icon: rgba(255, 255, 255, 0.62);
+  --icon-hover: rgba(255, 255, 255, 0.92);
+  --icon-strong: rgba(255, 255, 255, 0.45);
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
+  --scrollbar-thumb-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+
+  color-scheme: dark;
+}
+
 /* 项目内统一滚动条样式（仅影响应用自身元素）
    现代风格：细条、圆角、悬停强调、轻微阴影；默认微弱，鼠标移入时变明显 */
 .window-shell {
   /* Firefox */
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
+  /* 窗口外壳兜底底色。
+     注意：html/body/#app 都是 transparent（为支持窗口透明特性），
+     所以外壳底色必须在这里给，且必须跟随主题——否则深色模式下窗口仍是白的。
+
+     ⚠️ 必须用 rgba(...) 并乘上 var(--shell-alpha)，不能用 rgb(...)！
+     用 rgb() 就没有 alpha 通道，外壳永远是实心色块，
+     结果就是「软件背景透明 / 网页背景透明」全部失效——
+     因为外壳本身不透明，后面所有透明处理都被挡住看不见。
+     做深色主题迁移时曾把 rgba(255,255,255,var(--shell-alpha)) 误改成
+     rgb(var(--bg-rgb))，丢掉了 alpha，导致透明功能整体失效。 */
+  background: rgba(var(--bg-rgb), var(--shell-alpha, 1));
 }
 
 .window-shell ::-webkit-scrollbar {
@@ -145,10 +225,10 @@ iframe {
   border-radius: 0;
   /* background:
     radial-gradient(circle at top right, rgba(113, 188, 255, 0.32), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, var(--shell-alpha, 0.9)), rgba(236, 241, 247, calc(var(--shell-alpha, 0.9) - 0.08))); */
+    linear-gradient(180deg, rgba(var(--bg-rgb), var(--shell-alpha, 0.9)), rgba(236, 241, 247, calc(var(--shell-alpha, 0.9) - 0.08))); */
   backdrop-filter: blur(24px) saturate(140%);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
-  /* border: 1px solid rgba(255, 255, 255, var(--shell-alpha, 0.75)); */
+  /* border: 1px solid rgba(var(--bg-rgb), var(--shell-alpha, 0.75)); */
   pointer-events: none;
 }
 
@@ -179,7 +259,7 @@ iframe {
   align-items: center;
   justify-content: space-between;
   /* 使用 shell alpha 变量渲染标题栏背景（单色），便于通过设置切换透明度 */
-  background: rgba(255, 255, 255, var(--shell-alpha, 1));
+  background: rgba(var(--bg-rgb), var(--shell-alpha, 1));
   border-radius: 0;
 }
 
@@ -216,7 +296,7 @@ iframe {
   height: 28px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.8));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.8));
   color: var(--muted);
 }
 
@@ -275,7 +355,7 @@ iframe {
   gap: 6px;
   padding: 4px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, var(--shell-alpha, 0.74));
+  background: rgba(var(--bg-rgb), var(--shell-alpha, 0.74));
 }
 
 .nav-btn {
@@ -289,7 +369,7 @@ iframe {
 
 .nav-btn.active {
   color: var(--text);
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.96));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.96));
   border-color: var(--line);
 }
 
@@ -297,7 +377,7 @@ iframe {
   padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid var(--line-soft);
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.65));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.65));
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -308,7 +388,7 @@ iframe {
   height: 28px;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.75));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.75));
   color: var(--text);
 }
 
@@ -321,13 +401,13 @@ iframe {
 }
 
 .control-btn.close:hover {
-  color: #fff;
+  color: rgb(var(--bg-rgb));
   background: var(--danger);
   border-color: var(--danger);
 }
 
 .tabbar {
-  background: color-mix(in srgb, var(--header-tint) 22%, rgba(255, 255, 255, var(--shell-alpha, 0.92)));
+  background: color-mix(in srgb, var(--header-tint) 22%, rgba(var(--bg-rgb), var(--shell-alpha, 0.92)));
 }
 
 /* Make non-interactive areas of tabbar draggable so merged header/tab area can drag */
@@ -359,7 +439,7 @@ iframe {
   padding: 0 var(--tab-padding-horizontal, 10px);
   border: 1px solid transparent;
   border-radius: 10px 10px 0 0;
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.6));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.6));
   color: var(--muted);
   display: inline-flex;
   align-items: center;
@@ -368,7 +448,7 @@ iframe {
 }
 
 .tab-chip.active {
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.96));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.96));
   color: var(--text);
   border-color: var(--line);
 }
@@ -383,7 +463,7 @@ iframe {
   height: 28px;
   border-radius: 8px;
   border: 1px dashed var(--line);
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.6));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.6));
 }
 
 .workspace {
@@ -415,14 +495,33 @@ iframe {
   z-index: 999999999 !important;
 }
 
+/* 设置内容区：**唯一的滚动容器**。
+ *
+ * 修复历史：这里曾是三层嵌套滚动
+ *   1. .settings-modal-layer.settings-floating { overflow: auto }
+ *   2. .settings-modal { max-height: 100vh-40px; overflow: auto }
+ *   3. .settings-page { height: 100%; overflow: auto }   ← 本行
+ * 嵌套滚动容器互相压制，加上 height:100% 把内容区强行压成外层高度，
+ * 结果内容（实测约 2100px）在小窗口（高 160~560px）里**既显示不全也不能滚动**。
+ *
+ * 现在：外层只负责定位（不滚动），弹窗只负责限高（不滚动），
+ * 由本元素独占滚动，内容自然撑高、正常滚动。
+ */
 .settings-page {
+  flex: 1 1 auto;
   min-height: 0;
-  height: 100%;
   width: 100%;
-  padding: 20px 18px;
-  overflow: auto;
+  /* 内边距收窄：原来是 20px 18px，在 300px 高的摸鱼窗口里，
+     上下就吃掉 40px（约 13% 的高度），而设置项又多，滚动距离被拉长。 */
+  padding: 10px 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
+  /* 整体字号下调一档，配合行高收紧让更多设置项一屏可见 */
+  font-size: 11px;
 }
 
 .settings-modal-layer {
@@ -434,7 +533,7 @@ iframe {
   align-items: stretch;
   justify-content: flex-end;
   padding: 56px 20px 20px;
-  background: rgba(255, 255, 255, var(--shell-alpha, 0.22));
+  background: rgba(var(--bg-rgb), var(--shell-alpha, 0.22));
   backdrop-filter: blur(14px) saturate(120%);
   -webkit-backdrop-filter: blur(14px) saturate(120%);
   border-radius: 18px;
@@ -453,28 +552,44 @@ iframe {
 .settings-modal-layer.settings-floating {
   justify-content: flex-start;
   align-items: flex-start;
-  padding: 12px;
+  /* 内边距尽量小，让面板铺满（原来是 12px，四周浪费较多）。
+     这里保留 6px 是为了让面板的圆角与描边不被裁掉。 */
+  padding: 6px;
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  /* 确保浮动模式可以接收鼠标/滚动事件并允许滚动 */
+  /* 确保浮动模式可以接收鼠标/滚动事件 */
   pointer-events: auto;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+  /* 不要在这里加 overflow:auto —— 外层只负责定位。
+     真正滚动交给内部的 .settings-page，嵌套滚动会互相压制（见该处注释）。 */
+  overflow: hidden;
   overscroll-behavior: contain;
 }
 
 .settings-modal-layer.settings-floating .settings-modal {
-  width: min(420px, 92%);
-  margin: 12px 20px 0 auto;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, calc(var(--surface-alpha, 0.74) - 0.12));
-  box-shadow: 0 3px 9px rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(210, 220, 230, 0.12);
-  /* 限制最大高度并在内部启用滚动 */
-  max-height: calc(100vh - 40px);
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+  /* 铺满可用区域。
+   *
+   * 原先写死 `min(420px, 92%)` —— 在大窗口（如 900px 宽）下只用了不到一半宽度，
+   * 右侧 480px 全空着，而内容却被压在窄栏里需要不断滚动，很浪费。
+   * 现在改为 flex 撑满，宽度随窗口自适应。
+   *
+   * 注意：外层 .settings-modal-layer 有 inset: 10px，所以"铺满"是指铺满
+   * 那圈内缩后的区域 —— 保留 10px 边距，避免面板和窗口边缘完全贴合显得局促。 */
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  border-radius: 10px;
+  /* 必须用 --bg-rgb 通道变量：此处选择器比 .panel 更具体，写死白色会在深色主题下
+     让整个设置弹窗保持白底（曾出现的实际问题）。 */
+  background: rgba(var(--bg-rgb), calc(var(--surface-alpha, 0.74) - 0.12));
+  box-shadow: 0 3px 9px var(--overlay);
+  border: 1px solid var(--line);
+  /* 限高，但**不滚动**：滚动由内部 .settings-page 独占。
+     两侧都设 overflow:auto 会形成嵌套滚动，实测导致内容显示不全。 */
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
   overscroll-behavior: contain;
 }
 
@@ -534,7 +649,7 @@ iframe {
   height: 38px;
   border-radius: 10px;
   border: 1px solid rgba(186, 193, 208, 0.62);
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.88));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.88));
   padding: 0 14px;
   color: var(--text);
 }
@@ -555,7 +670,7 @@ iframe {
   border: none;
   border-radius: 10px;
   background: var(--primary);
-  color: #fff;
+  color: rgb(var(--bg-rgb));
 }
 
 .page-frame {
@@ -578,7 +693,7 @@ iframe {
 }
 
 .mode-transparent-page .page-frame.is-webview {
-  background: rgba(255, 255, 255, var(--page-alpha, 0.12));
+  background: rgba(var(--bg-rgb), var(--page-alpha, 0.12));
 }
 
 .page-head h1 {
@@ -620,7 +735,7 @@ iframe {
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
-  border: 1px solid rgba(220, 224, 235, 0.85);
+  border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
   text-align: left;
@@ -657,7 +772,7 @@ iframe {
   border-radius: 12px;
   font-size: 12px;
   font-weight: 700;
-  color: #fff;
+  color: rgb(var(--bg-rgb));
 }
 
 .site-mark.green {
@@ -695,7 +810,7 @@ iframe {
   min-height: 46px;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(220, 224, 235, 0.85);
+  border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text);
   text-align: left;
@@ -728,7 +843,10 @@ iframe {
 
 .settings-header h2 {
   margin: 0;
-  font-size: 28px;
+  /* 兜底值。实际显示由 App.vue 的 `.settings-modal .settings-header h2`（13px）决定，
+     这里写 28px 是早期大标题设计的遗留——万一那条更具体的规则失效，
+     28px 会在小窗口里撑出一个巨大的标题，故一并收敛。 */
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -748,34 +866,37 @@ iframe {
 }
 
 .section-panel {
-  padding: 14px;
-  border: 1px solid rgba(220, 224, 235, 0.85);
-  border-radius: 12px;
+  /* 内边距收紧：14px → 8px。设置面板里有多层嵌套面板
+     （page > section-panel > toggle-grid > toggle-column），
+     每一层的内边距会累加，缩小单层收益明显。 */
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
   background: var(--surface);
 }
 
 .slider {
   width: 100%;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .toggle-grid {
-  margin-top: 20px;
+  margin-top: 10px;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 14px;
+  gap: 8px;
 }
 
 .toggle-column {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
 }
 
 .toggle-title {
   margin: 0;
-  font-size: 13px;
-  color: #60708a;
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .toggle-row,
@@ -787,9 +908,9 @@ iframe {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  border: 1px solid rgba(213, 219, 232, 0.85);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.72));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.72));
   color: var(--text);
   text-align: left;
 }
@@ -805,8 +926,11 @@ iframe {
 }
 
 .switch {
-  width: 56px; /* 与容器 flex 基准一致，确保轨道填满 */
-  height: 28px;
+  /* 尺寸整体缩小一档：56×28 → 40×20。
+     宽度更多由使用处的 flex-basis 决定（见 .toggle-row .switch），
+     这里同时写 width 是为了让非 flex 场景下也一致。 */
+  width: 40px;
+  height: 20px;
   border-radius: 999px;
   background: #c8ccd5;
   position: relative;
@@ -817,13 +941,14 @@ iframe {
 .switch::after {
   content: '';
   position: absolute;
-  top: 5px; /* 使圆点垂直居中（28 - 18 = 10） */
+  /* 圆点垂直居中：20 - 14 = 6，上下各 3px */
+  top: 3px;
   left: 3px;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  background: rgb(var(--bg-rgb));
+  box-shadow: 0 1px 4px var(--overlay);
   transition: transform 0.2s ease;
 }
 
@@ -832,7 +957,8 @@ iframe {
 }
 
 .switch.on::after {
-  transform: translateX(32px); /* 56 - 3 - 18 - 3 = 32 */
+  /* 40 - 3 - 14 - 3 = 20 */
+  transform: translateX(20px);
 }
 
 .color-input {
@@ -840,7 +966,7 @@ iframe {
   height: 28px;
   border: 1px solid rgba(186, 193, 208, 0.62);
   border-radius: 8px;
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.82));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.82));
 }
 
 .inline-field {
@@ -850,18 +976,21 @@ iframe {
 }
 
 .shortcut-grid {
-  margin-top: 12px;
+  margin-top: 8px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 14px;
+  /* 自适应列数：面板铺满后横向空间充足，用 auto-fill 让快捷键项
+     在宽窗口下自动排成更多列，而不是固定 2 列把高度堆得很长。
+     最小列宽 150px —— 再窄就没法同时放下标签和输入框了。 */
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 10px;
 }
 
 .shortcut-grid label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .webview-wrap {
@@ -878,7 +1007,7 @@ iframe {
   padding: 6px 8px;
   border-radius: 0;
   background: var(--surface);
-  border: 1px solid rgba(213, 219, 232, 0.85);
+  border: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -903,8 +1032,22 @@ iframe {
   background: var(--page-surface);
 }
 
-.mode-transparent-page .webview-frame {
-  background: transparent;
+/* 网页透明：覆盖 .webview-frame 的底色，并让内层 webview 元素本身也透明。
+ *
+ * ⚠️ 这里必须用 `!important`，不能只靠选择器顺序。
+ * 下面 `.webview-wrap .webview-frame`（同样 2 个 class）在文件中出现更晚，
+ * 特异性相同时**后出现的胜出**，会把这里的 transparent 覆盖回 --page-surface，
+ * 表现就是「勾了网页透明但网页依然是不透明白底」。
+ * 曾因此让整个透明功能失效，故显式提升优先级而非依赖源码顺序。 */
+.mode-transparent-page .webview-frame,
+.mode-transparent-page .webview-wrap .webview-frame {
+  background: transparent !important;
+}
+
+/* webview 元素本身：Electron 的 <webview> 默认有不透明底，必须一并清掉，
+   否则即使 frame 透明，webview 仍会画出一层白底。 */
+.mode-transparent-page webview {
+  background: transparent !important;
 }
 
 /* 仪表盘模式（非 webview）下，page-frame 跟随透明，否则 overlay-panel 透明时会穿透到白色背景 */
@@ -923,7 +1066,7 @@ iframe {
   inset: 0;
   width: 100%;
   height: 100%;
-  border: 1px solid rgba(213, 219, 232, 0.85);
+  border: 1px solid var(--line);
   border-radius: 0;
   overflow: hidden;
   background: var(--page-surface);
@@ -1014,7 +1157,7 @@ iframe {
   padding: 18px;
   border-radius: 16px;
   background: var(--surface);
-  border: 1px solid rgba(220, 224, 235, 0.85);
+  border: 1px solid var(--line);
 }
 
 .preview-copy h2 {
@@ -1025,13 +1168,13 @@ iframe {
 .preview-copy p {
   margin: 0;
   line-height: 1.8;
-  color: #4f5c72;
+  color: var(--text-secondary);
 }
 
 .preview-points {
   margin: 14px 0 0;
   padding-left: 18px;
-  color: #4f5c72;
+  color: var(--text-secondary);
 }
 
 .secondary-btn,
@@ -1088,8 +1231,8 @@ iframe {
 .workspace-block {
   padding: 14px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.7));
-  border: 1px solid rgba(216, 223, 235, 0.9);
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.7));
+  border: 1px solid var(--line);
 }
 
 .workspace-block + .workspace-block {
@@ -1103,7 +1246,7 @@ iframe {
 .hero-block {
   background:
     radial-gradient(circle at top right, rgba(91, 162, 255, 0.22), transparent 38%),
-    linear-gradient(180deg, rgba(255, 255, 255, var(--shell-alpha, 0.92)), rgba(245, 248, 253, calc(var(--shell-alpha, 0.92) - 0.10)));
+    linear-gradient(180deg, rgba(var(--bg-rgb), var(--shell-alpha, 0.92)), rgba(245, 248, 253, calc(var(--shell-alpha, 0.92) - 0.10)));
 }
 
 .hero-label {
@@ -1138,7 +1281,7 @@ iframe {
   padding: 12px;
   border-radius: 14px;
   background: var(--surface);
-  border: 1px solid rgba(220, 224, 235, 0.9);
+  border: 1px solid var(--line);
 }
 
 .metric-card strong {
@@ -1174,7 +1317,7 @@ iframe {
   height: 34px;
   border-radius: 10px;
   border: 1px solid rgba(186, 193, 208, 0.62);
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.92));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.92));
   padding: 0 12px;
   color: var(--text);
 }
@@ -1194,8 +1337,8 @@ iframe {
   align-items: center;
   gap: 10px;
   border-radius: 14px;
-  border: 1px solid rgba(220, 224, 235, 0.85);
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.92));
+  border: 1px solid var(--line);
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.92));
   color: var(--text);
   text-align: left;
 }
@@ -1235,7 +1378,7 @@ iframe {
   align-items: center;
   justify-content: space-between;
   border-radius: 10px;
-  border: 1px solid rgba(220, 224, 235, 0.85);
+  border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text);
 }
@@ -1256,7 +1399,7 @@ iframe {
   margin-top: 12px;
   padding: 12px;
   border-radius: 12px;
-  background: rgba(245, 248, 252, 0.9);
+  background: var(--line);
   color: #647389;
   font-size: 12px;
   line-height: 1.6;
@@ -1298,10 +1441,10 @@ iframe {
 .reader-badge {
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(213, 219, 232, 0.85);
+  background: rgba(var(--bg-rgb), 0.88);
+  border: 1px solid var(--line);
   font-size: 12px;
-  color: #60708a;
+  color: var(--text-secondary);
 }
 
 .dashboard-grid {
@@ -1315,8 +1458,8 @@ iframe {
   min-height: 0;
   padding: 16px;
   border-radius: 16px;
-  border: 1px solid rgba(220, 224, 235, 0.85);
-  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  background: rgba(var(--bg-rgb), 0.72);
 }
 
 .history-list.compact {
@@ -1335,8 +1478,8 @@ iframe {
   min-height: 38px;
   padding: 0 10px;
   border-radius: 10px;
-  border: 1px solid rgba(213, 219, 232, 0.85);
-  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid var(--line);
+  background: rgba(var(--bg-rgb), 0.88);
   color: #5d6a80;
 }
 
@@ -1351,7 +1494,7 @@ iframe {
   flex-direction: column;
   gap: 6px;
   margin-top: 12px;
-  color: #60708a;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -1365,8 +1508,8 @@ iframe {
   min-height: 0;
   padding: 18px 20px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(220, 224, 235, 0.85);
+  background: rgba(var(--bg-rgb), 0.72);
+  border: 1px solid var(--line);
   overflow: auto;
   color: var(--reader-text-color);
 }
@@ -1378,7 +1521,7 @@ iframe {
   gap: 12px;
   padding-bottom: 12px;
   margin-bottom: 16px;
-  border-bottom: 1px solid rgba(220, 224, 235, 0.85);
+  border-bottom: 1px solid var(--line);
 }
 
 .local-reader-head strong {
@@ -1627,7 +1770,7 @@ iframe {
   cursor: pointer;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, var(--surface-alpha, 0.75));
+  background: rgba(var(--bg-rgb), var(--surface-alpha, 0.75));
   color: var(--text);
   padding: 0 10px;
   height: 28px;
@@ -1646,7 +1789,7 @@ iframe {
   height: 28px;
   border-radius: 8px;
   border: 1px dashed var(--line);
-  background: rgba(255,255,255,var(--surface-alpha,0.6));
+  background: rgba(var(--bg-rgb), var(--surface-alpha,0.6));
 }
 
 .el-button.control-btn {
@@ -1664,7 +1807,7 @@ iframe {
 }
 
 .el-button.control-btn.close:hover {
-  color: #fff;
+  color: rgb(var(--bg-rgb));
   background: var(--danger);
   border-color: var(--danger);
 }
@@ -1688,7 +1831,7 @@ iframe {
 }
 
 .el-button.icon-btn.icon-only.on {
-  color: #409eff;
+  color: var(--primary);
   background: rgba(64, 158, 255, 0.06);
 }
 
@@ -1700,7 +1843,7 @@ iframe {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--line-soft);
-  background: rgba(255,255,255,var(--surface-alpha,0.65));
+  background: rgba(var(--bg-rgb), var(--surface-alpha,0.65));
   color: var(--text-secondary);
 }
 
@@ -1715,7 +1858,7 @@ iframe {
 .el-button.secondary-btn {
   padding: 6px 10px;
   border-radius: 6px;
-  background: rgba(255,255,255,var(--surface-alpha,0.65));
+  background: rgba(var(--bg-rgb), var(--surface-alpha,0.65));
   border: 1px solid var(--line-soft);
 }
 
@@ -1723,8 +1866,8 @@ iframe {
   text-align: left;
   padding: 8px;
   border-radius: 6px;
-  border: 1px solid rgba(240,240,240,1);
-  background: #fff;
+  border: 1px solid var(--line);
+  background: rgb(var(--bg-rgb));
 }
 
 .el-button:focus {
@@ -1749,7 +1892,7 @@ iframe {
 /* 覆盖默认 primary 视觉以更贴合主题 */
 .el-button--primary {
   background: var(--primary);
-  color: #fff;
+  color: rgb(var(--bg-rgb));
   border-color: rgba(47,120,255,0.12);
 }
 
@@ -1834,7 +1977,7 @@ iframe {
 }
 
 .el-button.tab-chip .close-mark:hover {
-  background: rgba(0,0,0,0.04);
+  background: var(--overlay-weak);
   color: var(--danger);
 }
 
@@ -1859,8 +2002,8 @@ iframe {
   justify-content: space-between;
   gap: 12px;
   border-radius: 10px;
-  background: rgba(255,255,255,var(--surface-alpha,0.72));
-  border: 1px solid rgba(213,219,232,0.85);
+  background: rgba(var(--bg-rgb), var(--surface-alpha,0.72));
+  border: 1px solid var(--line);
   color: var(--text);
 }
 
@@ -1877,9 +2020,18 @@ iframe {
   align-self: center;
 }
 
-/* 小屏幕下稍微压缩高度，避免过大留白 */
+/* 小屏幕下进一步压缩高度。
+ *
+ * ⚠️ 这里原来是 `min-height: 42px; padding: 8px 10px` —— 比常规值（当时 46px）只小一点，
+ * 但后来又加了一条全局收紧（46px → 28px），于是这个媒体查询反而变成了**放大**：
+ * 摸鱼窗口通常 < 520px，正好命中它，行高被顶回 42px，把上面的收紧全部抵消。
+ * 现在改为在 28px 基础上再收，方向与全局一致。 */
 @media (max-width: 520px) {
-  .el-button.toggle-row { min-height: 42px; padding: 8px 10px; }
+  .el-button.toggle-row,
+  .toggle-row {
+    min-height: 26px;
+    padding: 3px 7px;
+  }
   .el-button.tab-chip { height: 32px; }
 }
 
@@ -1898,15 +2050,17 @@ iframe {
   justify-content: space-between !important;
   width: 100% !important;
   box-sizing: border-box;
-  min-height: 46px;
-  padding: 10px 14px;
+  /* 收紧：46px → 28px，10/14 → 4/8。
+     设置面板有 20+ 个开关，每行省 18px 就能少滚一屏。 */
+  min-height: 28px;
+  padding: 4px 8px;
 }
 
 .el-button.toggle-row .el-button__content {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
 }
 
@@ -1917,14 +2071,14 @@ iframe {
   text-align: left;
   padding-left: 2px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 11.5px;
 }
 
 /* 右侧开关：固定宽度，靠右对齐，保持列对齐 */
 .el-button.toggle-row .switch,
 .toggle-row .switch {
-  flex: 0 0 56px !important; /* 包含内间距，确保对齐 */
-  margin-left: 12px !important;
+  flex: 0 0 40px !important; /* 与缩小后的轨道宽度一致 */
+  margin-left: 8px !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1956,8 +2110,8 @@ iframe {
 /* 避免内嵌白块：如果 el-button 自带 background，确保边框与背景一致 */
 .settings-page .el-button.toggle-row,
 .settings-modal .el-button.toggle-row {
-  background: rgba(255,255,255,var(--surface-alpha,0.72));
-  border: 1px solid rgba(213,219,232,0.85);
+  background: rgba(var(--bg-rgb), var(--surface-alpha,0.72));
+  border: 1px solid var(--line);
 }
 
 

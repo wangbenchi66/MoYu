@@ -187,7 +187,7 @@ function formatTime(t) {
 
 .history-page.transparent-page .search-input {
   background: transparent !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(var(--bg-rgb), 0.2) !important;
 }
 
 .page-header {
@@ -199,7 +199,7 @@ function formatTime(t) {
 .page-header h2 {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text, #333);
+  color: var(--text, var(--text));
   margin: 0;
   letter-spacing: 0;
   text-transform: none;
@@ -215,12 +215,12 @@ function formatTime(t) {
   border: none;
   background: transparent;
   cursor: pointer;
-  color: #666;
+  color: var(--text-secondary);
   transition: background 0.12s;
 }
 
 .back-btn:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--overlay-weak);
 }
 
 .search-bar {
@@ -231,14 +231,14 @@ function formatTime(t) {
   width: 100%;
   padding: 6px 10px;
   border-radius: 6px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--line-strong);
   font-size: 12px;
   box-sizing: border-box;
 }
 
 .search-input:focus {
   outline: none;
-  border-color: #409eff;
+  border-color: var(--primary);
 }
 
 .history-list {
@@ -252,7 +252,7 @@ function formatTime(t) {
 .history-item {
   padding: 4px 6px;
   border-radius: 5px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--fill-soft);
   background: var(--surface);
   cursor: pointer;
   font-size: 12px;
@@ -260,7 +260,7 @@ function formatTime(t) {
 }
 
 .history-item:hover {
-  background: rgba(64, 158, 255, 0.04);
+  background: var(--primary-faint);
 }
 
 .item-header {
@@ -299,7 +299,7 @@ function formatTime(t) {
 .empty-tip {
   text-align: center;
   padding: 24px 0;
-  color: rgba(0, 0, 0, 0.25);
+  color: var(--overlay);
   font-size: 13px;
 }
 
@@ -315,17 +315,17 @@ function formatTime(t) {
 .page-btn {
   padding: 4px 12px;
   border-radius: 4px;
-  border: 1px solid #ddd;
-  background: var(--surface, #fff);
+  border: 1px solid var(--line-strong);
+  background: var(--surface, rgb(var(--bg-rgb)));
   cursor: pointer;
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
   transition: border-color 0.12s, color 0.12s;
 }
 
 .page-btn:hover:not(:disabled) {
-  border-color: #409eff;
-  color: #409eff;
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .page-btn:disabled {
@@ -335,6 +335,6 @@ function formatTime(t) {
 
 .page-info {
   font-size: 12px;
-  color: #999;
+  color: var(--muted);
 }
 </style>

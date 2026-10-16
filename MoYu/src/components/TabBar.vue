@@ -470,7 +470,7 @@ onBeforeUnmount(() => {
   margin-top: 0; /* 不要额外的项间距 */
 }
 .overflow-item:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--overlay-weak);
 }
 .overflow-item .ov-title {
   overflow: hidden;
@@ -495,7 +495,7 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 .overflow-item .close-mark:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--overlay-weak);
   color: rgba(0, 0, 0, 0.85);
 }
 

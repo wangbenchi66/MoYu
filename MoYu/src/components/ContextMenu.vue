@@ -353,8 +353,8 @@ onBeforeUnmount(() => {
   z-index: 4000;
   -webkit-app-region: no-drag;
   pointer-events: auto;
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgb(var(--bg-rgb));
+  border: 1px solid var(--overlay-weak);
   border-radius: 5px;
   box-shadow: 0 6px 18px rgba(16, 23, 32, 0.14);
   min-width: 120px;
@@ -369,7 +369,7 @@ onBeforeUnmount(() => {
   padding: 0 10px;
   font-size: var(--cm-font, 12px);
   line-height: 1;
-  color: #222;
+  color: var(--text);
   cursor: pointer;
   user-select: none;
   display: flex;
@@ -380,10 +380,10 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 .context-item:hover {
-  background: #f5f7fa;
+  background: var(--fill-soft);
 }
 .context-item.disabled {
-  color: #c0c4cc;
+  color: var(--muted);
   cursor: default;
 }
 .context-item.disabled:hover {
@@ -423,6 +423,6 @@ onBeforeUnmount(() => {
 .context-separator {
   height: 1px;
   margin: 3px 0;
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--overlay-weak);
 }
 </style>

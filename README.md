@@ -16,6 +16,7 @@ MoYu 把「浏览器」和「隐身」两件事合到一起：
 | 透明窗口 | 窗口背景透明（`transparent: true`），透明档位 0→100 可调，还能让网页自身背景也透明 |
 | 老板键 | 全局快捷键（默认 `Alt+Q`）一键隐藏/恢复窗口，任意应用聚焦时都生效；隐藏时**自动静音** |
 | 后台听音频 | 失焦/隐藏时**音频继续播放**（视频仍暂停），可开关 |
+| 深色模式 | 浅色 / **深色** / 跟随系统（默认），可让网页一并变深 |
 | 鼠标穿透 | 开启后鼠标事件穿透到下层窗口，临时关闭设置面板可恢复交互 |
 | 防截屏 | 开启 `setContentProtection`，录屏/截屏软件抓不到窗口内容 |
 | 多标签 | 每个标签一个 `<webview>`，驻留 DOM 只切显隐，切回不重载；**重启可恢复上次标签** |
@@ -47,7 +48,7 @@ MoYu 把「浏览器」和「隐身」两件事合到一起：
 
 ```
 TransBrowser/
-├── .github/workflows/main.yml     CI：手动触发 → 建 Release → macOS/Windows 并行打包并上传
+├── .github/workflows/main.yml     CI：推 v* tag 触发 → 权限校验 → 建 Release → macOS/Windows 并行打包并上传
 ├── .gitignore
 ├── README.md                      ← 本文件（仓库总览）
 └── MoYu/                          ← 应用本体
@@ -68,7 +69,7 @@ TransBrowser/
         ├── main.js                Vue 应用入口
         ├── App.vue                1283 行：根组件、快捷键、设置面板、热区
         ├── style.css              42KB 全局样式与主题变量
-        ├── components/            TopBar / TabBar / BottomToolbar / ContextMenu / ShortcutRow / BaseButton / PrivacyConsent
+        ├── components/            TopBar / TabBar / BottomToolbar / ContextMenu / ShortcutRow / BaseButtononsent
         ├── composables/           状态层（详见第 4 节）
         ├── pages/                 各页面（详见第 5 节）
         ├── rules/                 站点规则注入系统
@@ -120,8 +121,10 @@ TransBrowser/
 | `window:open-settings` | invoke | 打开设置面板 |
 | `shell:open-external` | invoke | 外部浏览器打开（**仅允许 http/https**） |
 | `moyu:get-stats` / `moyu:clear-stats` | invoke | 摸鱼统计读取/清空 |
-| `update:check` | invoke | 返回 `{ currentVersion, platform, isDev }` |
-| `device:get-id` | invoke | 读取/生成持久化的匿名设备 ID |
+| `update:get-version` | invoke | 纯本地返回版本号/平台（**不联网**） |
+| `update:check` | invoke | 检查 GitHub Releases 更新 |
+| `update:download` / `update:install` | invoke | 下载 / 重启安装 |
+| `update:download-progress` | main→renderer | 下载进度 |
 | `renderer:log` | send | 渲染进程日志转发到主进程写文件 |
 | `contextmenu:show` | main→renderer | webview 内右键：转发 guest 的 `params` 供渲染进程渲染菜单 |
 | `preload:loaded` | send | preload 注入自检信号 |
@@ -150,7 +153,7 @@ useDesktopApp.js        聚合导出 + 计算属性（filteredRecentVisits、the
 - **不持久化**（每次启动从 `defaultSettings` 重置）：`transparency`、`autoHide`、`transparentBackground`、`hoverHeaderMode`、`pageTransparentMode`、`forcePageTransparent`、`fullWindowTransparent`、`shellOnlyTransparent`、`clickThroughMode`、`alwaysOnTop`、`autoScrollEnabled`
 - **窗口尺寸** → `electron-store`（键 `width` / `height`，读取时按屏幕工作区 clamp）
 - **摸鱼统计** → `electron-store`（键 `moyuSessions`，结构 `{ "YYYY-MM-DD": [{start, end}, …] }`）
-- **推荐站点 / 最近访问 / 站点规则 / 标签会话 / 隐私同意** → `localStorage`
+- **推荐站点 / 最近访问 / 站点规则 / 标签会话** → `localStorage`
 
 ### 4.4.1 会话恢复（标签页）
 
@@ -315,11 +318,64 @@ session.defaultSession.clearCache()
 
 ### 4.6.3 响应式
 
-窗口变窄时按优先级整组隐藏：`≤420px` 隐藏透明度组，`≤340px` 隐藏可见性组，**设置/最小化/关闭永不隐藏**。
+窗口变窄时**不隐藏任何快捷操作**，而是让标题让位：
 
-> 原先用 `flex` 收缩实现隐藏，但按钮有 `min-width: 22px !important` 无法被压缩——**那套机制从未生效**。实测窄到 360px 时 8 个按钮仍完整可见，故改为明确的媒体查询阈值。
+| 宽度 | 行为 |
+|---|---|
+| > 360px | 标题与按钮都显示 |
+| ≤ 360px | **标题隐藏**，按钮保留；同时压缩内边距与透明度标签字号 |
 
-### 4.7 快捷键分层
+关键 CSS：
+
+```css
+.title-drag      { flex: 1 1 0; }      /* 可收缩到 0，空间不足时先让位 */
+.window-controls { flex: 0 0 auto; }   /* 永不收缩，按钮始终保留 */
+```
+
+> **曾经的错误做法**：用 `@media (max-width: 420px) { .grp-collapsible-a { display:none } }`
+> **整组隐藏**按钮，结果窗口一小快捷操作就整片消失。
+> 现在改为"压缩标题、保留按钮"——实测窄到 **260px** 时全部 8 个按钮仍完整可见。
+>
+> 另外不要依赖 `overflow: hidden` 做"静默裁切"：`.ctrl-btn` 有 `min-width: 22px !important`
+> 无法被压缩，裁切只会把按钮切一半，看起来像渲染故障。
+
+### 4.6.4 图标颜色跟随主题
+
+顶栏按钮的图标色不写死，走语义变量：
+
+| 变量 | 浅色 | 深色 |
+|---|---|---|
+| `--icon` | `rgba(0,0,0,0.5)` | `rgba(255,255,255,0.62)` |
+| `--icon-hover` | `rgba(0,0,0,0.8)` | `rgba(255,255,255,0.92)` |
+| `--icon-strong` | `rgba(0,0,0,0.35)` | `rgba(255,255,255,0.45)` |
+
+> **原因**：原先写死 `rgba(0,0,0,0.5)`，深色模式下等于**黑图标画在深色底上**，
+> 几乎看不见。激活态用 `var(--primary)`，两套主题下都会自动变成合适的蓝色。
+
+### 4.7 主题（浅色 / 深色 / 跟随系统）
+
+**默认跟随系统**。有三个入口，效果一致：
+
+| 入口 | 交互 |
+|---|---|
+| 设置面板 →「外观」→ 主题 | 下拉三选一 |
+| **顶栏**主题按钮 | 点击循环 `跟随系统 → 浅色 → 深色`（跟随时显示灰点标记） |
+| **托盘菜单** →「主题：xxx」 | 顶层子菜单，radio 三选一 |
+
+同时托盘里也能开关「深色模式下让网页也变深」。
+
+**实现要点**：
+
+- 实际生效的深浅色写入 `<html data-theme="...">`，另有 `.dark` 类供 **Element Plus** 使用（EP 的暗色选择器是 `html.dark`）
+- 变量体系用两个"通道变量" `--bg-rgb` / `--fg-rgb` 承载底/前景色。组件里大量 `rgba(255,255,255,0.88)` 这类半透明白改写成 `rgba(var(--bg-rgb), 0.88)`，深色下只需翻转通道，**所有半透明层次自动跟随**
+- 主进程同步 `nativeTheme.themeSource`，并监听 `nativeTheme.on('updated')` 广播给渲染进程——这是"跟随系统"能实时响应的关键
+- 主题设置**会持久化**（不属于"会话级"设置）
+
+**深色模式下让网页也变深**（默认开）：给 webview 注入 `filter: invert(1) hue-rotate(180deg)`，并对 `img/video/canvas` 等媒体元素**二次反色**还原，避免照片变负片。仅对未自适应深色的站点有意义，已适配深色的站点可能显得过深，可关闭。
+
+> **排查提示**：若某个元素在深色下仍是浅色，多半是**被更具体的选择器覆盖**了主题变量。例如设置弹窗曾整块发白，根因是 `.settings-modal-layer.settings-floating .settings-modal` 这条规则比 `.panel` 更具体、且写了写死的白色。
+
+### 4.8 快捷键分层
 | 层级 | 注册位置 | 键 | 生效条件 |
 |---|---|---|---|
 | 全局 | 主进程 `globalShortcut` | `bossKey`（`Alt+Q`） | **任意时候** |
@@ -327,7 +383,7 @@ session.defaultSession.clearCache()
 
 快捷键格式为 Electron Accelerator 风格（`"Ctrl+Alt+T"`）或单字符（`"="`）。**明确不支持 Shift 作为修饰符**（`formatAcceleratorFromEvent` 会拒绝）。
 
-### 4.8 webview 与站点规则注入
+### 4.9 webview 与站点规则注入
 
 页面内按键要能触发宿主功能，靠的是三层配合：
 
@@ -353,15 +409,15 @@ session.defaultSession.clearCache()
 | `/profile/history` | `history` | HistoryPage | 历史记录：搜索 + 分页 + 右键菜单 |
 | `/profile/stats` | `stats` | StatsPage | 摸鱼统计：今日/历史/累计，1s 实时刷新 |
 | `/profile/rules` | `rules` | RulesPage | 站点规则**备份/恢复**，支持油猴脚本导入 |
-| `/profile/about` | `about` | AboutPage | 版本信息与手动检查更新 |
+| `/profile/about` | `about` | AboutPage | 版本信息与检查更新 / 下载安装 |
 | `/profile/help` | `help` | HelpPage | 使用说明（纯静态长文） |
-| `/update` | `update` | UpdatePage | 强制更新页，跳浏览器下载 |
 
-路由守卫：`forceUpdateActive` 为真时，任何导航都被重定向到 `update`。
-
-> **已移除**（曾存在，现已删除）：`/library`（书架）与 `/library/:id`（阅读器）两个页面，
-> 以及首页的「导入文件」入口与本地文件标签页。相关文件 `LibraryPage.vue` / `ReaderPage.vue` /
-> `useLocalFiles.js` / `useLocalReaderAutoScroll.js` 已一并删除。
+> **已移除**（曾存在，现已删除）：
+>
+> - `/library`（书架）与 `/library/:id`（阅读器），以及首页的「导入文件」入口与本地文件标签页。
+>   相关文件 `LibraryPage.vue` / `ReaderPage.vue` / `useLocalFiles.js` / `useLocalReaderAutoScroll.js` 已删除
+> - `/update`（强制更新页）与 `forceUpdateActive` 路由守卫——版本更新改走 GitHub Releases，
+>   `UpdatePage.vue` 已删除
 
 ### 5.1 站点规则备份/恢复
 
@@ -480,6 +536,17 @@ npm start        # 以 file:// 加载 dist/，等价于打包后的运行形态
 
 ### 6.5 打包成安装包
 
+**最省事的方式：双击根目录的 [`build.bat`](build.bat)。** 它内部就是 `cd MoYu && npm run dist:win`，跑完会列出产物并暂停窗口。
+
+它还会做**前置检查**（[`scripts/check-build-lock.ps1`](scripts/check-build-lock.ps1)）：如果检测到有 `MoYu.exe` 从本仓库的构建目录启动、或有卡住的 `7za.exe`，会直接报出 PID 并中止，避免出现下面这种难懂的报错：
+
+```
+⨯ remove ...\release\win-unpacked\MoYu.exe: The process cannot access
+  the file because it is being used by another process.
+```
+
+命令行方式：
+
 ```bash
 cd MoYu
 npm run pack         # 只打包为目录（release/win-unpacked），最快，适合本地验证
@@ -489,11 +556,77 @@ npm run dist:mac     # macOS DMG → release/*.dmg
 
 产物在 `MoYu/release/`。`pack` 不生成安装程序，但能直接双击其中的可执行文件测试，比 `dist:win` 快得多。
 
+> ⚠️ **不要手敲 `electron-builder`**
+>
+> 它是 `node_modules/.bin/` 里的**本地**可执行文件，没有全局安装，也不在系统 `PATH` 中。
+> 直接敲会报：
+>
+> ```
+> 'electron-builder' 不是内部或外部命令，也不是可运行的程序或批处理文件。
+> ```
+>
+> `npm run` 会临时把 `node_modules/.bin` 加进 `PATH`，所以走脚本才找得到。
+> 确实要单独执行时用 `npx electron-builder --win nsis`。
+>
+> **最容易踩的形态**是先跑 `npm run build` 成功，然后顺手接上 `&& electron-builder ...`。
+> `npm run build` 能跑通是因为 `vite` 同样在 `.bin` 里——但下一段没有 `npm run` 前缀，
+> 于是找不到命令。而 `npm run dist:win` **本身已经包含 `npm run build`**，
+> 不需要、也不该拆开手敲：
+
+```bash
+npm run dist:win     # = npm run build && electron-builder --win nsis
+```
+
+**电子镜像**：`ELECTRON_MIRROR` / `ELECTRON_BUILDER_BINARIES_MIRROR` 配在**用户级环境变量**里
+（不在 `.npmrc`，理由见该文件注释）。改完需**新开终端**才生效。
+
 ### 6.6 打包产物 vs CI
 
-仓库 CI（[`.github/workflows/main.yml`](.github/workflows/main.yml)）与你本地跑的是**同一套** `electron-builder`，但 CI 用的是 `npx electron-builder --win --x64 --publish never`，且只在手动触发时运行。CI 的 Node 是 18，本地用当前系统的 Node。
+仓库 CI（[`.github/workflows/main.yml`](.github/workflows/main.yml)）与你本地跑的是**同一套** `electron-builder`，但 CI 用的是 `npx electron-builder --win --x64 --publish never`，且**只在推送 `v*` tag 时自动运行**（也可手动触发）。CI 的 Node 是 18，本地用当前系统的 Node。
 
 ### 6.7 常见问题
+
+**打包报 `'electron-builder' 不是内部或外部命令`**
+
+`electron-builder` 在 `MoYu/node_modules/.bin/` 里，**没有全局安装、不在 PATH**。
+必须经 `npm run`（npm 会临时把 `.bin` 加进 PATH）或 `npx`：
+
+```bash
+npm run dist:win                     # ✓ 正确
+npx electron-builder --win nsis      # ✓ 也可以
+electron-builder --win nsis          # ✗ 找不到命令
+npm run build && electron-builder --win nsis   # ✗ 后半段失败
+```
+
+**最容易踩的形态**是先跑 `npm run build` 成功（`vite` 同样在 `.bin` 里，所以能跑），
+然后顺手用 `&&` 接上 `electron-builder` —— 但那段没有 `npm` 前缀。
+而 `npm run dist:win` **本身就包含 `npm run build`**，不需要拆开写。
+
+**打包报 `The process cannot access the file ... being used by another process`**
+
+```
+⨯ remove ...\release\win-unpacked\MoYu.exe: The process cannot access
+  the file because it is being used by another process.
+```
+
+electron-builder 要清空并重建 `MoYu/release/win-unpacked/`，但有进程占着里面的文件。两种来源：
+
+| 占用者 | 来源 | 处理 |
+|---|---|---|
+| `MoYu.exe` | 你之前从 `release/win-unpacked/` 启动过它（或句柄尚未释放） | 关掉它，等几秒 |
+| `7za.exe` / `app-builder.exe` | 上次打包中断，解压进程卡住 | 结束它 |
+
+```powershell
+# 查看谁在占用
+tasklist | findstr /i "MoYu 7za app-builder"
+
+# 全部结束（注意：会关掉你正在用的 MoYu，包括已安装版）
+taskkill /F /IM MoYu.exe
+taskkill /F /IM 7za.exe
+```
+
+> 用 [`build.bat`](build.bat) 时**不需要手动排查**——它内置的前置检查会直接报出
+> 占用进程的 PID 和路径并中止。
 
 **`npm run dev` / `npm start` 一启动就崩，报 `cjsPreparseModuleExports`**
 
@@ -582,47 +715,120 @@ npm run dist:win
 
 **没有测试框架**（`package.json` 中无 test 脚本，仓库内无测试文件）。
 
+### 换行符约定
+
+**全仓库统一 CRLF**（`\r\n`）。这是 Windows 项目，由两个配置文件强制：
+
+| 文件 | 作用 |
+|---|---|
+| [`.gitattributes`](.gitattributes) | `* text=auto eol=crlf`——仓库内存 LF，检出到工作区时转 CRLF |
+| [`.editorconfig`](.editorconfig) | `end_of_line = crlf`——编辑器写入时用 CRLF |
+
+**新增或重写文件时必须写入 CRLF**。若发现某文件是 LF，用 `git add --renormalize <file>` 修正。
+
+**例外**（不要转 CRLF）：
+
+- 二进制文件（`.png` / `.ico` / `.icns` / `.exe` 等）——转换会损坏文件，已在 `.gitattributes` 标为 `binary`
+- `package-lock.json` / `*.lock`——标为 `-text`
+- `*.sh`——必须是 LF（`.editorconfig` 中单独指定）
+
+> **为什么仓库内存 LF 而不是 CRLF**：与既有的 `core.autocrlf=true` 行为一致，
+> 避免一次改动就把所有文件标记为"已修改"，产生整仓库的 diff 噪音。
+
 ### 环境变量
 
-| 文件 | 变量 | 值 |
-|---|---|---|
-| `.env.development` | `VITE_APP_BASE_API` | `http://localhost:7000` |
-| `.env.production` | `VITE_APP_BASE_API` | `https://gateway.benchi.xyz` |
+**已无自建后端环境变量**。曾用的 `VITE_APP_BASE_API`（指向 `localhost:7000` / `gateway.benchi.xyz`）
+随 `src/http/` 与 axios 一起移除，`.env.*` 文件也已删除。
 
-该变量在 [`src/http/index.js`](MoYu/src/http/index.js) 中作为 `axios.defaults.baseURL`。
+更新源改为硬编码在 [`package.json`](MoYu/package.json) 的 `build.publish` 中（GitHub provider）。
 
 ### 后端接口
 
-应用访问自有网关，共 2 个端点：
+**应用不依赖任何自建后端**。版本更新直接使用 GitHub Releases。
 
-| 端点 | 调用处 | 说明 |
+| 来源 | 调用处 | 说明 |
 |---|---|---|
-| `GET /api/MoYu/CheckVersion` | `App.vue` onMounted、`AboutPage.checkUpdate` | 版本检查，参数 `platform` |
-| `POST /api/MoYu/ReportDevice` | `useDeviceReport.reportDevice` | 匿名设备上报 |
+| GitHub Releases | 关于页「检查更新」 | 由 `electron-updater` 读取 Release 里的 `latest.yml` 比对版本 |
 
-**当前状态：默认全部关闭。** 由 [`defaultSettings.backendEnabled`](MoYu/src/shared/defaultSettings.js)（默认 `false`）控制，设置面板 →「隐私与痕迹」→「启用后端在线服务」可开关。
+**更新流程**：
 
-关闭时的行为：
+```
+关于页「检查更新」
+  └→ 主进程 autoUpdater.checkForUpdates()   ← 读 GitHub Release 的 latest.yml
+       ├─ 有新版本 → 显示「下载并安装」+「手动下载」
+       ├─ 下载（带进度条）→ downloadUpdate()
+       └─ 下载完成 → 询问后 quitAndInstall() 重启安装
+```
 
-| 影响 | 说明 |
-|---|---|
-| 启动版本检测 | 完全不发起请求；因此**不会**再因接口不可达而强制跳转更新页 |
-| 匿名设备上报 | 不发起请求；隐私弹窗的「同意」只写本地标记 |
-| 关于页「检查更新」 | 给出「后端在线服务已关闭」提示 |
-| 版本号显示 | **仍正常**——`window.desktop.checkForUpdate()` 是本地 IPC（只返回版本号/平台），不是网络请求，不受此开关影响 |
+- 更新源配置在 [`package.json`](MoYu/package.json) 的 `build.publish`（provider: github）
+- `autoDownload = false`：**由用户决定是否下载**，不在后台偷偷消耗流量
+- 保留「GitHub Releases」入口作为兜底（平台不支持自动更新时可手动下载）
 
-> **隐私相关**：`/api/MoYu/ReportDevice` 上报 `{ deviceId, platform, appVersion, osInfo }`。`deviceId` 是首次启动生成的 UUID，存于 `userData/.moyu_device_id`，**不随缓存清理丢失**。上报**仅在** `localStorage['moyu-privacy-consent'] === '1'` 时执行（首次启动弹 `PrivacyConsent.vue`，用户点"同意并继续"才写入该标记；点 ✕ 只是关闭本次弹窗，下次启动继续提示）。
+> **已移除**：自建网关（`https://gateway.benchi.xyz`）、`src/http/`（axios 封装）、`axios` 依赖、
+> `POST /api/MoYu/ReportDevice`（匿名上报）、`GET /api/MoYu/CheckVersion`、
+> `UpdatePage.vue` 与 `/update` 路由、`forceUpdateActive` 强制更新守卫。
 >
-> 即：**即使把 `backendEnabled` 重新打开，也必须用户明确同意后才会上报**。两个条件是「与」的关系。
+> 原强制更新路径会在接口不可达时把用户**锁在更新页**，已彻底去掉——现在启动时不做任何版本检测。
 
-**重新启用后端服务**：把 `backendEnabled` 改为 `true`，或在设置面板打开该开关。
+**打包发布**：[`.github/workflows/main.yml`](.github/workflows/main.yml) 在**推送 `v*` tag 时自动触发**，
+会创建**正式 Release**（`draft: false`）并上传 `latest.yml` / `latest-mac.yml` / `*.blockmap`
+—— 这些是自动更新的必需文件。
 
 ### CI/CD
 
-[`.github/workflows/main.yml`](.github/workflows/main.yml) 仅支持 `workflow_dispatch` **手动触发**：
+**触发方式**：
 
-1. `create-release`（ubuntu）读 `MoYu/package.json` 版本号，创建 **draft** GitHub Release
-2. `build` 矩阵并行：`macos-latest/universal` 与 `windows-latest/x64`，各自 `npm ci` → 缓存 Electron 二进制 → `npm run build` → `electron-builder` → 上传 `.dmg` / `.exe` 到该 Release
+| 方式 | 条件 |
+|---|---|
+| **推送 tag**（推荐） | tag 名形如 `v0.0.6`，且**与 `MoYu/package.json` 的 version 一致** |
+| 手动触发 | Actions 页面点 *Run workflow*，用于重跑失败的构建 |
+
+**发布步骤**：
+
+```bash
+# 1. 改版本号（必须与即将打的 tag 一致）
+#    MoYu/package.json → "version": "0.0.6"
+# 2. 提交并推送
+git add MoYu/package.json
+git commit -m "chore: 版本号提升至 0.0.6"
+git push
+# 3. 打 tag 并推送 —— 这一步会触发自动打包
+git tag v0.0.6
+git push origin v0.0.6
+```
+
+**流水线结构**：
+
+```
+guard（ubuntu）★ 权限校验
+  ├─ 仓库必须等于 wangbenchi66/MoYu
+  └─ 触发者必须等于 wangbenchi66
+       ↓ allowed == 'true' 才继续
+create-release（ubuntu）
+  ├─ 校验 tag 与 package.json 版本一致（不一致直接失败）
+  └─ 创建正式 Release（draft: false）
+       ↓
+build（矩阵并行）
+  ├─ macos-latest / universal → .dmg + latest-mac.yml
+  └─ windows-latest / x64     → .exe + latest.yml + *.blockmap
+```
+
+> **为什么需要 `guard`**：`on.push.tags` 是仓库级配置，别人 fork 之后那份副本里
+> workflow 文件同样存在，**对方打 tag 时会在他的仓库里跑一遍**。
+> `guard` 用「仓库名 + 触发者」双重判断挡掉这种情况——
+> 别人的 fork 即使照抄这个文件、即使把 `actor` 改成你的名字，
+> 也会因为 `github.repository` 不匹配而被跳过，不会产生任何构建产物。
+>
+> 这是**软性保护**：对方可以自行改掉 workflow 里的判断（那是他自己的仓库）。
+> 它防的是"无意中触发"和"产物看起来像是官方发布的"，不是恶意篡改。
+> 真要更强,可以再加一道只有你知道的 secret 校验。
+
+> ⚠️ **必须是非 draft Release**。electron-updater 通过 GitHub API 查 latest release，
+> draft 版本对它不可见,会导致客户端「检查更新」永远返回已是最新。
+
+> ⚠️ **tag 与 package.json 版本必须一致**。`latest.yml` 里的版本号取自
+> package.json,而 Release 挂在 tag 上;两者不一致时 electron-updater 会认为
+> "没有新版本",自动更新**静默失效**——这类问题很难排查,所以流水线会直接拦下。
 
 ---
 
@@ -635,10 +841,10 @@ npm run dist:win
 - `App.vue` 中 `autoRangeRef` 定义后未被模板使用（死代码）；`openDefaultUrl()` 同样未被引用。
 - `App.vue` 模板使用了 `BaseButton` 但**未 import**，依赖 `src/main.js` 的全局注册；若拆分组件会立刻报错。
 - `fullWindowTransparent` 变化**不会**触发 `syncWebviewTransparency` 的 watcher（`MainPage.vue` 只监听了 `pageTransparentMode`），需靠其他路径间接触发。
-- 更新检查失败时会**强制**跳转到 `/update` 并展示"联系 QQ 群"的保底文案，用户无法跳过。
-- **遥测文案与实现不符**：`PrivacyConsent.vue` 声称"以加密哈希形式匿名上报"，但 `device:get-id` 实际是明文存盘的 UUID（`userData/.moyu_device_id`），可长期追踪同一设备；且 `osInfo` 兜底分支会带上原始 UA 前 80 字符。
-- `src/http/index.js` 的 `Bearer token` 注入分支是**死代码**（全库无任何地方写入 `localStorage.token`），疑似残留的账号体系设想。
 - `useAppState.js` 中 `activeTabId` 初值为 `1`，而 `tabs` 初值只有 id `0`，初始状态不匹配（靠 `activeTab` 的 `?? tabs.value[0]` 兜底）。
+
+> 已修复（原列于此）：~~更新检查失败时强制跳转 `/update`~~ → 启动时的自动版本检测已整段移除；
+> ~~遥测文案与实现不符~~ → 匿名上报与隐私同意弹窗已整体删除。
 
 **架构注意点**
 - `settingsRules` provider（localStorage `glass_reader_settings_rules`）已实现但**在 MainPage 中未被消费**，`customSettings` 目前是死路径。
@@ -654,7 +860,7 @@ npm run dist:win
 | 方向 | 文档 | 不做的原因 |
 |---|---|---|
 | 插件市场（远程） | [`MoYu/docs/插件市场设计.md`](MoYu/docs/插件市场设计.md) | 需后端 + 审核机制；远程脚本注入 webview 的 XSS 面很大。**已由本地规则备份/恢复 + 油猴导入替代**（见 5.1） |
-| 云同步 / 会员体系 | [`MoYu/docs/市场模式.md`](MoYu/docs/市场模式.md) | 项目无任何账号体系（`http/index.js` 的 Bearer token 分支无写入方，是残留死代码）；且该文档设想的付费点（防截屏、摸鱼统计）当前都是免费功能 |
+| 云同步 / 会员体系 | [`MoYu/docs/市场模式.md`](MoYu/docs/市场模式.md) | 项目无任何账号体系（自建后端与 axios 已全部移除）；且该文档设想的付费点（防截屏、摸鱼统计）当前都是免费功能 |
 | 多窗口 / 分屏 | — | `MainPage` 是"单容器 + `v-show` 切换"结构，改成分屏要动布局与 `webviewRefs` 管理模型，收益/成本比不佳 |
 
 > 对应的条目已从 [`docs/优化与功能建议.md`](docs/优化与功能建议.md) 移除，不再出现在待办清单中。

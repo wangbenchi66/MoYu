@@ -77,23 +77,25 @@ const themeVars = computed(() => {
     // 注意必须放在 fullWindowTransparent 之后判断——后者优先级更高。
     if (settings.shellOnlyTransparent) {
         return {
-            '--header-tint': '#f5f5f7', '--shell-alpha': '0', '--surface-alpha': '0',
+            '--header-tint': 'transparent', '--shell-alpha': '0', '--surface-alpha': '0',
             '--page-alpha': '1', '--reader-text-color': settings.readerTextColor,
             '--reader-font-scale': `${settings.readerFontScale}%`,
         }
     }
     if (!settings.fullWindowTransparent && !settings.pageTransparentMode) {
         return {
-            '--header-tint': '#f5f5f7', '--shell-alpha': '1', '--surface-alpha': '1',
+            // 这些是内联样式，优先级高于样式表；必须用变量，否则深色主题会被这里的
+            // 硬编码白色覆盖（曾出现「顶栏变深但整个窗口仍白」的问题）。
+            '--header-tint': 'var(--surface-tint)', '--shell-alpha': '1', '--surface-alpha': '1',
             '--page-alpha': '1', '--reader-text-color': settings.readerTextColor,
-            '--reader-font-scale': `${settings.readerFontScale}%`, 'background': '#fff',
+            '--reader-font-scale': `${settings.readerFontScale}%`,
         }
     }
     const pageAlpha = settings.pageTransparentMode
         ? Math.max(0.04, 0.94 - settings.transparency / 88)
         : Math.max(0.72, 0.96 - settings.transparency / 145)
     return {
-        '--header-tint': '#f5f5f7', '--shell-alpha': String(shellAlpha),
+        '--header-tint': 'var(--surface-tint)', '--shell-alpha': String(shellAlpha),
         '--surface-alpha': String(surfaceAlpha), '--page-alpha': String(pageAlpha),
         '--reader-text-color': settings.readerTextColor,
         '--reader-font-scale': `${settings.readerFontScale}%`,

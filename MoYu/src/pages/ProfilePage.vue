@@ -51,7 +51,7 @@ function onMenuClick(item) {
 <template>
   <div class="profile-page" :class="{ 'transparent-page': isTransparent }">
     <section class="user-card">
-      <el-avatar :size="56" style="background: #409eff; font-size: 24px">摸</el-avatar>
+      <el-avatar :size="56" style="background: var(--primary); font-size: 24px">摸</el-avatar>
       <span class="nickname">摸鱼达人</span>
     </section>
 
@@ -104,7 +104,7 @@ function onMenuClick(item) {
 .nickname {
   font-size: 16px;
   font-weight: 600;
-  color: var(--text, #333);
+  color: var(--text, var(--text));
 }
 
 .menu-section {
@@ -120,7 +120,7 @@ function onMenuClick(item) {
   padding: 10px 12px;
   cursor: pointer;
   transition: background 0.12s;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid var(--fill-soft);
 }
 
 .menu-item:last-child {
@@ -128,14 +128,14 @@ function onMenuClick(item) {
 }
 
 .menu-item:hover {
-  background: rgba(64, 158, 255, 0.04);
+  background: var(--primary-faint);
 }
 
 .menu-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #666;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -143,11 +143,11 @@ function onMenuClick(item) {
   flex: 1;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text, #333);
+  color: var(--text, var(--text));
 }
 
 .menu-arrow {
   flex-shrink: 0;
-  color: #ccc;
+  color: var(--muted);
 }
 </style>

@@ -20,6 +20,7 @@ import {
   syncReaderEffects, scheduleSyncReaderEffects,
 } from '../composables/mainpage/useWebviewSync.js'
 import { attachPauseListeners, detachPauseListeners, reevaluatePauseState } from '../composables/mainpage/usePauseOnBlur.js'
+import { isDark } from '../composables/useTheme.js'
 import ContextMenu from '../components/ContextMenu.vue'
 
 const { settings, activeTab, activeTabId, tabs, addNewTab, selectTab, closeTab, patchSetting, updateTabMetadata, siteRules, ruleProviders, pushRecentVisit, addRecommendedSite, toggleSetting, recommendedSites, statusMessage } = useDesktopApp()
@@ -260,13 +261,23 @@ function handleWebviewDomReady(e) {
 }
 
 // ─── Watchers ───
+// pageTransparentMode 与 fullWindowTransparent 都会让网页变透明
+// （见 useWebviewSync 里 `enabled = pageTransparentMode || fullWindowTransparent`），
+// 所以两者都必须监听。曾经只监听前者，导致点「软件背景透明」时
+// 已经打开的 webview 不会重新注入透明样式——用户看到的就是"点了没反应"。
 watch(() => settings.pageTransparentMode, () => scheduleSyncReaderEffects())
+watch(() => settings.fullWindowTransparent, () => scheduleSyncReaderEffects())
 watch(() => settings.noImageMode, () => scheduleSyncReaderEffects())
 watch(() => settings.autoScrollEnabled, () => scheduleSyncReaderEffects())
 watch(() => settings.autoScrollSpeed, () => scheduleSyncReaderEffects())
 watch(() => settings.readerTextColor, () => { syncWebviewTextColor() })
 watch(() => settings.forceReaderTextColor, () => { syncWebviewTextColor() })
 watch(() => settings.showScrollbars, () => syncWebviewScrollbars())
+// 主题或「网页也变深」开关变化时，重新注入/移除深色 CSS
+watch(() => settings.darkenWebPages, () => scheduleSyncReaderEffects())
+watch(() => settings.themeMode, () => scheduleSyncReaderEffects())
+// 跟随系统时，系统深浅色切换也要同步到已打开的 webview
+watch(isDark, () => scheduleSyncReaderEffects())
 watch(() => settings.readerFontScale, () => { syncWebviewFontSize() })
 watch(() => settings.forceReaderFont, () => { syncWebviewFontSize() })
 

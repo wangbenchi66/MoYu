@@ -1,0 +1,43 @@
+# .editorconfig — 编辑器统一配置
+# 被 VSCode / JetBrains / Sublime / Vim 等原生支持或经插件支持。
+# 与 .gitattributes 配合：前者管编辑器写入，后者管 git 检出。
+# https://editorconfig.org
+
+root = true
+
+# 默认：所有文件用 CRLF、UTF-8、LF 之外的统一风格
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# JavaScript / Vue / CSS / JSON：2 空格
+[*.{js,cjs,mjs,ts,vue,css,html,json,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# Markdown：保留行尾空格（两个空格表示换行），且不强制 2 空格缩进
+[*.md]
+trim_trailing_whitespace = false
+indent_size = 2
+
+# Windows 批处理：CRLF 是硬要求，否则部分命令会出错
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# Shell 脚本：必须 LF
+[*.sh]
+end_of_line = lf
+
+# 以下是二进制或不关心格式的文件，显式排除以免被编辑器重写
+[*.{png,jpg,jpeg,gif,ico,icns,webp,woff,woff2,ttf,otf,exe,dll,dmg,zip,pdf}]
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+# 锁文件不要动
+[package-lock.json]
+insert_final_newline = false
+trim_trailing_whitespace = false

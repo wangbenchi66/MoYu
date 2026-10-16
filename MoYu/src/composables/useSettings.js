@@ -14,20 +14,50 @@ const immediateSyncKeys = new Set([
     'forceReaderTextColor', 'forceReaderFont', 'readerFontScale', 'toolbarDocked',
     'toolbarPinned', 'toolbarVisible', 'toolbarDisabled', 'showScrollbars',
     'fullWindowTransparent', 'shellOnlyTransparent', 'bossKey', 'decreaseTransparencyShortcut',
+    'themeMode', 'darkenWebPages',
     'increaseTransparencyShortcut', 'clickThroughShortcut', 'autoToggleShortcut',
     'autoSpeedDownShortcut', 'autoSpeedUpShortcut',
     // 隐私 / 会话：改动需立刻同步到主进程（老板键静音、退出清缓存由主进程执行）
     'restoreTabsOnStartup', 'muteOnBossKey', 'clearCacheOnExit',
-    'historyRetentionDays', 'autoCleanOnStartup', 'backendEnabled',
+    'historyRetentionDays', 'autoCleanOnStartup',
     'keepAudioPlayingInBackground', 'pauseOnBlurHide',
 ])
 
+/**
+ * 同步请求序号：只接受「最后一次」请求的响应。
+ *
+ * 为什么需要：patchSetting 对 immediateSyncKeys 里的键会**每次都立即同步**，
+ * 而像「背景透明三态」那样的操作会连续调用多次（一次改 2~3 个键），
+ * 于是并发发出多个 updateSettings 请求。它们返回顺序不保证与发出顺序一致，
+ * 而响应处理里是 Object.assign(settings, nextSettings) ——
+ * **早发出的旧快照会覆盖刚设好的新值**，表现为「点了没反应、界面闪一下又回去」。
+ *
+ * 实测复现过：三连调用后最终 pageTransparentMode / fullWindowTransparent
+ * 双双被回滚成 false。
+ */
+let syncSeq = 0
+
 function syncSettingsNow() {
     if (!desktopApi?.updateSettings) return Promise.resolve()
-    return desktopApi.updateSettings({ ...settings }).then((nextSettings) => {
-        Object.assign(settings, nextSettings)
+    const seq = ++syncSeq
+    const snapshot = { ...settings }
+    return desktopApi.updateSettings(snapshot).then((nextSettings) => {
+        // 已有更新的请求在路上：丢弃这次响应，避免用旧快照覆盖新值
+        if (seq !== syncSeq) return
+        if (nextSettings && typeof nextSettings === 'object') {
+            // 再兜一层：只回填「本次请求发出后没有被本地改动过」的键，
+            // 防止主进程归一化（如 clamp / 白名单）的结果被误当成权威值覆盖新输入
+            const stale = new Set()
+            for (const k of Object.keys(nextSettings)) {
+                if (!(k in settings)) continue
+                if (settings[k] !== snapshot[k]) stale.add(k)
+            }
+            const patch = { ...nextSettings }
+            for (const k of stale) delete patch[k]
+            Object.assign(settings, patch)
+        }
     }).catch(() => {
-        statusMessage.value = '设置同步失败，请重试'
+        if (seq === syncSeq) statusMessage.value = '设置同步失败，请重试'
     })
 }
 

@@ -26,6 +26,11 @@ const { pathToFileURL } = require('url')
                         ipcRenderer.on('ui:open-settings', h)
                         return () => ipcRenderer.removeListener('ui:open-settings', h)
                     },
+                    onWindowRevealed: (cb) => {
+                        const h = () => cb()
+                        ipcRenderer.on('window:revealed', h)
+                        return () => ipcRenderer.removeListener('window:revealed', h)
+                    },
                     setIgnoreMouseEvents: (ignore) => ipcRenderer.invoke('ui:set-ignore-mouse-events', !!ignore),
                     // 在外部浏览器中打开链接
                     openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),

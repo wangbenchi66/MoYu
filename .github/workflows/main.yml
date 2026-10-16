@@ -1,14 +1,77 @@
 name: 打包推送到 Release
 
+# ─────────────────────────────────────────────────────────────────────
+#  触发条件
+#    1. 推送 v* 形式的 tag（如 v0.0.6）→ 自动打包并发布 Release
+#    2. 手动触发（Actions 页面点 Run workflow）→ 用于重跑
+#
+#  只对仓库所有者生效：见 guard job。别人 fork 后照抄这个 workflow
+#  并推 tag 也不会产生任何 Release（详见 guard 的注释）。
+# ─────────────────────────────────────────────────────────────────────
+
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  # 先创建 Release（后续 build job 直接上传产物，不再依赖 artifact 中转）
+  # ───────────────────────────────────────────────────────────────────
+  #  守卫：确认是仓库所有者本人的操作
+  #
+  #  为什么需要它：on.push.tags 是仓库级配置。别人 fork 之后，
+  #  那份副本里的 workflow 文件同样存在，对方打 tag 推送时
+  #  会在**他自己的仓库**里跑一次（消耗他的额度）。
+  #  如果没有这层判断，那个流程会尝试创建 Release —— 虽然落在他的
+  #  仓库上、动不了你的代码，但会产生一个看似"官方"的构建产物，
+  #  而且版本号、签名、更新源都可能被你这边误认。
+  #
+  #  两道判断：
+  #    repository 必须等于 wangbenchi66/MoYu
+  #    tag 推送者（github.actor）必须是 wangbenchi66
+  #  手动触发（workflow_dispatch）时 github.actor 是当前登录用户，
+  #  同样受第二条约束——协作者也无法手动跑发布。
+  # ───────────────────────────────────────────────────────────────────
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+
+    steps:
+      - name: 校验仓库与触发者
+        id: check
+        run: |
+          OWNER_REPO="wangbenchi66/MoYu"
+          OWNER_ACTOR="wangbenchi66"
+
+          echo "repository = ${{ github.repository }}"
+          echo "actor      = ${{ github.actor }}"
+          echo "ref        = ${{ github.ref }}"
+
+          if [ "${{ github.repository }}" != "$OWNER_REPO" ]; then
+            echo "allowed=false" >> $GITHUB_OUTPUT
+            echo "::notice::跳过：仓库不是 $OWNER_REPO（这是 fork 或镜像仓库）"
+            exit 0
+          fi
+
+          if [ "${{ github.actor }}" != "$OWNER_ACTOR" ]; then
+            echo "allowed=false" >> $GITHUB_OUTPUT
+            echo "::notice::跳过：触发者 ${{ github.actor }} 不是 $OWNER_ACTOR"
+            exit 0
+          fi
+
+          echo "allowed=true" >> $GITHUB_OUTPUT
+          echo "::notice::校验通过，开始打包"
+
+  # ───────────────────────────────────────────────────────────────────
+  #  校验版本一致性 + 创建 Release
+  # ───────────────────────────────────────────────────────────────────
   create-release:
+    needs: guard
+    if: needs.guard.outputs.allowed == 'true'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
@@ -16,10 +79,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 读取版本号
+      - name: 读取并校验版本号
         id: get_version
         run: |
+          set -euo pipefail
+
           VERSION=$(node -p "require('./MoYu/package.json').version")
+          echo "package.json 版本 = $VERSION"
+
+          # tag 推送时，tag 名必须与 package.json 版本一致。
+          # 否则 electron-builder 生成的 latest.yml 里写的是 package.json
+          # 的版本，而 Release 挂在另一个 tag 上，electron-updater 会
+          # 认为"没有新版本"，自动更新静默失效——这种问题很难排查。
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+            echo "tag = $TAG"
+            if [ "v$VERSION" != "$TAG" ]; then
+              echo "::error::tag ($TAG) 与 MoYu/package.json 的版本 (v$VERSION) 不一致"
+              echo "::error::请先把 package.json 的 version 改成 ${TAG#v}，提交后再打 tag"
+              exit 1
+            fi
+          fi
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: 创建 Release
@@ -27,12 +108,20 @@ jobs:
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: MoYu v${{ steps.get_version.outputs.version }}
-          draft: true
+          # 必须是非 draft：electron-updater 通过 GitHub API 查 latest release，
+          # draft 版本对它不可见，会导致「检查更新」永远返回已是最新。
+          draft: false
           generate_release_notes: true
 
+  # ───────────────────────────────────────────────────────────────────
+  #  多平台构建
+  # ───────────────────────────────────────────────────────────────────
   build:
-    needs: create-release
+    needs: [guard, create-release]
+    if: needs.guard.outputs.allowed == 'true'
     strategy:
+      # 一个平台失败时不取消另一个，便于单独看哪个平台的日志
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -71,9 +160,15 @@ jobs:
         run: npm run build
         working-directory: MoYu
 
+      # 用 GitHub 官方 token 发布，避免 electron-builder 自己发布时
+      # 与 create-release 步骤冲突（--publish never），
+      # 但仍会生成 latest.yml / latest-mac.yml —— 这两个清单文件是
+      # electron-updater 判断版本的依据，必须一并上传。
       - name: 打包 Electron 应用
         run: npx electron-builder ${{ matrix.build_args }} --publish never
         working-directory: MoYu
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 上传产物到 Release
         uses: softprops/action-gh-release@v2
@@ -82,3 +177,7 @@ jobs:
           files: |
             MoYu/release/*.dmg
             MoYu/release/*.exe
+            MoYu/release/*.blockmap
+            MoYu/release/latest.yml
+            MoYu/release/latest-mac.yml
+          fail_on_unmatched_files: false

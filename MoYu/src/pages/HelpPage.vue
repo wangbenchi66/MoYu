@@ -312,8 +312,8 @@ defineProps({
 }
 
 .help-page.transparent-page kbd {
-  background: rgba(255, 255, 255, 0.2) !important;
-  border-color: rgba(255, 255, 255, 0.3) !important;
+  background: rgba(var(--bg-rgb), 0.2) !important;
+  border-color: rgba(var(--bg-rgb), 0.3) !important;
 }
 
 /* 顶部卡片 */
@@ -431,8 +431,8 @@ defineProps({
 .feature-item {
   padding: 10px;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid #f0f0f0;
+  background: var(--overlay-weak);
+  border: 1px solid var(--fill-soft);
 }
 
 .feature-header {
@@ -451,23 +451,23 @@ defineProps({
 }
 
 .feature-badge.blue {
-  background: rgba(64, 158, 255, 0.1);
-  color: #409eff;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .feature-badge.green {
   background: rgba(103, 194, 58, 0.1);
-  color: #67c23a;
+  color: var(--success);
 }
 
 .feature-badge.red {
   background: rgba(245, 108, 108, 0.1);
-  color: #f56c6c;
+  color: var(--danger);
 }
 
 .feature-badge.orange {
   background: rgba(230, 162, 60, 0.1);
-  color: #e6a23c;
+  color: var(--warning);
 }
 
 .feature-badge.purple {
@@ -516,7 +516,7 @@ defineProps({
 .shortcut-table {
   display: flex;
   flex-direction: column;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--fill-soft);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -525,7 +525,7 @@ defineProps({
   display: flex;
   align-items: center;
   padding: 8px 10px;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid var(--fill-soft);
   font-size: 12px;
 }
 
@@ -534,7 +534,7 @@ defineProps({
 }
 
 .shortcut-row.header {
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--overlay-weak);
   font-weight: 600;
   color: var(--text-secondary);
   font-size: 11px;
@@ -580,8 +580,8 @@ kbd {
   font-size: 11px;
   font-weight: 600;
   color: var(--text);
-  background: rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: var(--overlay-weak);
+  border: 1px solid var(--overlay);
   border-radius: 4px;
   white-space: nowrap;
 }
@@ -596,12 +596,12 @@ kbd {
 
 .scope-badge.global {
   background: rgba(245, 108, 108, 0.1);
-  color: #f56c6c;
+  color: var(--danger);
 }
 
 .scope-badge.local {
-  background: rgba(64, 158, 255, 0.1);
-  color: #409eff;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .hint-text {

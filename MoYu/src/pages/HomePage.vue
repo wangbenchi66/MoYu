@@ -200,12 +200,12 @@ function avatarText(site) {
           title="添加站点">
           <el-avatar
             size="24"
-            style="background: #fff; border: 1px dashed #dcdfe6; color: #409eff">
+            style="background: rgb(var(--bg-rgb)); border: 1px dashed var(--line-strong); color: var(--primary)">
             +
           </el-avatar>
           <span
             class="pill-name"
-            style="color: #409eff"
+            style="color: var(--primary)"
             >添加站点</span
           >
         </div>
@@ -320,7 +320,7 @@ function avatarText(site) {
 .recommended-page.transparent-page .url-input,
 .recommended-page.transparent-page .mini-input {
   background: transparent !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(var(--bg-rgb), 0.2) !important;
   color: inherit;
 }
 .metrics .metric-grid {
@@ -365,7 +365,7 @@ h2 {
   align-items: center;
   padding: 6px;
   border-radius: 6px;
-  border: 1px solid #eee;
+  border: 1px solid var(--line);
   background: var(--surface);
   cursor: pointer;
 }
@@ -384,7 +384,7 @@ h2 {
 .mini-input {
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--line-strong);
   font-size: 12px;
   width: 100%;
   box-sizing: border-box;
@@ -400,7 +400,7 @@ h2 {
   flex: 1;
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--line-strong);
   font-size: 12px;
 }
 .open-btn,
@@ -431,9 +431,9 @@ h2 {
   width: 128px;
   padding: 4px 8px 4px 4px;
   border-radius: 999px;
-  background: #fff;
+  background: rgb(var(--bg-rgb));
   box-shadow: 0 1px 2px rgba(16, 23, 32, 0.04);
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--fill-soft);
   cursor: pointer;
   transition: box-shadow 0.12s ease;
   position: relative;
@@ -458,7 +458,7 @@ h2 {
   transform: translateY(-50%);
   display: flex;
   gap: 1px;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(var(--bg-rgb), 0.95);
   border-radius: 999px;
   padding: 0 2px;
   opacity: 0;
@@ -478,27 +478,27 @@ h2 {
   border-radius: 50%;
   font-size: 11px;
   cursor: pointer;
-  color: #999;
+  color: var(--muted);
   transition:
     color 0.12s,
     background 0.12s;
 }
 .pill-icon-btn:hover {
-  color: #409eff;
-  background: rgba(64, 158, 255, 0.1);
+  color: var(--primary);
+  background: var(--primary-soft);
 }
 .pill-icon-btn.danger:hover {
-  color: #f56c6c;
+  color: var(--danger);
   background: rgba(245, 108, 108, 0.1);
 }
 .add-pill {
   border-style: dashed;
-  border-color: #dcdfe6;
-  background: linear-gradient(180deg, #fbfbfd, #fff);
+  border-color: var(--line-strong);
+  background: linear-gradient(180deg, #fbfbfd, rgb(var(--bg-rgb)));
 }
 .add-pill:hover {
   border-color: #b3d8ff;
-  background: rgba(64, 158, 255, 0.04);
+  background: var(--primary-faint);
 }
 
 .popover-form {
@@ -513,7 +513,7 @@ h2 {
 }
 
 .el-button.danger {
-  color: #f56c6c;
+  color: var(--danger);
 }
 
 .history-entry {
@@ -523,17 +523,17 @@ h2 {
   padding: 8px 10px;
   border-radius: 8px;
   background: var(--surface);
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--fill-soft);
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
-  color: #666;
+  color: var(--text-secondary);
   transition: background 0.12s;
 }
 
 .history-entry:hover {
-  background: rgba(64, 158, 255, 0.04);
-  color: #409eff;
+  background: var(--primary-faint);
+  color: var(--primary);
 }
 
 .history-entry .arrow {
