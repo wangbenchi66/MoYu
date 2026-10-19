@@ -261,11 +261,19 @@ jobs:
           if [ "$OS" = "windows-latest" ]; then
             MANIFEST="MoYu/release/latest.yml"
             INSTALLER_GLOB="MoYu/release/*.exe"
+            UPDATE_PKG_GLOB=""
             LABEL="Windows (.exe + latest.yml)"
           else
             MANIFEST="MoYu/release/latest-mac.yml"
             INSTALLER_GLOB="MoYu/release/*.dmg"
-            LABEL="macOS (.dmg + latest-mac.yml)"
+            # ⚠️ macOS 自动更新**只认 zip**，不认 dmg。
+            # electron-updater 的 MacUpdater 里写的是：
+            #     findFile(files, "zip", ["pkg", "dmg"])   ← 明确排除 dmg
+            # 之前 mac.target 只配了 dmg，导致 latest-mac.yml 里没有 zip 条目，
+            # macOS 端「检查更新」能查到新版本，但下载安装必然失败。
+            # 现已在 package.json 的 mac.target 里加上 zip，并在这里强制校验。
+            UPDATE_PKG_GLOB="MoYu/release/*.zip"
+            LABEL="macOS (.dmg + .zip + latest-mac.yml)"
           fi
 
           echo "平台: $OS  →  期望产物: $LABEL"
@@ -306,6 +314,37 @@ jobs:
             exit 1
           fi
 
+          # ④ macOS 专项：自动更新依赖 zip，必须存在且已写进清单
+          #
+          # 这是 macOS 自动更新的前提条件，缺了它「检查更新」能查到新版本，
+          # 但点下载后会失败（MacUpdater 找不到 zip）。
+          if [ -n "$UPDATE_PKG_GLOB" ]; then
+            shopt -s nullglob
+            PKGS=($UPDATE_PKG_GLOB)
+            shopt -u nullglob
+
+            if [ ${#PKGS[@]} -eq 0 ]; then
+              echo "::error::未找到 $UPDATE_PKG_GLOB —— macOS 自动更新需要 zip"
+              echo "::error::请在 MoYu/package.json 的 build.mac.target 中加入 zip"
+              exit 1
+            fi
+            echo ""
+            echo "更新包（自动更新实际下载的）："
+            for f in "${PKGS[@]}"; do
+              echo "  $(basename "$f")  ($(du -h "$f" | cut -f1))"
+            done
+
+            if ! grep -qE '\.zip' "$MANIFEST"; then
+              echo "::error::$MANIFEST 中没有 .zip 条目"
+              echo "::error::说明打包时没有产出 zip target —— macOS 端将无法自动更新"
+              echo ""
+              echo "$MANIFEST 内容："
+              cat "$MANIFEST"
+              exit 1
+            fi
+            echo "  ✓ 清单已包含 .zip 条目"
+          fi
+
           echo ""
           echo "✓ $OS 产物与清单校验通过（version: $EXPECTED）"
 
@@ -315,8 +354,11 @@ jobs:
           tag_name: v${{ needs.create-release.outputs.version }}
           files: |
             MoYu/release/*.dmg
+            MoYu/release/*.zip
             MoYu/release/*.exe
             MoYu/release/*.blockmap
             MoYu/release/latest.yml
             MoYu/release/latest-mac.yml
+          # 保持 false：各平台只产出自己那部分，
+          # 匹配不到不算错（真正的产物完整性由上面「校验本平台产物」把关）
           fail_on_unmatched_files: false
