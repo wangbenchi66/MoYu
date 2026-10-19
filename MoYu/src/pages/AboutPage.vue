@@ -268,8 +268,11 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <!-- 手动更新指引：自动更新失败时的主要出路 -->
-    <section class="manual-section">
+    <!-- 手动更新指引：自动更新失败时的主要出路。
+         只在**确认有新版本**时才显示 —— 已是最新版本时这块没有意义，
+         白白占掉一屏空间。没有新版本时，底部的「GitHub Releases」
+         一行仍然保留，用户想手动去看看也有入口。 -->
+    <section v-if="pendingUpdate" class="manual-section">
       <div class="manual-head">
         <span class="manual-title">手动更新</span>
         <span class="manual-badge">{{ isMac ? 'macOS' : 'Windows' }}</span>
