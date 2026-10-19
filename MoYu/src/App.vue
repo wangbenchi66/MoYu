@@ -55,6 +55,7 @@ const isSettingsOpen = ref(false);
 // 这里清理历史版本遗留的同意标记，避免 localStorage 里留无用数据。
 try { localStorage.removeItem('moyu-privacy-consent'); } catch (e) { }
 let removeOpenSettingsListener = null;
+let removeUpdateAvailableListener = null;
 let _globalErrorHandler = null;
 let _globalRejectionHandler = null;
 let _sessionFlushHandler = null;
@@ -482,6 +483,89 @@ function openSettingsModal() {
 }
 
 /**
+ * 启动时发现新版本 → 询问「立即更新 / 稍后再说」
+ *
+ * 设计取舍（与用户确认过）：
+ *   - 不做持久化：选「稍后」只影响**本次运行**，下次启动会重新检查并提示。
+ *     所以这里不写 localStorage，也不需要在主进程记「已跳过」。
+ *   - 用应用内弹窗（ElMessageBox）而不是系统对话框：与整体 UI 一致，
+ *     且不抢焦点——摸鱼场景下弹系统窗口太显眼。
+ *   - 用户选「立即更新」后走下载 → 进度条 → 重启安装，
+ *     与「关于」页的手动更新是同一套 IPC。
+ *
+ * 参数 info: { currentVersion, latestVersion, releaseNotes, releasesUrl }
+ */
+async function promptStartupUpdate(info) {
+  if (!info || !info.latestVersion) return;
+  try {
+    await ElMessageBox.confirm(
+      `发现新版本 ${info.latestVersion}（当前 ${info.currentVersion || 'unknown'}）。\n是否现在下载并安装？`,
+      '发现更新',
+      {
+        confirmButtonText: '立即更新',
+        cancelButtonText: '稍后再说',
+        type: 'info',
+        // 允许点遮罩 / 按 Esc 关闭，都等同「稍后」
+        distinguishCancelAndClose: false,
+      },
+    );
+  } catch (e) {
+    // 用户选择「稍后再说」或关闭 —— 本次不再提示
+    return;
+  }
+
+  // 用户选择「立即更新」
+  try {
+    const api = window.desktop;
+    if (!api?.downloadUpdate) return;
+
+    // 显式告知用户正在下载，避免大安装包时"点了没反应"
+    const notice = ElMessage({
+      message: `正在下载 ${info.latestVersion}，完成后会提示重启…`,
+      type: 'info',
+      duration: 0,
+    });
+
+    // 订阅进度（与「关于」页共用 update:download-progress）
+    let removeProgress = null;
+    try {
+      removeProgress = api.onUpdateProgress?.((p) => {
+        const pct = Math.max(0, Math.min(100, Number(p?.percent) || 0));
+        notice.message = `正在下载 ${info.latestVersion}… ${pct}%`;
+      }) || null;
+    } catch (e) {}
+
+    const r = await api.downloadUpdate();
+    try { removeProgress?.(); } catch (e) {}
+    notice.close();
+
+    if (!r || r.ok === false) {
+      ElMessage({
+        message: `下载失败：${r?.error || '未知错误'}，可稍后在「关于」页重试`,
+        type: 'warning',
+      });
+      return;
+    }
+
+    // 下载完成，询问是否立即重启安装
+    try {
+      await ElMessageBox.confirm('更新已下载完成，是否立即重启并安装？', '安装更新', {
+        confirmButtonText: '立即重启安装',
+        cancelButtonText: '稍后',
+        type: 'success',
+      });
+    } catch (e) {
+      // 选「稍后」：autoInstallOnAppQuit = true，用户退出时仍会装上
+      return;
+    }
+
+    try { await api.installUpdate(); } catch (e) {}
+  } catch (e) {
+    ElMessage({ message: '更新过程出错，可稍后在「关于」页重试', type: 'warning' });
+  }
+}
+
+/**
  * 恢复默认设置（仅开关与快捷键），并提示二次确认
  */
 async function restoreDefaults() {
@@ -865,10 +949,19 @@ onMounted(() => {
     window.addEventListener('blur', onWindowBlur);
   } catch (e) {}
 
-  // 启动时的自动版本检测已移除。
-  // 原实现会在接口不可达时把 forceUpdateActive 置真并强制跳转更新页，
-  // 导致「启动即被锁在更新页」；且它依赖的后端接口已不再维护。
-  // 版本检测改为仅在「关于」页由用户主动触发（checkUpdate）。
+  // ── 启动时自动检查更新 ──
+  //
+  // 与「旧的强制更新」的区别（那段逻辑已移除，见下方注释）：
+  //   旧实现：接口不可达时把 forceUpdateActive 置真并**强制跳转更新页**，
+  //           相当于把用户锁住。已彻底删除。
+  //   现实现：主进程后台检查，**只有确认有新版本**才推送 'update:available'；
+  //           渲染层弹一个可关闭的询问框，选「稍后」本次运行不再打扰。
+  //           网络错误 / 限流 / 无更新 一律静默，绝不阻塞启动。
+  if (desktopApi?.onUpdateAvailable) {
+    removeUpdateAvailableListener = desktopApi.onUpdateAvailable((info) => {
+      promptStartupUpdate(info);
+    });
+  }
 
   if (desktopApi?.onOpenSettingsRequest) {
     removeOpenSettingsListener = desktopApi.onOpenSettingsRequest(() => {
@@ -945,6 +1038,8 @@ onBeforeUnmount(() => {
   } catch (e) {}
   removeOpenSettingsListener?.();
   removeOpenSettingsListener = null;
+  removeUpdateAvailableListener?.();
+  removeUpdateAvailableListener = null;
   try {
     window.removeEventListener('keydown', localShortcutHandler, true);
   } catch (e) {}

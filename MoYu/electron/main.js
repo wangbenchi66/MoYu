@@ -1466,6 +1466,56 @@ ipcMain.handle('update:check', () => checkForUpdates())
 ipcMain.handle('update:download', () => downloadUpdate())
 ipcMain.handle('update:install', () => installUpdate())
 
+// ── 启动时自动检查更新 ──
+//
+// 行为约定（与用户确认过）：
+//   - 不做设置开关，每次启动都检查
+//   - 选「稍后再说」→ 本次运行不再提示，下次启动重新检查
+//     （所以这里**不持久化**任何"已跳过"标记，重启即重置）
+//   - 提示用应用内弹窗，不抢焦点、不弹系统对话框
+//
+// 为什么要延迟：启动瞬间窗口还在加载（preload 未就绪、Vue 未挂载），
+// 此时 send 过去渲染进程收不到。等窗口 ready-to-show / 内容加载完再发。
+const STARTUP_UPDATE_CHECK_DELAY_MS = 5000
+
+// 本次运行是否已经提示过（选「稍后」后置 true，避免重复弹）
+let _startupUpdateNotified = false
+
+/**
+ * 启动后台检查更新，有新版则通知渲染进程弹窗。
+ *
+ * 这是「尽力而为」的检查：网络失败、GitHub 限流、开发环境等
+ * 一律静默忽略 —— 启动流程不该因为检查更新而卡住或被错误打断。
+ */
+async function checkUpdateOnStartup() {
+    if (isDev) return
+    if (_startupUpdateNotified) return
+
+    let result
+    try {
+        result = await checkForUpdates()
+    } catch (e) {
+        return
+    }
+
+    // 只在「确认有新版本」时才提示。
+    // ok === false 的情况（网络错误/限流/开发环境）一律静默。
+    if (!result || !result.ok || !result.hasUpdate) return
+
+    _startupUpdateNotified = true
+
+    try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('update:available', {
+                currentVersion: result.currentVersion,
+                latestVersion: result.latestVersion,
+                releaseNotes: result.releaseNotes || '',
+                releasesUrl: result.releasesUrl || '',
+            })
+        }
+    } catch (e) { }
+}
+
 // ── 匿名设备 ID 已随匿名上报功能一起移除 ──
 
 ipcMain.handle('moyu:get-stats', () => getMoyuStats())
@@ -1522,6 +1572,10 @@ app.whenReady().then(() => {
     refreshAutoHideMonitor()
     // 注册更新下载进度等事件（不触发联网，仅挂监听）
     initUpdaterEvents()
+
+    // 启动后延迟一段时间再检查更新：等窗口加载完，渲染进程才收得到 'update:available'。
+    // 失败一律静默（见 checkUpdateOnStartup 的注释）。
+    setTimeout(() => { checkUpdateOnStartup() }, STARTUP_UPDATE_CHECK_DELAY_MS)
 
     app.on('activate', () => {
         // macOS 点击 Dock 图标时：有隐藏窗口则显示，没有则新建

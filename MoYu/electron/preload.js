@@ -78,6 +78,15 @@ contextBridge.exposeInMainWorld('desktop', {
             ipcRenderer.removeListener('update:download-progress', handler)
         }
     },
+    // 启动时后台检查到新版本 → 主进程推送，渲染进程弹窗询问「立即更新 / 稍后」
+    onUpdateAvailable: (callback) => {
+        const handler = (_, payload) => callback(payload)
+        ipcRenderer.on('update:available', handler)
+
+        return () => {
+            ipcRenderer.removeListener('update:available', handler)
+        }
+    },
 })
 
 // 在 preload 加载时通知主进程，便于确认 preload 是否注入到渲染器
