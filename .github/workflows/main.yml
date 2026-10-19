@@ -222,26 +222,92 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 打包完成后再核对一次：electron-builder 写进 latest.yml 的版本
-      # 必须与发布版本一致，否则自动更新会失效。这是最后一道防线。
-      - name: 校验 latest.yml 版本
+      # 诊断：无论打包成功还是失败，都打印 release 目录的实际情况。
+      # if: always() 保证打包步骤失败时也会执行 —— 否则最需要看内容的时候反而看不到。
+      - name: 诊断 - 列出打包产物
+        if: always()
         shell: bash
         run: |
+          echo "platform = ${{ matrix.os }} / ${{ matrix.build_args }}"
+          echo ""
+          if [ -d MoYu/release ]; then
+            echo "=== MoYu/release ==="
+            ls -la MoYu/release/
+          else
+            echo "::warning::MoYu/release 目录不存在 —— 打包可能根本没有开始"
+          fi
+          echo ""
+          echo "=== electron-builder 版本 ==="
+          cd MoYu && npx electron-builder --version || echo "（无法获取版本）"
+
+      # 打包完成后核对产物与清单：这是最后一道防线。
+      #
+      # ⚠️ 必须按平台**严格校验**，不能对缺失文件只发 warning。
+      #
+      # 原因：早先的实现对 latest.yml / latest-mac.yml 一视同仁，
+      # 文件不存在就 `::warning::` 然后继续。看似"兼容每个平台只产出自己那份"，
+      # 实际副作用是把**真正的打包失败静默放行**了 ——
+      # 实测出现过：windows runner 上 latest.yml 根本不存在，
+      # 校验却打印"✓ 通过"，随后把缺了 Windows 产物的 Release 当成成功。
+      #
+      # 现在：按 matrix.os 只认本平台应该产出的那个文件，缺失即 fail。
+      - name: 校验本平台产物与清单版本
+        shell: bash
+        run: |
+          set -uo pipefail
           EXPECTED="${{ needs.create-release.outputs.version }}"
-          for f in MoYu/release/latest.yml MoYu/release/latest-mac.yml; do
-            if [ -f "$f" ]; then
-              ACTUAL=$(grep -E '^version:' "$f" | head -1 | sed 's/^version:[[:space:]]*//' | tr -d '\r')
-              echo "$f -> version: $ACTUAL"
-              if [ "$ACTUAL" != "$EXPECTED" ]; then
-                echo "::error::$f 的版本 ($ACTUAL) 与发布版本 ($EXPECTED) 不一致"
-                echo "::error::这会导致 electron-updater 认为没有新版本，自动更新静默失效"
-                exit 1
-              fi
-            else
-              echo "::warning::$f 不存在（该平台可能不产出此清单）"
-            fi
+          OS="${{ matrix.os }}"
+
+          if [ "$OS" = "windows-latest" ]; then
+            MANIFEST="MoYu/release/latest.yml"
+            INSTALLER_GLOB="MoYu/release/*.exe"
+            LABEL="Windows (.exe + latest.yml)"
+          else
+            MANIFEST="MoYu/release/latest-mac.yml"
+            INSTALLER_GLOB="MoYu/release/*.dmg"
+            LABEL="macOS (.dmg + latest-mac.yml)"
+          fi
+
+          echo "平台: $OS  →  期望产物: $LABEL"
+          echo ""
+
+          # ① 安装包必须存在
+          shopt -s nullglob
+          INSTALLERS=($INSTALLER_GLOB)
+          shopt -u nullglob
+          if [ ${#INSTALLERS[@]} -eq 0 ]; then
+            echo "::error::未找到安装包（$INSTALLER_GLOB）—— 打包步骤没有真正产出产物"
+            echo "::error::请检查上一步「打包 Electron 应用」的完整日志"
+            exit 1
+          fi
+          echo "安装包:"
+          for f in "${INSTALLERS[@]}"; do
+            echo "  $(basename "$f")  ($(du -h "$f" | cut -f1))"
           done
-          echo "✓ 更新清单版本校验通过"
+
+          # ② 本平台的更新清单必须存在
+          if [ ! -f "$MANIFEST" ]; then
+            echo "::error::$MANIFEST 不存在"
+            echo "::error:::上述平台（$OS）必须产出 $MANIFEST，否则 electron-updater 无法判断版本"
+            echo "::error::常见原因：打包未成功、target 不是 nsis/dmg、或 --publish 参数异常"
+            echo ""
+            echo "release 目录实际内容："
+            ls -la MoYu/release/ 2>/dev/null || echo "  （目录不存在）"
+            exit 1
+          fi
+
+          # ③ 清单里的版本必须等于发布版本
+          ACTUAL=$(grep -E '^version:' "$MANIFEST" | head -1 | sed 's/^version:[[:space:]]*//' | tr -d '\r')
+          echo ""
+          echo "$MANIFEST -> version: $ACTUAL"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::$MANIFEST 的版本 ($ACTUAL) 与发布版本 ($EXPECTED) 不一致"
+            echo "::error::这会导致 electron-updater 认为没有新版本，自动更新静默失效"
+            exit 1
+          fi
+
+          echo ""
+          echo "✓ $OS 产物与清单校验通过（version: $EXPECTED）"
 
       - name: 上传产物到 Release
         uses: softprops/action-gh-release@v2
