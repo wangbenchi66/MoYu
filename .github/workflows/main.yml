@@ -86,7 +86,16 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
 
     steps:
+      # fetch-depth: 0 —— 必须取完整历史。
+      #
+      # 下面要用 `git describe --tags` 找上一个 tag、用 `git log prev..tag`
+      # 汇总本次提交，从而自动生成发布说明。
+      # checkout 默认是浅克隆（depth=1，只有 1 个提交），
+      # 在这种仓库里 git describe 会失败、git log 区间取不到东西，
+      # 生成出来的说明会是空的。
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 解析版本号（以 tag 为准）
         id: get_version
@@ -115,15 +124,82 @@ jobs:
           echo "发布版本 = $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      # ── 从提交描述自动生成发布说明 ──
+      #
+      # 思路：直接汇总上一个 tag 到当前 tag 之间每个 commit 的**完整 message**
+      # （标题 + 正文），拼成 Markdown。这样每次写 commit 时认真写的
+      # 「功能新增 / 修复 / 影响」等段落会原样出现在 Release 页面上，
+      # 不需要再单独手写一份发布说明。
+      #
+      # 为什么不用 GitHub 的 generate_release_notes：
+      #   它只取 commit 的 **subject（标题）**，格式固定为 "What's Changed"，
+      #   正文完全丢弃。而这个仓库的 commit 正文才是信息量最大的部分。
+      #
+      # 如果这个 tag 本身写了 annotated 描述（git tag -a -m "..."），
+      # 会把它放在最前面作为「概述」，下面再接提交明细。
+      - name: 生成发布说明
+        id: notes
+        shell: bash
+        run: |
+          set -uo pipefail
+          TAG="v${{ steps.get_version.outputs.version }}"
+
+          # 上一个 tag（用 TAG^ 排除自身；没有则说明是首个版本）
+          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          if [ -n "$PREV" ]; then
+            echo "提交范围: $PREV → $TAG"
+            RANGE="${PREV}..${TAG}"
+          else
+            echo "提交范围: 首个版本 → $TAG"
+            RANGE="${TAG}"
+          fi
+
+          COUNT=$(git rev-list --count --no-merges "$RANGE" 2>/dev/null || echo 0)
+          echo "提交数: $COUNT"
+
+          {
+            # ① 若 tag 写了 annotated 描述，作为概述放最前
+            TAGMSG=$(git tag -l --format='%(contents)' "$TAG" 2>/dev/null || true)
+            if [ -n "$TAGMSG" ]; then
+              printf '%s\n\n' "$TAGMSG"
+              printf '---\n\n'
+            fi
+
+            # ② 提交明细：标题 + 正文
+            if [ -n "$PREV" ]; then
+              printf '## 提交明细（%s → %s）\n\n' "$PREV" "$TAG"
+            else
+              printf '## 提交明细\n\n'
+            fi
+
+            if [ "$COUNT" = "0" ]; then
+              printf '_本次没有新提交_\n'
+            else
+              git log --no-merges --format='### %s%n%n%b' "$RANGE"
+            fi
+          } > release-notes.md
+
+          echo ""
+          echo "=== 生成结果预览（前 50 行）==="
+          head -50 release-notes.md
+          echo "..."
+          echo "=== 共 $(wc -l < release-notes.md) 行 / $(wc -c < release-notes.md) 字节 ==="
+
+          if [ ! -s release-notes.md ]; then
+            echo "::error::release-notes.md 为空，生成逻辑异常"
+            exit 1
+          fi
+
       - name: 创建 Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: MoYu v${{ steps.get_version.outputs.version }}
+          # 用上一步生成的说明（自动来自 commit 描述）
+          body_path: release-notes.md
           # 必须是非 draft：electron-updater 通过 GitHub API 查 latest release，
           # draft 版本对它不可见，会导致「检查更新」永远返回已是最新。
           draft: false
-          generate_release_notes: true
 
   # ───────────────────────────────────────────────────────────────────
   #  多平台构建
