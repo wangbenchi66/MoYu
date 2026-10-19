@@ -190,10 +190,19 @@ jobs:
       #
       # 注意：npm version 会连带把 package-lock.json 里的 version 也改掉。
       # 这没有影响——依赖早已由上面的 `npm ci` 装好，且改动只留在 CI 工作区。
+      #
+      # ⚠️ 必须写成**单行**，并且显式指定 shell: bash。
+      #
+      # 原因：这个 job 在 windows-latest 上跑，GitHub Actions 的**默认 shell 是
+      # PowerShell**，而 PowerShell 里行尾的 `\` 不是续行符（那是 bash 语法）。
+      # 写成跨行时，下一行的 `--no-git-tag-version` 会被当成一元 `--` 运算符，
+      # 报错：Missing expression after unary operator '--'。
+      #
+      # create-release 在 ubuntu 上跑、默认就是 bash，所以同样的续行在那边没事——
+      # 这是很容易漏掉的一处不对称。
       - name: 用 tag 版本覆写 package.json
-        run: |
-          npm version ${{ needs.create-release.outputs.version }} \
-            --no-git-tag-version --allow-same-version
+        shell: bash
+        run: npm version ${{ needs.create-release.outputs.version }} --no-git-tag-version --allow-same-version
         working-directory: MoYu
 
       - name: 确认版本已同步
