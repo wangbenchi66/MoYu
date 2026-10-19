@@ -481,6 +481,50 @@ computeOverflow(availableH, itemH)
 `html { filter: invert(1) hue-rotate(180deg) }`，并对 `img/video/canvas` 等媒体元素
 **二次反色**还原，避免照片变负片。仅有内容脚本级能力，已自适应深色的站点会显得过深。
 
+### ⚠️ CI 脚本里的两类致命陷阱
+
+这两条都是**本地测不出来、只在 GitHub runner 上炸**的问题，各踩过一次。
+
+#### 1. `$VAR` 后不能紧跟中文标点
+
+```bash
+# ✗ 崩溃：line 93: EXPECTED?: unbound variable
+echo "✓ 产物校验通过（version: $EXPECTED）"
+
+# ✓ 用花括号明确边界
+echo "✓ 产物校验通过（version: ${EXPECTED}）"
+```
+
+**原因**：bash 解析 `$NAME` 时会把紧随其后的"可作标识符"字符一并吞掉。
+在 macOS runner 的 **bash 3.2 + UTF-8 locale** 下，全角标点（`）` `，` `（`）的
+首字节会被当成变量名的一部分，于是去找 `EXPECTED<乱码>` 这个不存在的变量；
+配合 `set -u`（nounset）直接 unbound variable 并退出。
+
+**为什么本地测不出来**：Git Bash 是 bash 5.x + C locale，按字节处理，不会吞。
+**这条只能在 macOS runner 上暴露。**
+
+**规则**：CI 的 shell 语句里，变量引用**一律写 `${VAR}`**。
+尤其后面紧跟中文标点、汉字时，没有例外。
+
+#### 2. Windows runner 默认 shell 是 PowerShell，不认 `\` 续行
+
+```yaml
+# ✗ 崩溃：Missing expression after unary operator '--'
+- run: |
+    npm version 0.0.6 \
+      --no-git-tag-version
+
+# ✓ 单行 + 显式 shell: bash
+- shell: bash
+  run: npm version 0.0.6 --no-git-tag-version --allow-same-version
+```
+
+`on.push` 的 workflow 里，`ubuntu-latest` / `macos-latest` 默认 bash，
+但 `windows-latest` 默认 **PowerShell**。同一个 `run:` 块在两个平台上语义不同。
+
+**规则**：`build` job 跑在 `matrix.os` 上时，任何**多行脚本**都要显式
+`shell: bash`；跨行命令优先改写成单行。
+
 ### 版本更新（GitHub Releases）
 
 **不使用任何自建后端**。更新源是 GitHub Releases，由 `electron-updater` 读取 Release 里的
@@ -546,11 +590,10 @@ CI 会自己把 tag 版本（`v0.0.6` → `0.0.6`）写进 `MoYu/package.json`�
 # create-release：版本从 tag 推导（手动触发时退回读 package.json）
 VERSION="${TAG#v}"
 # 校验是合法 semver，否则 electron-updater 无法比较大小
-echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+echo "${VERSION}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
 
-# build：打包前覆写
-npm version ${{ needs.create-release.outputs.version }} \
-  --no-git-tag-version --allow-same-version
+# build：打包前覆写（单行 + shell: bash，见上文「陷阱 2」）
+npm version ${{ needs.create-release.outputs.version }} --no-git-tag-version --allow-same-version
 ```
 
 > `--no-git-tag-version` 阻止 npm 顺手打 tag / 提交；
