@@ -1,6 +1,6 @@
 /**
  * matchRule.js — 规则 URL 匹配工具
- * 统一的 matchesRule 实现，供 siteRules / settingsRules / toolbarRules 共用。
+ * 统一的 matchesRule 实现，供 siteRules / toolbarRules 共用。
  * 支持自定义 match 函数、RegExp pattern、数组 pattern、通配符、regex/url/hostname 匹配类型。
  */
 

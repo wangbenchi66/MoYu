@@ -113,14 +113,6 @@ function zoomIn() { setSiteZoom(siteZoom.value + 0.1) }
 function zoomOut() { setSiteZoom(siteZoom.value - 0.1) }
 function resetZoom() { setSiteZoom(1) }
 
-function onWebviewNewWindow(e) {
-  try { if (e && typeof e.preventDefault === 'function') e.preventDefault() } catch (err) {}
-  const url = (e && (e.url || (e.detail && e.detail.url))) || ''
-  if (!url) return
-  const w = (e && e.target) || getActiveWebview()
-  try { if (w && typeof w.loadURL === 'function') w.loadURL(url); else if (w) { try { w.src = url } catch (err) {} } } catch (err) {}
-}
-
 // ─── 输入处理 ───
 function onReaderColorInput(e) {
   const v = e.target.value; patchSetting('readerTextColor', v)

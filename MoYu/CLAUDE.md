@@ -141,8 +141,7 @@ src/
                         备份/恢复、油猴脚本解析）
     matchRule.js        规则 URL 匹配工具（统一的 matchesRule 实现）
     providers/
-      index.js          规则聚合层（合并 site / settings / toolbar 规则）
-      settingsRules.js  设置类规则（按站点覆盖设置）——**当前未被消费**
+      index.js          规则聚合层（合并 site / toolbar 规则）
       toolbarRules.js   工具栏规则（按站点控制工具栏显隐）
     scripts/            站点规则脚本（函数型）
       default.js        默认全局规则（注入快捷键到 webview）
@@ -715,9 +714,13 @@ win.webContents.on('before-input-event', (event, input) => {
 
 ### 已知死代码 / 待决策
 
-- `settingsRules` provider 实现了完整的按站点覆盖设置，但 `MainPage` **从不读 `combined.settings`**，`customSettings` 是死路径——接上或删除
-- `MainPage.onWebviewNewWindow` 已定义但模板未绑定
-- `App.vue` 的 `autoRangeRef`、`openDefaultUrl()` 未被引用
+> **已清理**（本轮）：`settingsRules` provider（连同 `customSettings`）、
+> `MainPage.onWebviewNewWindow`、`App.vue.openDefaultUrl()`。
+> 前两者是全路径死代码（有定义无消费/无绑定），删除不影响功能；
+> `setWindowOpenHandler`（主进程）本来就负责新窗口准入。
+> 若将来要做「按站点覆盖设置」，需同时补上：聚合、`MainPage` 应用、编辑 UI —— 只加 provider 没用。
+
+- `App.vue` 的 `autoRangeRef` 仍未被引用
 - `defaultSettings` 中 `forcePageTransparent` 与 `pageTransparentMode` 语义重叠，仅在 `patchSetting` 内联动
 
 ### Vite 配置注意事项

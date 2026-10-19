@@ -696,14 +696,6 @@ async function testSetTransparency() {
 }
 
 /**
- * 打开默认地址到输入框并触发导航
- */
-function openDefaultUrl() {
-  urlInput.value = settings.defaultUrl === 'about:blank' ? '' : settings.defaultUrl;
-  handleOpenUrl();
-}
-
-/**
  * 跳转到仪表盘或创建空白仪表盘页
  */
 const router = useRouter();

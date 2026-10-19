@@ -12,9 +12,7 @@
     "dev:electron": "chcp 65001 >nul && wait-on tcp:5173 && electron .",
     "start": "electron .",
     "build": "vite build --base=./",
-    "preview": "vite preview",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win nsis",
     "dist:mac": "npm run build && electron-builder --mac dmg"
   },
@@ -44,10 +42,10 @@
     },
     "files": [
       "dist/**/*",
-      "src/**/*",
       "electron/**/*",
       "public/**/*",
-      "package.json"
+      "package.json",
+      "src/shared/defaultSettings.js"
     ],
     "win": {
       "icon": "public/icon.png",
@@ -86,9 +84,6 @@
         "repo": "MoYu"
       }
     ]
-  },
-  "publish": {
-    "provider": "github"
   },
   "repository": {
     "type": "git",

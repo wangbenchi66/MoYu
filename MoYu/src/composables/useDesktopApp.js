@@ -190,7 +190,7 @@ function initializeDesktopApp() {
         })
     }
     try { siteRules.loadRules() } catch (e) { }
-    try { ruleProviders.toolbar.loadRules(); ruleProviders.settings.loadRules() } catch (e) { }
+    try { ruleProviders.toolbar.loadRules() } catch (e) { }
     if (desktopApi?.onSettingsChanged) {
         removeSettingsListener = desktopApi.onSettingsChanged((nextSettings) => {
             Object.assign(settings, nextSettings)
@@ -244,7 +244,7 @@ export function useDesktopApp() {
         },
         ruleProviders: {
             getCombinedRulesForUrl: ruleProviders.getCombinedRulesForUrl,
-            toolbar: ruleProviders.toolbar, settings: ruleProviders.settings, site: ruleProviders.site,
+            toolbar: ruleProviders.toolbar, site: ruleProviders.site,
         },
     }
 }
