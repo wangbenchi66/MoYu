@@ -53,7 +53,7 @@ jobs:
 
           if [ "${{ github.repository }}" != "$OWNER_REPO" ]; then
             echo "allowed=false" >> $GITHUB_OUTPUT
-            echo "::notice::跳过：仓库不是 $OWNER_REPO（这是 fork 或镜像仓库）"
+            echo "::notice::跳过：仓库不是 ${OWNER_REPO}（这是 fork 或镜像仓库）"
             exit 0
           fi
 
@@ -360,7 +360,7 @@ jobs:
           INSTALLERS=($INSTALLER_GLOB)
           shopt -u nullglob
           if [ ${#INSTALLERS[@]} -eq 0 ]; then
-            echo "::error::未找到安装包（$INSTALLER_GLOB）—— 打包步骤没有真正产出产物"
+            echo "::error::未找到安装包（${INSTALLER_GLOB}）—— 打包步骤没有真正产出产物"
             echo "::error::请检查上一步「打包 Electron 应用」的完整日志"
             exit 1
           fi
@@ -372,7 +372,7 @@ jobs:
           # ② 本平台的更新清单必须存在
           if [ ! -f "$MANIFEST" ]; then
             echo "::error::$MANIFEST 不存在"
-            echo "::error:::上述平台（$OS）必须产出 $MANIFEST，否则 electron-updater 无法判断版本"
+            echo "::error:::上述平台（${OS}）必须产出 ${MANIFEST}，否则 electron-updater 无法判断版本"
             echo "::error::常见原因：打包未成功、target 不是 nsis/dmg、或 --publish 参数异常"
             echo ""
             echo "release 目录实际内容："
@@ -422,7 +422,7 @@ jobs:
           fi
 
           echo ""
-          echo "✓ $OS 产物与清单校验通过（version: $EXPECTED）"
+          echo "✓ $OS 产物与清单校验通过（version: ${EXPECTED}）"
 
       - name: 上传产物到 Release
         uses: softprops/action-gh-release@v2
