@@ -124,19 +124,22 @@ jobs:
           echo "发布版本 = $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # ── 从提交描述自动生成发布说明 ──
+      # ── 生成发布说明 ──
       #
-      # 思路：直接汇总上一个 tag 到当前 tag 之间每个 commit 的**完整 message**
-      # （标题 + 正文），拼成 Markdown。这样每次写 commit 时认真写的
-      # 「功能新增 / 修复 / 影响」等段落会原样出现在 Release 页面上，
-      # 不需要再单独手写一份发布说明。
+      # 目标：Release 页面上只显示**大概的说明**，不铺陈提交明细。
+      #
+      # 优先用这个 tag 的 annotated 描述（git tag -a -m "..."）。
+      # 那段文字是面向用户写的概述——本版做了什么、有什么注意事项，
+      # 正好适合直接作为 Release body。
+      #
+      # 只在 tag 没写描述时，才回退到「提交标题列表」（- %s）。
+      # 注意回退路径**只取标题**，不取正文：本仓库的 commit 正文
+      # 动辄几十行（问题/修复/验证分节），全贴到 Release 上会非常冗长。
+      # 想看细节的人去看提交记录，Release 页只负责讲清楚"这版变了什么"。
       #
       # 为什么不用 GitHub 的 generate_release_notes：
-      #   它只取 commit 的 **subject（标题）**，格式固定为 "What's Changed"，
-      #   正文完全丢弃。而这个仓库的 commit 正文才是信息量最大的部分。
-      #
-      # 如果这个 tag 本身写了 annotated 描述（git tag -a -m "..."），
-      # 会把它放在最前面作为「概述」，下面再接提交明细。
+      #   它会自动生成 "What's Changed"，格式与措辞都不受控；
+      #   而这里想要的是自己能完全决定的一段概述。
       - name: 生成发布说明
         id: notes
         shell: bash
@@ -147,46 +150,53 @@ jobs:
           # 上一个 tag（用 TAG^ 排除自身；没有则说明是首个版本）
           PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
           if [ -n "$PREV" ]; then
-            echo "提交范围: $PREV → $TAG"
+            echo "提交范围: ${PREV} → ${TAG}"
             RANGE="${PREV}..${TAG}"
           else
-            echo "提交范围: 首个版本 → $TAG"
+            echo "提交范围: 首个版本 → ${TAG}"
             RANGE="${TAG}"
           fi
 
           COUNT=$(git rev-list --count --no-merges "$RANGE" 2>/dev/null || echo 0)
-          echo "提交数: $COUNT"
+          echo "提交数: ${COUNT}"
+
+          # 判断 tag 类型。
+          # ⚠️ 必须看类型，不能只看 `git tag -l --format='%(contents)'` 是否非空：
+          # 对**轻量 tag**，%(contents) 返回的是它指向的 commit message，
+          # 于是永远判为"有描述"，回退分支成了死代码。（实测 v0.0.2 就是这种情况）
+          #   annotated tag → cat-file -t 返回 "tag"
+          #   轻量 tag      → 返回 "commit"
+          TAGTYPE=$(git cat-file -t "refs/tags/${TAG}" 2>/dev/null || echo "unknown")
+          echo "tag 类型: ${TAGTYPE}"
 
           {
-            # ① 若 tag 写了 annotated 描述，作为概述放最前
-            TAGMSG=$(git tag -l --format='%(contents)' "$TAG" 2>/dev/null || true)
-            if [ -n "$TAGMSG" ]; then
-              printf '%s\n\n' "$TAGMSG"
-              # ⚠️ 不能写 printf '---\n\n' —— 格式串以 `-` 开头时
-              # printf 会把它当成选项解析，报 `invalid option` 并退出 2。
-              # 把 '-' 放到参数位置，格式串用 %s，永远安全。
-              printf '%s\n\n' '---'
-            fi
-
-            # ② 提交明细：标题 + 正文
-            if [ -n "$PREV" ]; then
-              printf '## 提交明细（%s → %s）\n\n' "$PREV" "$TAG"
+            if [ "${TAGTYPE}" = "tag" ]; then
+              # 主路径：annotated tag → 用它自己的描述
+              printf '%s\n' "$(git tag -l --format='%(contents)' "$TAG")"
             else
-              printf '## 提交明细\n\n'
-            fi
-
-            if [ "$COUNT" = "0" ]; then
-              printf '_本次没有新提交_\n'
-            else
-              git log --no-merges --format='### %s%n%n%b' "$RANGE"
+              # 回退：轻量 tag（或未知）→ 列提交标题，不含正文
+              printf '%s\n\n' '## 更新内容'
+              if [ "${COUNT}" = "0" ]; then
+                printf '%s\n' '_本次没有新提交_'
+              else
+                git log --no-merges --format='- %s' "$RANGE"
+              fi
             fi
           } > release-notes.md
 
-          echo ""
-          echo "=== 生成结果预览（前 50 行）==="
-          head -50 release-notes.md
-          echo "..."
-          echo "=== 共 $(wc -l < release-notes.md) 行 / $(wc -c < release-notes.md) 字节 ==="
+          # 诊断信息走 stderr，避免混进 release-notes.md
+          # （这些 echo 若放在 { } 块内会被一并重定向进文件）
+          if [ "${TAGTYPE}" = "tag" ]; then
+            echo "使用 tag 描述作为发布说明" >&2
+          else
+            echo "tag 无描述，回退到提交标题列表" >&2
+          fi
+
+          echo "" >&2
+          echo "=== 生成结果 ===" >&2
+          cat release-notes.md >&2
+          echo "" >&2
+          echo "=== 共 $(wc -l < release-notes.md) 行 / $(wc -c < release-notes.md) 字节 ===" >&2
 
           if [ ! -s release-notes.md ]; then
             echo "::error::release-notes.md 为空，生成逻辑异常"
