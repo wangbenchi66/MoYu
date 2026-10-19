@@ -162,7 +162,10 @@ jobs:
             TAGMSG=$(git tag -l --format='%(contents)' "$TAG" 2>/dev/null || true)
             if [ -n "$TAGMSG" ]; then
               printf '%s\n\n' "$TAGMSG"
-              printf '---\n\n'
+              # ⚠️ 不能写 printf '---\n\n' —— 格式串以 `-` 开头时
+              # printf 会把它当成选项解析，报 `invalid option` 并退出 2。
+              # 把 '-' 放到参数位置，格式串用 %s，永远安全。
+              printf '%s\n\n' '---'
             fi
 
             # ② 提交明细：标题 + 正文
