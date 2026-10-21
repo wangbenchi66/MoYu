@@ -64,22 +64,31 @@ npm run dist:mac     # macOS DMG
 
 没有测试框架。
 
-**换行符约定：全部使用 CRLF。**
-
-本仓库是 Windows 项目，工作区所有文本文件必须是 **CRLF**（`\r\n`）：
+**换行符约定：默认 LF。**
 
 | 文件 | 作用 |
 |---|---|
-| `.gitattributes` | `* text=auto eol=crlf`——仓库内存 LF，检出时转 CRLF |
-| `.editorconfig` | `end_of_line = crlf`——编辑器写入时用 CRLF |
+| `.gitattributes` | `* text=auto eol=lf`——仓库与工作区都用 LF |
+| `.editorconfig` | `end_of_line = lf`——编辑器写入时用 LF |
 
-**新增或重写文件时，必须写入 CRLF**，不要用 `\n`。
-若发现某个文件是 LF，用 `git add --renormalize <file>` 或手动转换修正。
+**新增或重写文件时默认写 LF**。git 的 `eol` 属性优先级高于 `core.autocrlf`，
+所以无论本机怎么配，检出结果都由 `.gitattributes` 决定。
 
-例外（**不要**转成 CRLF）：
-- 二进制文件（`.png` / `.ico` / `.icns` / `.exe` 等）——转换会损坏文件
-- `package-lock.json` / `*.lock`——已在 `.gitattributes` 中标为 `-text`
-- `*.sh`——必须是 LF
+例外（这些格式的换行符是硬要求）：
+
+| 格式 | 要求 | 原因 |
+|---|---|---|
+| `*.bat` / `*.cmd` | **CRLF** | cmd.exe 解析依赖 CRLF，LF 会报离奇语法错误 |
+| `*.plist` | **LF** | codesign 的 AMFI 解析器不接受 CRLF |
+| `*.sh` | **LF** | bash 不认 CRLF |
+| 二进制（`.png` / `.ico` / `.exe` / `.dmg` 等） | 不转换 | 转换会损坏文件 |
+| `package-lock.json` / `*.lock` | `-text` | 仅用于 diff 展示 |
+
+> ⚠️ **强制的 `eol=crlf` 曾经害过一次**：`build/entitlements.mac.plist` 在仓库里存的是
+> LF，但检出时被转成 CRLF，导致 macOS 打包在 codesign 阶段报
+> `Failed to parse entitlements: AMFIUnserializeXML: syntax error near line 1`。
+> 这个错误**只在 macOS 上暴露**，本地 Windows 完全正常，排查成本很高。
+> 现在默认 LF，并把 `plist` / `sh` 显式标成 `eol=lf` 兜底。
 
 **两个容易踩的点**：
 

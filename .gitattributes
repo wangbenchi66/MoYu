@@ -1,30 +1,30 @@
-# .gitattributes — 统一换行符为 CRLF（Windows 项目）
+# .gitattributes — 换行符与文本处理策略
 #
-# 策略：仓库内部存 LF，检出到工作区时转成 CRLF。
-#   - 与 core.autocrlf=true 的既有行为一致，不会产生整文件 diff
-#   - 显式声明优于依赖各机器的 git config（团队协作/换机器时行为一致）
+# 策略：默认 LF，不再强制 CRLF。
 #
-# 为什么要写 text=auto + eol=crlf 两个：
-#   text=auto  让 git 在提交时把 CRLF 规范化为 LF（避免仓库里混入 CRLF）
-#   eol=crlf   让 git 在检出时把 LF 转回 CRLF（保证工作区始终是 CRLF）
-* text=auto eol=crlf
+# 为什么改
+#   - macOS / Linux 原生就是 LF，CRLF 只有 Windows 记事本"看起来"才顺眼，
+#     而现代编辑器（包括 Windows 11 的记事本）都能正确处理 LF。
+#   - 强制 eol=crlf 曾经把一个 macOS 必需的 .plist 转成 CRLF，导致
+#     codesign 报 "AMFIUnserializeXML: syntax error near line 1"。
+#     偏偏这个错误只在 macOS 打包时才暴露，Windows 上完全正常。
+#   - 统一 LF 后跨平台行为一致，不再依赖本地 core.autocrlf 设置
+#     （git 的 eol 属性优先级高于 core.autocrlf）。
 
-# 文本类：明确要求 CRLF 工作区副本
-*.js    text eol=crlf
-*.cjs   text eol=crlf
-*.mjs   text eol=crlf
-*.ts    text eol=crlf
-*.vue   text eol=crlf
-*.css   text eol=crlf
-*.html  text eol=crlf
-*.json  text eol=crlf
-*.md    text eol=crlf
-*.yml   text eol=crlf
-*.yaml  text eol=crlf
-*.bat   text eol=crlf
-*.cmd   text eol=crlf
+* text=auto eol=lf
 
-# 二进制：禁止任何换行符转换（转了会损坏文件）
+# ── Windows 批处理：CRLF 是硬要求 ──────────────────────────────────
+# cmd.exe 解析 .bat/.cmd 时依赖 CRLF，改成 LF 会出现离奇的语法错误。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# ── macOS / Unix 原生格式：必须 LF ────────────────────────────────
+# plist：codesign 的 AMFI 解析器不接受 CRLF
+# sh   ：bash 不认 CRLF（会报 $'\r': command not found）
+*.plist text eol=lf
+*.sh    text eol=lf
+
+# ── 二进制：禁止任何换行符转换（转了会损坏文件）──────────────────
 *.png   binary
 *.jpg   binary
 *.jpeg  binary
@@ -43,13 +43,12 @@
 *.7z    binary
 *.pdf   binary
 *.crx   binary
-*.user.js text eol=crlf
 
-# 仅用于 diff 展示，不做转换
+# ── 锁定文件：仅用于 diff 展示，不做转换 ─────────────────────────
 *.lock  -text
 package-lock.json -text
 
-# 构建产物与依赖不参与（同时也在 .gitignore 中）
+# ── 构建产物与依赖不参与导出 ─────────────────────────────────────
 dist/     export-ignore
 release/  export-ignore
 node_modules/ export-ignore
