@@ -1,11 +1,27 @@
 <!-- TopBar.vue — 顶部标题栏（窗口控制、透明度快速切换、品牌图标） -->
 <script setup>
-import { CloseBold, Document, Files, Hide, House, Lock, Moon, Mouse, Setting, Sunny, Sunrise, Unlock, View } from '@element-plus/icons-vue';
-import { computed, onUnmounted, ref, watch } from 'vue';
-import BaseButton from '../components/BaseButton.vue';
+import {
+  CloseBold,
+  DArrowLeft,
+  DArrowRight,
+  Document,
+  Files,
+  Hide,
+  House,
+  Lock,
+  MagicStick,
+  Mouse,
+  Setting,
+  Unlock,
+  View,
+} from "@element-plus/icons-vue";
+import { computed, onUnmounted, ref, watch } from "vue";
+import BaseButton from "../components/BaseButton.vue";
 
 // 检测平台：Mac 上窗口控制习惯在左侧
-const isMac = computed(() => typeof window !== 'undefined' && window.desktop?.platform === 'darwin');
+const isMac = computed(
+  () => typeof window !== "undefined" && window.desktop?.platform === "darwin",
+);
 const isDev = import.meta.env.DEV;
 
 const props = defineProps({
@@ -22,39 +38,23 @@ const props = defineProps({
   activeTab: Object,
   statusMessage: String,
   // 主题：当前设置的模式 + 切换回调（由 App.vue 传入，保持本组件无状态依赖）
-  themeMode: { type: String, default: 'system' },
+  themeMode: { type: String, default: "system" },
   cycleTheme: Function,
 });
 
-/** 主题按钮的图标与提示：跟随系统/浅色/深色 */
-const themeIcon = computed(() => {
-  const m = props.themeMode;
-  if (m === 'light') return 'sunny';
-  if (m === 'dark') return 'moon';
-  return 'system';
-});
-
-const themeTitle = computed(() => {
-  const label = props.themeMode === 'light' ? '浅色' : props.themeMode === 'dark' ? '深色' : '跟随系统';
-  return `主题：${label}（点击切换 跟随系统 → 浅色 → 深色）`;
-});
-
-// 透明度在预设值间循环：15 → 40 → 60 → 85
+// 透明度在预设值间循环：0 → 20 → 50 → 85 → 100
 const cycleTitlebarOpacity = () => {
   try {
     const presets = [0, 20, 50, 85, 100];
     const cur = Number(props.settings?.transparency ?? 85);
     // 找第一个严格大于当前值的预设；到头了就回到 0
-    const next = presets.find(v => v > cur) ?? presets[0];
+    const next = presets.find((v) => v > cur) ?? presets[0];
     setOpacity(next);
   } catch (e) {}
 };
 
 // 透明度上限与设置面板滑块保持一致（0-100）
 const OPACITY_MAX = 100;
-
-/** 记忆「双击前」的非零透明度，用于双击在 0 与它之间切换 */
-const lastNonZeroOpacity = ref(0);
 
 function currentOpacity() {
   const v = Number(props.settings?.transparency);
@@ -64,10 +64,7 @@ function currentOpacity() {
 function setOpacity(v) {
   try {
     const next = Math.max(0, Math.min(OPACITY_MAX, Math.round(Number(v) || 0)));
-    const cur = currentOpacity();
-    // 记录最近一次非零值（供双击恢复）
-    if (cur > 0) lastNonZeroOpacity.value = cur;
-    props.patchSetting && props.patchSetting('transparency', next);
+    props.patchSetting && props.patchSetting("transparency", next);
   } catch (e) {}
 }
 
@@ -78,8 +75,11 @@ function flashAdjusting() {
   try {
     adjusting.value = true;
     if (_adjustTimer) clearTimeout(_adjustTimer);
-    _adjustTimer = setTimeout(() => { adjusting.value = false; _adjustTimer = null; }, 420);
-  } catch (e) { }
+    _adjustTimer = setTimeout(() => {
+      adjusting.value = false;
+      _adjustTimer = null;
+    }, 420);
+  } catch (e) {}
 }
 
 /**
@@ -98,79 +98,129 @@ function onOpacityWheel(e) {
 }
 
 /**
- * 单击与双击共用同一个按钮，需要区分：
- * 双击必然先触发两次 click，若立即执行会导致透明度被循环两轮再归零。
- * 做法：单击延迟 DBLCLICK_DELAY 执行，等待期内若发生第二次点击就取消它。
+ * 单击循环透明度档位。
+ *
+ * 之前为了区分「单击循环档位」和「双击在 0 与上次值间切换」，
+ * 单击要延迟 220ms 等一等看有没有第二次点击 —— 体感上就是「点了没反应」。
+ * 现在双击功能已按需求移除，单击可以直接执行，响应更跟手。
  */
-const DBLCLICK_DELAY = 220;
-let _clickTimer = null;
-
 function onOpacityClick() {
   try {
-    if (_clickTimer) {
-      // 已在等待中 → 这是第二次点击，交给 dblclick 处理
-      clearTimeout(_clickTimer);
-      _clickTimer = null;
-      return;
-    }
-    _clickTimer = setTimeout(() => {
-      _clickTimer = null;
-      cycleTitlebarOpacity();
-    }, DBLCLICK_DELAY);
-  } catch (e) { }
-}
-
-function onOpacityDblClick(e) {
-  try {
-    if (e && typeof e.preventDefault === 'function') e.preventDefault();
-    // 取消挂起的单击，避免它稍后再执行一次
-    if (_clickTimer) { clearTimeout(_clickTimer); _clickTimer = null; }
-    const cur = currentOpacity();
-    if (cur > 0) {
-      lastNonZeroOpacity.value = cur;
-      setOpacity(0);
-    } else {
-      // 记忆值为 0（从未设过非零）时，给一个直观的默认值
-      const restore = lastNonZeroOpacity.value > 0 ? lastNonZeroOpacity.value : 50;
-      setOpacity(restore);
-    }
-    flashAdjusting();
-  } catch (e) { }
+    cycleTitlebarOpacity();
+  } catch (e) {}
 }
 
 onUnmounted(() => {
-  if (_clickTimer) { clearTimeout(_clickTimer); _clickTimer = null; }
   clearTimeout(_statusTimer);
 });
 
+/**
+ * 顶栏图标的展开/收起。
+ *
+ * 默认收起：只留「透明度」「标题栏显隐」「关闭」三个高频入口 + 一个箭头，
+ * 窗口小的时候顶栏不会挤满图标。点箭头才展开其余（软件透明、网页透明、
+ * 主题、自动隐藏、置顶、设置）。
+ *
+ * 箭头方向：展开时 DArrowLeft（«），收起时 DArrowRight（»）。
+ * 箭头位置固定在关闭按钮左侧，不随展开状态移动。
+ */
+const iconsExpanded = ref(false);
+
+const iconsToggleTitle = computed(() =>
+  iconsExpanded.value ? "收起顶栏图标" : "展开全部顶栏图标",
+);
+
+// ─── 极简模式 ───
+
+/** 极简模式下使用的透明度档位 */
+const MINIMAL_OPACITY = 50;
+
+/**
+ * 极简模式：一键把「摸鱼时最该打开」的几项同时设好。
+ *
+ * 包含：软件背景透明 + 网页背景透明 + 窗口置顶 + 标题栏悬停显示 + 透明度 50%。
+ *
+ * 状态用**派生**判断，不额外存一个 minimalMode 设置项：
+ * 上述五项全部满足才算「开」。好处是用户在顶栏手动关掉任意一项后，
+ * 这个开关会自动反映为「关」，不会出现「开关显示开着、实际却不满配」的错位。
+ *
+ * 点关闭时会把五项**全部**还原（透明度回 0），不只是翻转当前那一项，
+ * 这样即便用户中途手动开过某些项也能一次收干净。
+ */
+const minimalActive = computed(() => {
+  const s = props.settings || {};
+  return (
+    !!s.fullWindowTransparent &&
+    !!s.pageTransparentMode &&
+    !!s.alwaysOnTop &&
+    !!s.hoverHeaderMode &&
+    Number(s.transparency) === MINIMAL_OPACITY
+  );
+});
+
+const minimalTitle = computed(() =>
+  minimalActive.value
+    ? "极简模式（已开启，点击全部关闭）"
+    : "极简模式（软件透明 + 网页透明 + 置顶 + 悬停标题栏 + 透明度 50%）",
+);
+
+function toggleMinimalMode() {
+  try {
+    const patch = props.patchSetting;
+    if (typeof patch !== "function") return;
+
+    if (minimalActive.value) {
+      // 关闭：五项全部还原，透明度回到 0
+      patch("fullWindowTransparent", false);
+      patch("pageTransparentMode", false);
+      patch("alwaysOnTop", false);
+      patch("hoverHeaderMode", false);
+      patch("transparency", 0);
+    } else {
+      // 开启：一次性设成极简组合
+      patch("fullWindowTransparent", true);
+      patch("pageTransparentMode", true);
+      patch("alwaysOnTop", true);
+      patch("hoverHeaderMode", true);
+      patch("transparency", MINIMAL_OPACITY);
+    }
+  } catch (e) {}
+}
+
 // 自动隐藏二态循环：关闭 → 移入不显示 → 关闭
 const autoHideTitle = computed(() => {
-  return props.settings?.autoHide ? '移出隐藏 · 移入不显示（点击关闭）' : '自动隐藏（关闭）';
+  return props.settings?.autoHide
+    ? "移出隐藏 · 移入不显示（点击关闭）"
+    : "自动隐藏（关闭）";
 });
 const cycleAutoHide = () => {
   try {
-    props.patchSetting && props.patchSetting('autoHide', props.settings?.autoHide ? false : 'hide');
+    props.patchSetting &&
+      props.patchSetting("autoHide", props.settings?.autoHide ? false : "hide");
   } catch (e) {}
 };
 
 const showStatus = ref(false);
 let _statusTimer = null;
 
-watch(() => props.statusMessage, (msg) => {
-  if (!msg) return;
-  showStatus.value = true;
-  clearTimeout(_statusTimer);
-  _statusTimer = setTimeout(() => {
-    showStatus.value = false;
-  }, 2500);
-});
+watch(
+  () => props.statusMessage,
+  (msg) => {
+    if (!msg) return;
+    showStatus.value = true;
+    clearTimeout(_statusTimer);
+    _statusTimer = setTimeout(() => {
+      showStatus.value = false;
+    }, 2500);
+  },
+);
 
 function dragAreaText() {
   if (showStatus.value && props.statusMessage) return props.statusMessage;
   const tab = props.activeTab;
-  if (!tab) return '';
-  if (tab.kind === 'dashboard') return '工作台';
-  return tab.title || tab.url || '';
+  if (!tab) return "";
+  if (tab.kind === "dashboard") return "工作台";
+  return tab.title || tab.url || "";
 }
 </script>
 
@@ -192,108 +242,167 @@ function dragAreaText() {
       <span
         v-if="dragAreaText()"
         class="drag-title"
-        :class="{ 'is-status': showStatus && statusMessage }">
+        :class="{ 'is-status': showStatus && statusMessage }"
+      >
         {{ dragAreaText() }}
       </span>
     </div>
 
-    <!-- 窗口控制区 -->
+    <!-- 窗口控制区
+         布局：常显（透明度 / 标题栏显隐）→ 展开箭头 → 折叠区（其余全部图标）
+         折叠区默认隐藏，点箭头才展开。 -->
     <div class="window-controls no-drag">
-      <!-- 组1：透明度（空间不足时优先隐藏） -->
-      <div class="ctrl-group grp-collapsible-a">
+      <!-- ── 常显：透明度 ── -->
+      <div class="ctrl-group">
         <BaseButton
           class="ctrl-btn opacity-btn"
           :class="{ 'opacity-adjusting': adjusting }"
-          :title="`透明度 ${props.settings?.transparency ?? 0}%｜滚轮微调（±1%）· 单击循环档位 · 双击在 0 与上次值间切换`"
+          :title="`透明度 ${props.settings?.transparency ?? 0}%｜滚轮微调（±1%）· 单击循环档位`"
           @click="onOpacityClick"
           @wheel.prevent="onOpacityWheel"
-          @dblclick="onOpacityDblClick">
-          <span class="opacity-label">{{ props.settings?.transparency ?? 0 }}%</span>
+        >
+          <span class="opacity-label"
+            >{{ props.settings?.transparency ?? 0 }}%</span
+          >
         </BaseButton>
+      </div>
+
+      <!-- ── 常显：标题栏显隐 ── -->
+      <div class="ctrl-group">
+        <BaseButton
+          class="ctrl-btn"
+          :class="{ active: props.settings.hoverHeaderMode }"
+          :title="
+            props.settings.hoverHeaderMode
+              ? '悬停显示标题栏（点击关闭）'
+              : '标题栏改为悬停显示（点击开启）'
+          "
+          @click="
+            () => props.toggleSetting && props.toggleSetting('hoverHeaderMode')
+          "
+        >
+          <el-icon v-if="props.settings.hoverHeaderMode"><View /></el-icon>
+          <el-icon v-else><Hide /></el-icon>
+          <span v-if="props.settings.hoverHeaderMode" class="state-dot"></span>
+        </BaseButton>
+      </div>
+
+      <!-- ── 常显：极简模式 ──
+           一键开关「软件透明 + 网页透明 + 置顶 + 悬停标题栏 + 透明度 50%」。
+           不放进折叠区：它是常用的一键切换，藏起来就失去意义了。 -->
+      <div class="ctrl-group">
+        <BaseButton
+          class="ctrl-btn"
+          :class="{ active: minimalActive }"
+          :title="minimalTitle"
+          @click="toggleMinimalMode"
+        >
+          <el-icon><MagicStick /></el-icon>
+          <span v-if="minimalActive" class="state-dot"></span>
+        </BaseButton>
+      </div>
+
+      <!-- ── 折叠区：其余全部图标，默认隐藏 ── -->
+      <div v-show="iconsExpanded" class="ctrl-group ctrl-group-extra">
         <!-- 软件背景透明：只让外壳/面板透明（fullWindowTransparent）
              拆成两个按钮而不是循环：循环一次要改多个设置项，
              切换过程中容易出现"点了却像没生效"的错觉，分开更直观可控。 -->
         <BaseButton
           class="ctrl-btn"
           :class="{ active: !!props.settings?.fullWindowTransparent }"
-          :title="props.settings?.fullWindowTransparent ? '软件背景透明（已开启，点击关闭）' : '软件背景透明（点击开启）'"
-          @click="() => props.toggleSetting && props.toggleSetting('fullWindowTransparent')">
+          :title="
+            props.settings?.fullWindowTransparent
+              ? '软件背景透明（已开启，点击关闭）'
+              : '软件背景透明（点击开启）'
+          "
+          @click="
+            () =>
+              props.toggleSetting &&
+              props.toggleSetting('fullWindowTransparent')
+          "
+        >
           <el-icon><Files /></el-icon>
         </BaseButton>
         <!-- 网页背景透明：让嵌入的网页也透明（pageTransparentMode） -->
         <BaseButton
           class="ctrl-btn"
           :class="{ active: !!props.settings?.pageTransparentMode }"
-          :title="props.settings?.pageTransparentMode ? '网页背景透明（已开启，点击关闭）' : '网页背景透明（点击开启）'"
-          @click="() => props.toggleSetting && props.toggleSetting('pageTransparentMode')">
+          :title="
+            props.settings?.pageTransparentMode
+              ? '网页背景透明（已开启，点击关闭）'
+              : '网页背景透明（点击开启）'
+          "
+          @click="
+            () =>
+              props.toggleSetting && props.toggleSetting('pageTransparentMode')
+          "
+        >
           <el-icon><Document /></el-icon>
         </BaseButton>
         <span class="ctrl-sep"></span>
-      </div>
 
-      <!-- 组2：可见性控制（空间不足时次优先隐藏） -->
-      <div class="ctrl-group grp-collapsible-b">
-        <!-- 主题：点击在「跟随系统 → 浅色 → 深色」间循环 -->
-        <BaseButton
-          class="ctrl-btn theme-btn"
-          :title="themeTitle"
-          @click="() => props.cycleTheme && props.cycleTheme()">
-          <el-icon v-if="themeIcon === 'sunny'"><Sunny /></el-icon>
-          <el-icon v-else-if="themeIcon === 'moon'"><Moon /></el-icon>
-          <el-icon v-else><Sunrise /></el-icon>
-          <span
-            v-if="props.themeMode === 'system'"
-            class="state-dot system"></span>
-        </BaseButton>
-        <BaseButton
-          class="ctrl-btn"
-          :class="{ active: props.settings.hoverHeaderMode }"
-          :title="props.settings.hoverHeaderMode ? '悬停显示标题栏（点击关闭）' : '标题栏改为悬停显示（点击开启）'"
-          @click="() => props.toggleSetting && props.toggleSetting('hoverHeaderMode')">
-          <el-icon v-if="props.settings.hoverHeaderMode"><View /></el-icon>
-          <el-icon v-else><Hide /></el-icon>
-          <span
-            v-if="props.settings.hoverHeaderMode"
-            class="state-dot"></span>
-        </BaseButton>
         <BaseButton
           class="ctrl-btn"
           :class="{ active: !!props.settings.autoHide }"
           :title="autoHideTitle"
-          @click="cycleAutoHide">
+          @click="cycleAutoHide"
+        >
           <!-- 移出隐藏：用鼠标图标直指触发条件（鼠标移出窗口），
                比原先的 Top（向上箭头）更不易被误读成「置顶」 -->
           <el-icon><Mouse /></el-icon>
-          <span
-            v-if="props.settings.autoHide"
-            class="state-dot"></span>
+          <span v-if="props.settings.autoHide" class="state-dot"></span>
         </BaseButton>
         <BaseButton
           class="ctrl-btn"
           :class="{ active: props.settings.alwaysOnTop }"
-          :title="props.settings.alwaysOnTop ? '已置顶（点击取消）' : '窗口置顶（开启）'"
-          @click="props.togglePin">
+          :title="
+            props.settings.alwaysOnTop
+              ? '已置顶（点击取消）'
+              : '窗口置顶（开启）'
+          "
+          @click="props.togglePin"
+        >
           <el-icon v-if="props.settings.alwaysOnTop"><Lock /></el-icon>
           <el-icon v-else><Unlock /></el-icon>
-          <span
-            v-if="props.settings.alwaysOnTop"
-            class="state-dot"></span>
+          <span v-if="props.settings.alwaysOnTop" class="state-dot"></span>
         </BaseButton>
         <span class="ctrl-sep"></span>
-      </div>
 
-      <!-- 组3：窗口操作（始终可见） -->
-      <div class="ctrl-group grp-essential">
+        <!-- 设置（关闭按钮不在这里，它常驻在最右侧） -->
         <BaseButton
           class="ctrl-btn"
           title="设置"
-          @click="props.openSettingsModal">
+          @click="props.openSettingsModal"
+        >
           <el-icon><Setting /></el-icon>
         </BaseButton>
+      </div>
+
+      <!-- ── 展开 / 收起 ──
+           位置固定在关闭按钮左侧，不随展开状态移动。
+           图标：收起时 DArrowLeft（«），展开时 DArrowRight（»）。 -->
+      <BaseButton
+        class="ctrl-btn expand-toggle"
+        :class="{ active: iconsExpanded }"
+        :title="iconsToggleTitle"
+        @click="iconsExpanded = !iconsExpanded"
+      >
+        <el-icon v-if="iconsExpanded"><DArrowRight /></el-icon>
+        <!-- 展开：« -->
+        <el-icon v-else><DArrowLeft /></el-icon>
+        <!-- 收起：» -->
+      </BaseButton>
+
+      <span class="ctrl-sep"></span>
+
+      <!-- ── 常显：关闭 ──
+           始终在最右端。收起状态下也要能直接关窗口，不该被迫先展开。 -->
+      <div class="ctrl-group">
         <BaseButton
           class="ctrl-btn close-btn"
           title="关闭"
-          @click="props.handleClose">
+          @click="props.handleClose"
+        >
           <el-icon><CloseBold /></el-icon>
         </BaseButton>
       </div>
@@ -345,7 +454,9 @@ function dragAreaText() {
   border-radius: 4px !important;
   min-width: 0 !important;
   color: var(--icon);
-  transition: background 0.1s ease, color 0.1s ease !important;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease !important;
   cursor: pointer;
 }
 
@@ -428,14 +539,30 @@ function dragAreaText() {
  */
 @media (max-width: 360px) {
   /* 标题让位（用户接受「不要标题」） */
-  .drag-title { display: none; }
+  .drag-title {
+    display: none;
+  }
   /* 压缩按钮内边距而非隐藏 */
-  .ctrl-btn { padding: 0 3px !important; }
-  .opacity-label { min-width: 22px; font-size: 9px; }
+  .ctrl-btn {
+    padding: 0 3px !important;
+  }
+  .opacity-label {
+    min-width: 22px;
+    font-size: 9px;
+  }
 }
 
-/* 组3（设置/最小化/关闭）：始终完整显示 */
-.grp-essential {
+/* ── 展开/收起箭头 ──
+ *
+ * 常显，位置固定在关闭按钮左侧。展开时 DArrowLeft（«），收起时 DArrowRight（»）。
+ * 展开期间套用 .ctrl-btn.active 的蓝底蓝字，让「现在是展开状态」一眼可见。 */
+.expand-toggle {
+  flex: 0 0 auto;
+}
+
+/* ── 折叠区（其余全部图标）──
+ * 默认 v-show 隐藏，点箭头才出现。flex 布局与常显组一致。 */
+.ctrl-group-extra {
   flex: 0 0 auto;
 }
 
@@ -452,7 +579,9 @@ function dragAreaText() {
   border: none !important;
   box-shadow: none !important;
   border-radius: 4px !important;
-  transition: background 0.1s ease, color 0.1s ease !important;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease !important;
   cursor: pointer;
   color: var(--icon);
 }
@@ -461,6 +590,13 @@ function dragAreaText() {
   width: 14px;
   height: 14px;
   display: block;
+}
+
+/* 展开/收起箭头：双箭头（«/»）比单图标更"重"，在 14px 下显得偏大，
+   单独缩一档，避免它比相邻按钮更抢眼。 */
+.ctrl-btn.expand-toggle .el-icon svg {
+  width: 11px;
+  height: 11px;
 }
 
 .ctrl-btn:hover {

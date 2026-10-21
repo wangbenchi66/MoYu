@@ -71,7 +71,7 @@ const store = new Store()
 const DEFAULT_WIDTH = 820
 const DEFAULT_HEIGHT = 860
 const MIN_SAFE_WIDTH = 360
-const MIN_SAFE_HEIGHT = 240
+const MIN_SAFE_HEIGHT = 110
 
 // ─── 主题 ───
 // 三态：light / dark / system（默认 system）
@@ -863,9 +863,45 @@ function updateSettingsFromTray(partial) {
     }
 }
 
+// ─── 极简模式（托盘）───
+//
+// 与顶栏的极简模式保持一致：一键打开「软件背景透明 + 网页背景透明 +
+// 窗口置顶 + 悬停显示标题栏 + 透明度 50%」，关闭时五项一并还原、透明度回 0。
+//
+// 状态判断同样是**派生**的（五项全满足才算开），不额外存 minimalMode，
+// 这样用户在别处（顶栏 / 设置页）手动改动任意一项后，托盘里的勾选会跟着变。
+const MINIMAL_OPACITY = 50
+
+function isMinimalModeActive() {
+    return !!currentSettings.fullWindowTransparent
+        && !!currentSettings.pageTransparentMode
+        && !!currentSettings.alwaysOnTop
+        && !!currentSettings.hoverHeaderMode
+        && Number(currentSettings.transparency) === MINIMAL_OPACITY
+}
+
+function toggleMinimalModeFromTray() {
+    if (isMinimalModeActive()) {
+        updateSettingsFromTray({
+            fullWindowTransparent: false,
+            pageTransparentMode: false,
+            alwaysOnTop: false,
+            hoverHeaderMode: false,
+            transparency: 0,
+        })
+    } else {
+        updateSettingsFromTray({
+            fullWindowTransparent: true,
+            pageTransparentMode: true,
+            alwaysOnTop: true,
+            hoverHeaderMode: true,
+            transparency: MINIMAL_OPACITY,
+        })
+    }
+}
+
 function buildTrayMenuTemplate() {
     const isVisible = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()
-
     const transparencyOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80]
     const transparencySubmenu = transparencyOptions.map((v) => ({
         label: `${v}%`,
@@ -908,6 +944,13 @@ function buildTrayMenuTemplate() {
         {
             label: isVisible ? '隐藏主窗口' : '显示主窗口',
             click: () => toggleMainWindow(),
+        },
+        // 极简模式：一级菜单，一项顶五项，摸鱼时常用
+        {
+            label: '极简模式',
+            type: 'checkbox',
+            checked: isMinimalModeActive(),
+            click: () => toggleMinimalModeFromTray(),
         },
         // 主题放在顶层便于快速切换（高频操作）
         {
@@ -1075,7 +1118,7 @@ function createWindow() {
         width: initialW,
         height: initialH,
         minWidth: 280,
-        minHeight: 200,
+                minHeight: 110,
         // macOS 使用 titleBarStyle + trafficLightPosition 隐藏原生交通灯按钮
         // Windows 使用 frame: false 隐藏原生标题栏
         ...(isMac

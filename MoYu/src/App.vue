@@ -308,6 +308,10 @@ function onHeaderMouseLeave(e) {
  */
 function onTopbarMouseEnter(e) {
   try {
+    // 未开启「标题栏悬停显示」时不需要这套逻辑。
+    // 合并成单一 TopBar 后监听器是常驻的，必须在这里拦住，
+    // 否则普通模式下也会把 headerHoverActive 置 true，误触发 hover 样式。
+    if (!settings.hoverHeaderMode) return;
     clearHeaderHideTimeout();
     if (!headerHoverActive.value) headerHoverActive.value = true;
   } catch (e) {}
@@ -319,6 +323,8 @@ function onTopbarMouseEnter(e) {
  */
 function onTopbarMouseLeave(e) {
   try {
+    // 同 onTopbarMouseEnter：未开启悬停显示时这套逻辑不应生效
+    if (!settings.hoverHeaderMode) return;
     const to = e && e.relatedTarget;
     if (to) {
       if (_hzEl && (_hzEl === to || _hzEl.contains(to))) return;
@@ -1162,43 +1168,31 @@ function localShortcutHandler(e) {
       @mouseenter="onHeaderMouseEnter"
       @mouseleave="onHeaderMouseLeave"></div>
 
-    <div
-      v-if="settings.hoverHeaderMode"
+    <!-- TopBar 始终只渲染一次。
+         ⚠️ 这里原来用 v-if / v-else 按 hoverHeaderMode 分成两份 TopBar，
+         切换「标题栏显隐」时 Vue 会销毁并重建整个组件，导致 TopBar 内部的
+         状态（顶栏图标是否展开等）被重置 —— 表现就是「点一下标题栏开关，
+         展开的图标自己收起来了」。
+         现在只渲染一个实例；悬停监听直接绑在组件上（Vue 3 会把未声明为
+         props 的监听器落到根元素 <header class="topbar">），不需要额外
+         wrapper，布局零变化。 -->
+    <TopBar
+      :settings="settings"
+      :headerHoverActive="headerHoverActive"
+      :openSettingsModal="openSettingsModal"
+      :togglePin="togglePin"
+      :toggleSetting="toggleSetting"
+      :patchSetting="patchSetting"
+      :handleMinimize="handleMinimize"
+      :handleMaximize="handleMaximize"
+      :handleClose="handleClose"
+      :goHome="goHome"
+      :activeTab="activeTab"
+      :statusMessage="statusMessage"
+      :themeMode="themeMode"
+      :cycleTheme="cycleTopbarTheme"
       @mouseenter="onTopbarMouseEnter"
-      @mouseleave="onTopbarMouseLeave">
-      <TopBar
-        :settings="settings"
-        :headerHoverActive="headerHoverActive"
-        :openSettingsModal="openSettingsModal"
-        :togglePin="togglePin"
-        :toggleSetting="toggleSetting"
-        :patchSetting="patchSetting"
-        :handleMinimize="handleMinimize"
-        :handleMaximize="handleMaximize"
-        :handleClose="handleClose"
-        :goHome="goHome"
-        :activeTab="activeTab"
-        :statusMessage="statusMessage"
-        :themeMode="themeMode"
-        :cycleTheme="cycleTopbarTheme" />
-    </div>
-    <template v-else>
-      <TopBar
-        :settings="settings"
-        :headerHoverActive="headerHoverActive"
-        :openSettingsModal="openSettingsModal"
-        :togglePin="togglePin"
-        :toggleSetting="toggleSetting"
-        :patchSetting="patchSetting"
-        :handleMinimize="handleMinimize"
-        :handleMaximize="handleMaximize"
-        :handleClose="handleClose"
-        :goHome="goHome"
-        :activeTab="activeTab"
-        :statusMessage="statusMessage"
-        :themeMode="themeMode"
-        :cycleTheme="cycleTopbarTheme" />
-    </template>
+      @mouseleave="onTopbarMouseLeave" />
 
     <TabBar
       v-if="settings.showTabBar"
