@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Ad-hoc 签名 + Hardened Runtime 所需的两个 entitlement。
+
+    allow-jit:
+      Electron 的 V8 需要 JIT。开启 Hardened Runtime 后必须显式声明，
+      否则应用启动时会直接崩溃。
+
+    disable-library-validation:
+      我们用的是 ad-hoc 签名（无 Team ID），而 Electron 的预编译框架
+      （Electron Framework.framework 等）带着 Apple 的 Team ID。
+      Hardened Runtime 的库验证会拒绝「主程序与所加载框架 Team ID 不一致」，
+      报 "mapping process and mapped file (non-platform) have different Team IDs"。
+      关掉库验证才能正常加载。
+
+    注意：这两项只在 ad-hoc 场景需要。将来配置了真实的
+    Developer ID 证书 + 公证后，可以移除 disable-library-validation。
+  -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>

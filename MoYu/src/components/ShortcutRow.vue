@@ -100,7 +100,8 @@ function onClear() {
   height: 28px;
   line-height: 28px;
 }
-.shortcut-input >>> .el-input__inner {
+/* Vue 3 / @vue/compiler-sfc：`>>>` 与 `/deep/` 已废弃，改用 :deep() */
+.shortcut-input :deep(.el-input__inner) {
   height: 28px;
   padding: 4px 8px;
   box-sizing: border-box;

@@ -45,7 +45,7 @@ const manualSteps = computed(() => {
       `打开 Releases 页面，找到最新的版本`,
       `下载 ${manualFileName.value}`,
       '打开下载好的 dmg，把 MoYu 图标拖进「应用程序」文件夹',
-      '在「应用程序」里重新打开 MoYu（第一次可能需要在图标上右键 → 打开）',
+      '第一次打开：系统会提示「无法验证开发者」。按下方说明允许一次即可，之后双击就能开',
     ];
   }
   return [
@@ -251,8 +251,8 @@ onBeforeUnmount(() => {
           <div
             v-else-if="showMacSigningHint"
             class="update-hint">
-            macOS 的自动安装依赖代码签名，当前版本未签名时可能失败。
-            若「自动更新」未能完成，请使用「去手动下载」。
+            macOS 的自动安装依赖 Apple 开发者签名，当前版本只有 ad-hoc 签名，自动安装大概率会失败。
+            请直接用「去手动下载」，按下方步骤安装（首次需要允许一次）。
           </div>
         </div>
       </template>
@@ -305,8 +305,21 @@ onBeforeUnmount(() => {
       <div
         v-if="isMac"
         class="manual-note">
-        提示：由于本应用未做 Apple 代码签名，系统可能提示「无法验证开发者」。
-        在「应用程序」里对 MoYu 图标右键 → 打开，即可绕过（只需一次）。
+        <p class="manual-note-line">
+          首次打开会被 macOS 拦下，这是未上架、未公证的应用的正常提示。按系统版本操作：
+        </p>
+        <p class="manual-note-line">
+          <strong>macOS 15 及以上：</strong>点弹窗里的「完成」（不要点「移到废纸篓」），
+          然后打开「系统设置 → 隐私与安全性」，在安全区域找到 MoYu 的提示，点<strong>「仍要打开」</strong>，输入密码确认。
+        </p>
+        <p class="manual-note-line">
+          <strong>macOS 14 及以下：</strong>在「应用程序」里对 MoYu 图标右键 → 打开。
+        </p>
+        <p class="manual-note-line">
+          如果应用已被移进废纸篓，从废纸篓恢复到「应用程序」后，打开「终端」执行
+          <code class="manual-note-code">xattr -cr /Applications/MoYu.app</code>
+          再双击打开即可。
+        </p>
       </div>
     </section>
   </div>
@@ -611,5 +624,31 @@ onBeforeUnmount(() => {
   font-size: 10.5px;
   line-height: 1.55;
   color: var(--text);
+}
+
+/* macOS 首次放行说明：分条呈现，避免一大段文字挤在一起 */
+.manual-note-line {
+  margin: 0;
+}
+
+.manual-note-line + .manual-note-line {
+  margin-top: 5px;
+}
+
+.manual-note-line strong {
+  font-weight: 600;
+}
+
+/* 终端命令单独高亮，方便用户辨认/复制 */
+.manual-note-code {
+  display: inline-block;
+  margin: 1px 0;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(var(--fg-rgb), 0.10);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  word-break: break-all;
+  user-select: all;
 }
 </style>

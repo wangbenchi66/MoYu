@@ -240,7 +240,11 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          # 必须是 22+：
+          #   vite 8 / @vitejs/plugin-vue 6 要求 ^20.19.0 || >=22.12.0
+          #   electron 45 要求 >= 22.12.0
+          # 原来写的是 18，升级依赖后会直接构建失败。
+          node-version: 22
           cache: 'npm'
           cache-dependency-path: MoYu/package-lock.json
 
@@ -310,6 +314,59 @@ jobs:
         working-directory: MoYu
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 校验 macOS 产物的 ad-hoc 签名是否完整 ──
+      #
+      # 为什么必须校验：没有证书时，如果完全跳过签名，linker 会留下一个
+      # **残缺的** ad-hoc 签名（只有代码页哈希，没有资源封条 sealed resources）。
+      # macOS 14/15+ 遇到这种包会判定为「已被篡改/含恶意代码」，
+      # 弹「已阻止恶意软件并移到废纸篓」，且不提供任何 GUI 绕过入口。
+      #
+      # 所以要求：
+      #   ① codesign --verify --deep 通过（签名完整、嵌套组件也签了）
+      #   ② 输出里必须有 "Sealed Resources"（资源封条存在）
+      #
+      # 注意不能加 --strict：它会拒绝 macOS 13+ 上**合法**的 ad-hoc 签名，
+      # 造成误报失败。
+      - name: 校验 macOS 签名（ad-hoc）
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        working-directory: MoYu
+        run: |
+          set -uo pipefail
+          APP=$(find release -maxdepth 3 -type d -name "*.app" | head -1)
+          if [ -z "${APP}" ]; then
+            echo "::error::release 目录下找不到 .app，无法校验签名"
+            find release -maxdepth 3 -type d | head -20
+            exit 1
+          fi
+
+          echo "待校验: ${APP}"
+          echo ""
+          echo "=== codesign --verify --deep ==="
+          if ! codesign --verify --deep "${APP}"; then
+            echo "::error::签名校验失败 —— 产物可能未签名或签名不完整"
+            exit 1
+          fi
+          echo "✓ 签名完整（含嵌套组件）"
+          echo ""
+          echo "=== 签名详情 ==="
+          codesign -dv --verbose=4 "${APP}" 2>&1 || true
+          echo ""
+          echo "=== 资源封条检查（最关键）==="
+          if codesign -dv --verbose=4 "${APP}" 2>&1 | grep -q "Sealed Resources"; then
+            echo "✓ 存在 Sealed Resources —— 不是残缺签名"
+          else
+            echo "::error::缺少 Sealed Resources —— 这是残缺签名，macOS 会报「已损坏/含恶意软件」并拒绝运行"
+            exit 1
+          fi
+          echo ""
+          echo "=== 确认是 ad-hoc 签名 ==="
+          if codesign -dvv "${APP}" 2>&1 | grep -q "Signature=adhoc"; then
+            echo "✓ ad-hoc 签名（预期，无 Apple 证书）"
+          else
+            echo "::warning::未检测到 ad-hoc 签名，可能配置有变，请检查 build/afterPack.cjs"
+          fi
 
       # 诊断：无论打包成功还是失败，都打印 release 目录的实际情况。
       # if: always() 保证打包步骤失败时也会执行 —— 否则最需要看内容的时候反而看不到。

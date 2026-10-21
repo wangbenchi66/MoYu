@@ -985,9 +985,24 @@ function applyWindowsAcrylic(win, enabled) {
     if (process.platform !== 'win32') return
 
     try {
-        if (typeof win.setBackgroundMaterial === 'function') {
-            win.setBackgroundMaterial(enabled ? 'acrylic' : 'none')
+        if (typeof win.setBackgroundMaterial !== 'function') return
+
+        if (enabled) {
+            win.setBackgroundMaterial('acrylic')
+            return
         }
+
+        // ⚠️ 关闭亚克力时**不能**调用 setBackgroundMaterial('none')。
+        //
+        // 实测（Electron 45 / Windows 11）：对 transparent: true 的窗口调用
+        // 'none' 会把整个窗口变成完全不透明 —— capturePage 的 alpha 平均值
+        // 从 0 直接跳到 255，「软件背景透明」彻底失效。
+        // Electron 31 上没有这个问题，是升级后才出现的。
+        //
+        // 正确做法：用 'auto' 回到默认状态，再把窗口背景色重置成全透明。
+        // 两者各自都能把 alpha 拉回 0（实测），一起用更稳妥。
+        win.setBackgroundMaterial('auto')
+        win.setBackgroundColor('#00000000')
     } catch (error) {
         console.warn('[blur] setBackgroundMaterial failed:', error)
     }
