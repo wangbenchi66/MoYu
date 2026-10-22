@@ -689,30 +689,17 @@ function toggleFullScreen(win) {
     try {
         if (_isFullScreen) {
             // ── 退出全屏 ──
+            //
+            // ⚠️ 这里**只**切换全屏状态，尺寸还原交给下面的
+            // `leave-full-screen` 监听器统一处理。
+            //
+            // 原先是在这里用 setTimeout(0) 调 setBounds 还原，但 Electron 45
+            // 的 setFullScreen(false) 是异步的：0ms 之后窗口往往还没真正退出
+            // 全屏，此时 setBounds 会被随后完成的全屏退出流程覆盖掉，
+            // 用户看到的就是「按 F11 最大化后，再按一下回不到原尺寸」。
+            // 改为等 leave-full-screen 事件（真正的退出时机）再还原。
             _isFullScreen = false
             win.setFullScreen(false)
-
-            // 用进入前的 bounds 还原。setTimeout(0) 让全屏状态先提交，
-            // 否则紧随其后的 setBounds 可能被忽略。
-            const restore = _boundsBeforeFullScreen
-            _boundsBeforeFullScreen = null
-            if (restore) {
-                setTimeout(() => {
-                    try {
-                        if (!win.isDestroyed()) {
-                            win.setBounds(restore)
-                            // 回到窗口态后重新记录，供自动隐藏逻辑使用
-                            rememberWindowBounds()
-                            // 把还原后的尺寸同步到 store，避免下次启动沿用旧值
-                            const [w, h] = win.getSize()
-                            store.set('width', w)
-                            store.set('height', h)
-                        }
-                    } catch (e) {
-                        console.warn('[fullscreen] restore bounds failed:', e)
-                    }
-                }, 0)
-            }
         } else {
             // ── 进入全屏 ──
             _isFullScreen = true
@@ -1199,17 +1186,45 @@ function createWindow() {
         }
     })
 
-    // 退出全屏时补记一次尺寸：因为全屏期间的 resize 都被上面跳过了，
-    // 若用户在退出全屏后又拖动窗口，正常路径会记到；但若直接关闭窗口，
-    // 需要这里兜底，避免把全屏尺寸留成最后一次记录。
+    // 退出全屏的统一处理：还原尺寸 + 记录。
+    //
+    // 这里是**唯一**做 bounds 还原的地方（toggleFullScreen 只负责切状态）。
+    // 原因见 toggleFullScreen 的注释：Electron 45 的 setFullScreen(false)
+    // 是异步的，任何固定延时都可能抢在窗口真正退出全屏之前执行而被覆盖；
+    // leave-full-screen 是「真的退出了」的信号，此时 setBounds 才有效。
     win.on('leave-full-screen', () => {
         try {
-            if (!win.isMaximized()) {
-                rememberWindowBounds()
-                const [w, h] = win.getSize()
-                store.set('width', w)
-                store.set('height', h)
+            if (win.isDestroyed()) return
+
+            // 无论从哪条路径退出全屏（F11、Esc、系统按钮），
+            // 都要把自维护的状态复位，否则下次 F11 会误判为「当前在全屏」
+            // 而走「退出」分支，表现是按一下没反应。
+            _isFullScreen = false
+
+            const restore = _boundsBeforeFullScreen
+            _boundsBeforeFullScreen = null
+
+            // 恢复到进入全屏前的尺寸/位置。
+            // 若之前是最大化状态则不动 —— 让 Electron 自己回到最大化，
+            // 此时 setBounds 反而会把窗口从最大化状态里拽出来。
+            if (restore && !win.isMaximized()) {
+                win.setBounds(restore)
             }
+
+            // setBounds 之后 getSize 才是新值，等一小段时间再记录，
+            // 否则会把全屏尺寸（屏幕分辨率）写进 store，
+            // 导致下次启动/恢复时窗口按屏幕大小打开。
+            setTimeout(() => {
+                try {
+                    if (win.isDestroyed() || win.isMaximized()) return
+                    rememberWindowBounds()
+                    const [w, h] = win.getSize()
+                    store.set('width', w)
+                    store.set('height', h)
+                } catch (e) {
+                    // ignore
+                }
+            }, 60)
         } catch (e) {
             // ignore
         }
@@ -1287,6 +1302,30 @@ function createWindow() {
         try {
             if (_handledWvc.has(wc)) return
             _handledWvc.add(wc)
+
+            // ── guest 也要接管 F11 ──
+            //
+            // 焦点在 <webview> 内时，键盘事件进入的是 **guest 的 webContents**，
+            // 宿主 win.webContents 上的 before-input-event 收不到。
+            // 结果就是：在顶栏/仪表盘按 F11 正常，但在网页里按 F11
+            // 走的是 Chromium 内建全屏 —— 透明窗口上它退不出来，
+            // 表现为「只能全屏，再按一下没反应」。
+            //
+            // 这里给每个 guest 挂一份同样的拦截，转交给统一的 toggleFullScreen。
+            try {
+                wc.on('before-input-event', (inputEvent, input) => {
+                    try {
+                        if (input.type !== 'keyDown') return
+                        // F11 在不同键盘布局/输入法下 key 都应是 'F11'；
+                        // code 再兜一层，避免个别环境 key 为空。
+                        if (input.key !== 'F11' && input.code !== 'F11') return
+                        inputEvent.preventDefault()
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            toggleFullScreen(mainWindow)
+                        }
+                    } catch (e) { }
+                })
+            } catch (e) { }
 
             // 拦截主框架发起的导航（location.href / location.assign 等）
             wc.on('will-navigate', (navEvent, url) => {

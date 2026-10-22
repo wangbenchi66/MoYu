@@ -55,6 +55,9 @@ const shellClasses = computed(() => ({
     'mode-mobile': settings.mobileMode,
     'mode-hover-header': settings.hoverHeaderMode,
     'mode-transparent-page': settings.pageTransparentMode,
+    // 软件背景透明：此时文字直接浮在桌面/其他窗口上，
+    // 需要一个 class 让样式表能给文字补描边（见 style.css）。
+    'mode-transparent-shell': settings.fullWindowTransparent,
     'mode-no-image': settings.noImageMode,
 }))
 

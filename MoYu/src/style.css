@@ -1055,6 +1055,30 @@ iframe {
   background: transparent !important;
 }
 
+/* ── 软件背景透明时的文字可读性 ──
+ *
+ * 开启「软件背景透明」后，顶栏标题、透明度数字这些文字直接浮在
+ * 桌面壁纸或别的窗口上。这时无法用一套固定颜色同时应付深底和浅底：
+ *   壁纸偏白 → 浅色字（--text 浅色主题是深灰）看不清
+ *   壁纸偏黑 → 深色字看不清
+ *
+ * 这里选择「描边」而不是「自动检测背景色」：
+ *   - 自动检测必须截屏采样（隐私敏感、性能开销、结果抖动会让字色闪烁）
+ *   - 描边是纯 CSS，任何背景下都能勾出字形轮廓，零成本、零延迟、不误判
+ *
+ * 效果：文字统一白色（深底清晰），外面套两层深色阴影 ——
+ * 紧贴的一层勾轮廓，略散的一层在浅色背景上压出对比。
+ * 所以严格说不是「自动变色」，而是让两种背景都可读。
+ */
+.window-shell.mode-transparent-shell .drag-title,
+.window-shell.mode-transparent-shell .opacity-label {
+  color: #fff !important;
+  text-shadow:
+    0 0 1px rgba(0, 0, 0, 0.95),
+    0 0 2px rgba(0, 0, 0, 0.85),
+    0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
 /* 将 webview 叠放以避免使用 display:none 导致某些 Electron 版本重载 webview */
 .webview-wrap {
   position: relative;
