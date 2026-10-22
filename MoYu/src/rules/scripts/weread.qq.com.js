@@ -371,8 +371,13 @@ function attachAutoNext() {
             } catch (e) { }
         }
 
-        var minScrollable = (window.__glassReaderMinScrollable || 50);
-        var threshold = 10;
+        // 内容不足这么多像素就不算「可翻页」。
+        // 原先默认 50px，窗口很矮时一点点内容也满足，容易误触发；
+        // 调到 120px 更接近「这一章确实还有一屏以上的内容」。
+        var minScrollable = (window.__glassReaderMinScrollable || 120);
+        // 到底的判定容差：原先 10px 偏宽松，滚动过程中还没真正压到底
+        // 就可能判定为 atBottom。调到 24px，要求更接近「完全到底」。
+        var threshold = 24;
         targets.forEach(function (t) {
             try {
                 var handler = function () {
@@ -387,6 +392,15 @@ function attachAutoNext() {
                         var atBottom = (scrollTop + clientHeight >= scrollHeight - threshold);
                         // 滚离底部：解除「取消」抑制，并清掉 latch，允许下次到底重新触发
                         if (!atBottom) {
+                            // 滚离底部：取消已经弹出的倒计时。
+                            //
+                            // 窗口很矮时，翻页途中会短暂经过「底部」区域。
+                            // 原先这里只清 latch、不关浮层，于是倒计时会在
+                            // 用户还没真正停下来时就已经开始跑；现在只要
+                            // 离开底部就立刻把浮层撤掉，回到「到底才计时」。
+                            if (window.__glassReaderCountdownNode) {
+                                try { window.hideNextCountdown() } catch (e) { }
+                            }
                             if (window.__glassReaderAutoNextSuppressed) {
                                 window.__glassReaderAutoNextSuppressed = false;
                             }

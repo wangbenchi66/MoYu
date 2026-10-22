@@ -71,7 +71,7 @@ const store = new Store()
 const DEFAULT_WIDTH = 820
 const DEFAULT_HEIGHT = 860
 const MIN_SAFE_WIDTH = 360
-const MIN_SAFE_HEIGHT = 110
+const MIN_SAFE_HEIGHT = 80
 
 // ─── 主题 ───
 // 三态：light / dark / system（默认 system）
@@ -1118,7 +1118,7 @@ function createWindow() {
         width: initialW,
         height: initialH,
         minWidth: 280,
-                minHeight: 110,
+        minHeight: 80,
         // macOS 使用 titleBarStyle + trafficLightPosition 隐藏原生交通灯按钮
         // Windows 使用 frame: false 隐藏原生标题栏
         ...(isMac
