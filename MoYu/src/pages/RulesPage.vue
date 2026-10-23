@@ -7,6 +7,7 @@ import { useDesktopApp } from '../composables/useDesktopApp';
 import {
   exportRules, importRules, buildExportFileName,
   isUserscript, convertUserscriptToRule,
+  getRules, setBuiltinRuleEnabled,
 } from '../rules/index.js';
 
 defineProps({ isTransparent: Boolean });
@@ -16,8 +17,10 @@ const { statusMessage } = useDesktopApp();
 
 const STORAGE_KEY = 'glass_reader_site_rules';
 
-// 只展示「自定义规则」——内置静态规则随包提供，不在此处改动
+// 用户规则来自 localStorage；内置规则随包提供（含 userscripts/ 下自动加载的油猴脚本），
+// 用户可以在本页开关，但不能删除或编辑。
 const userRules = ref([]);
+const builtinRules = ref([]);
 const selectedIds = ref([]);
 const showImportBox = ref(false);
 const importText = ref('');
@@ -38,6 +41,12 @@ function writeAll(list) {
 
 function refresh() {
   userRules.value = readAll();
+  // 只取 userscripts/ 目录自动加载的脚本（id 前缀 builtin-userscript:）。
+  // scripts/*.js 里的手写站点规则虽然也是 builtin，但它们属于应用自身逻辑，
+  // 不放进本列表，避免用户看到 default / weread / zhihu 这些不可操作项。
+  builtinRules.value = getRules().filter(
+    (r) => r && r.builtin && String(r.id || '').startsWith('builtin-userscript:'),
+  );
   // 清理已不存在的选中项
   const ids = new Set(userRules.value.map((r) => r.id));
   selectedIds.value = selectedIds.value.filter((id) => ids.has(id));
@@ -248,6 +257,14 @@ function closeImportBox(clear = true) {
 
 function toggleRule(rule) {
   try {
+    // 内置规则的状态存在独立的禁用列表里（见 rules/index.js），
+    // 不能写进用户规则的 localStorage，否则下次加载会被内置默认值覆盖。
+    if (rule.builtin) {
+      setBuiltinRuleEnabled(rule.id, !(rule.enabled !== false));
+      refresh();
+      statusMessage.value = '规则已更新，刷新网页后生效';
+      return;
+    }
     const all = readAll();
     const i = all.findIndex((r) => r.id === rule.id);
     if (i === -1) return;
@@ -284,7 +301,27 @@ function deleteSelected() {
     .catch(() => {});
 }
 
-const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== false).length);
+// 列表 = userscripts/ 自动加载的内置脚本 + 用户自己导入/新建的规则。
+// 内置的排前面：它们随包提供，用户更可能先看到。
+const displayRules = computed(() => [...builtinRules.value, ...userRules.value]);
+
+const enabledCount = computed(() => displayRules.value.filter((r) => r.enabled !== false).length);
+
+/**
+ * 在系统浏览器里打开「找规则」的站点。
+ *
+ * 走主进程的 shell:open-external（只允许 http/https），
+ * 而不是在应用内打开 —— 这些站点通常需要登录/下载，用外部浏览器更合适。
+ */
+function openSource(url) {
+  try {
+    if (window.desktop?.openExternal) {
+      window.desktop.openExternal(url);
+      return;
+    }
+    window.open(url, '_blank');
+  } catch (e) {}
+}
 </script>
 
 <template>
@@ -313,6 +350,14 @@ const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== 
       <button class="act-btn" @click="openImportBox">粘贴导入</button>
       <input ref="fileInputRef" type="file" multiple accept=".json,.js,.user.js,application/json,text/javascript"
         class="hidden-input" @change="onFilesPicked" />
+    </div>
+
+    <!-- 找规则的站点快捷入口：在系统浏览器里打开 -->
+    <div class="rule-sources">
+      <span class="sources-label">找规则：</span>
+      <button class="source-btn" @click="openSource('https://greasyfork.org/zh-CN')">Greasy Fork</button>
+      <button class="source-btn" @click="openSource('https://openuserjs.org/')">OpenUserJS</button>
+      <button class="source-btn" @click="openSource('https://github.com/search?q=userscript&type=repositories')">GitHub</button>
     </div>
 
     <div v-if="showImportBox" class="import-box">
@@ -355,7 +400,7 @@ const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== 
         <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
         <span>自定义规则</span>
       </label>
-      <span class="count">{{ enabledCount }} / {{ userRules.length }} 已启用</span>
+      <span class="count">{{ enabledCount }} / {{ displayRules.length }} 已启用</span>
     </div>
 
     <div v-if="selectedIds.length" class="sel-actions">
@@ -364,13 +409,16 @@ const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== 
       <button class="op-btn danger" @click="deleteSelected">删除选中</button>
     </div>
 
-    <div v-if="!userRules.length" class="empty-tip">
+    <div v-if="!displayRules.length" class="empty-tip">
       还没有自定义规则。<br />
-      可以「恢复 / 导入」备份文件，或直接导入油猴脚本（<code>.user.js</code>）。
+      可以把油猴脚本放进 <code>src/rules/userscripts/</code> 后重新构建，
+      或在此页「恢复 / 导入」备份文件、直接导入油猴脚本（<code>.user.js</code>）。
     </div>
 
-    <div v-for="rule in userRules" :key="rule.id" class="rule-item">
+    <!-- 列表 = userscripts/ 自动加载的脚本（只能开关） + 用户导入/新建的规则（可备份/删除） -->
+    <div v-for="rule in displayRules" :key="rule.id" class="rule-item">
       <input
+        v-if="!rule.builtin"
         type="checkbox"
         class="row-check"
         :checked="selectedIds.includes(rule.id)"
@@ -379,7 +427,8 @@ const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== 
         <div class="rule-title">
           <span :class="['dot', { off: rule.enabled === false }]"></span>
           <strong>{{ rule.name || patternText(rule) }}</strong>
-          <span v-if="isScript(rule)" class="badge" :title="rule.sourceAuthor ? `作者：${rule.sourceAuthor}` : ''">
+          <span v-if="rule.builtin" class="badge builtin">内置</span>
+          <span v-else-if="isScript(rule)" class="badge" :title="rule.sourceAuthor ? `作者：${rule.sourceAuthor}` : ''">
             油猴{{ rule.sourceVersion ? ' v' + rule.sourceVersion : '' }}
           </span>
         </div>
@@ -394,8 +443,10 @@ const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== 
       </div>
       <div class="rule-ops">
         <button class="op-btn" @click="toggleRule(rule)">{{ rule.enabled === false ? '启用' : '停用' }}</button>
-        <button class="op-btn" @click="handleBackupOne(rule)">备份</button>
-        <button class="op-btn danger" @click="deleteRule(rule)">删除</button>
+        <template v-if="!rule.builtin">
+          <button class="op-btn" @click="handleBackupOne(rule)">备份</button>
+          <button class="op-btn danger" @click="deleteRule(rule)">删除</button>
+        </template>
       </div>
     </div>
   </div>
@@ -435,6 +486,19 @@ const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== 
 }
 
 .action-bar { display: flex; gap: 6px; }
+
+/* 「找规则」快捷入口 */
+.rule-sources {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 0 2px;
+}
+.sources-label { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+.source-btn {
+  font-size: 11px; padding: 4px 9px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--text-secondary); cursor: pointer; white-space: nowrap;
+}
+.source-btn:hover { color: var(--primary); border-color: var(--primary); }
 
 .act-btn {
   flex: 1; padding: 7px 6px; font-size: 12px;
@@ -482,6 +546,8 @@ const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== 
 }
 .select-all { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .list-head .count { color: var(--muted); font-size: 11px; }
+/* 内置规则分组的标题（不可勾选，只是分组名） */
+.section-title { font-weight: 600; color: var(--text); }
 
 .sel-actions {
   display: flex; align-items: center; gap: 6px;
@@ -514,6 +580,10 @@ const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== 
   font-size: 9px; padding: 1px 5px; border-radius: 3px;
   background: #ecf5ff; color: var(--primary); border: 1px solid #d9ecff;
   flex-shrink: 0; white-space: nowrap;
+}
+/* 「内置」标记：中性灰调，与蓝色「油猴」标记区分 */
+.badge.builtin {
+  background: var(--fill-soft); color: var(--muted); border-color: var(--line);
 }
 
 .rule-pattern {

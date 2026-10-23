@@ -11,7 +11,7 @@ const ZHIHU_DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 
 // 插件本体：构建时通过 Vite raw import 读取（约 5000 行）
 // 文件位于 vendors/ 目录，由用户提供并手动更新
-import pluginRaw from './vendors/知乎配置插件-5.17.1.user.js?raw';
+import pluginRaw from './vendors/知乎配置插件-5.21.4.user.js?raw';
 
 /**
  * 从完整 userscript 文件中提取 IIFE 函数体（去掉 ==UserScript== 注释头和外层 (() => { })(); 包裹）。
@@ -29,6 +29,122 @@ function extractPluginBody(raw) {
 }
 
 const PLUGIN_BODY = extractPluginBody(pluginRaw);
+
+/**
+ * 让知乎插件的设置齿轮（#CTZ_OPEN_CLOSE）可以自由拖动。
+ *
+ * 插件把齿轮写死在 position:fixed; bottom:0; right:0 —— 小窗口下经常压住正文，
+ * 也容易和本应用自己的底栏重叠。这里接管它的定位：
+ *
+ *   - 拖动超过 3px 才算「拖动」，否则保持原有「点击打开面板」的行为
+ *   - 拖完后把 left/top 存进 localStorage，刷新/换页后恢复
+ *   - 在 capture 阶段掐掉拖动结束时的 click，避免松手误开面板
+ *   - 拖动期间给 body 加 user-select:none，防止选中网页文字
+ *   - 插件是异步渲染的，用轮询等齿轮出现（最多约 20 秒）
+ *
+ * 选择器或 DOM 结构变了也不会报错，只是这段拖动静默失效。
+ */
+const GEAR_DRAG_SCRIPT = `(() => {
+  try {
+    if (window.__moyuZhihuGearDrag) return true;
+    window.__moyuZhihuGearDrag = true;
+
+    var STORAGE_KEY = '__moyu_zhihu_gear_pos__';
+
+    function applySaved(el) {
+      try {
+        var raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        var pos = JSON.parse(raw);
+        if (!pos || typeof pos.left !== 'number' || typeof pos.top !== 'number') return;
+        el.style.left = pos.left + 'px';
+        el.style.top = pos.top + 'px';
+        el.style.right = 'auto';
+        el.style.bottom = 'auto';
+      } catch (e) {}
+    }
+
+    function bind(el) {
+      if (!el || el.__moyuGearBound) return;
+      el.__moyuGearBound = true;
+
+      applySaved(el);
+
+      var startX = 0, startY = 0, originX = 0, originY = 0;
+      var dragging = false, moved = false;
+
+      el.addEventListener('mousedown', function (e) {
+        try {
+          if (e.button !== 0) return;
+          var r = el.getBoundingClientRect();
+          startX = e.clientX; startY = e.clientY;
+          originX = r.left; originY = r.top;
+          dragging = true; moved = false;
+        } catch (err) {}
+      }, true);
+
+      el.addEventListener('click', function (e) {
+        if (moved) {
+          try { e.stopPropagation(); e.preventDefault(); } catch (err) {}
+          moved = false;
+        }
+      }, true);
+
+      document.addEventListener('mousemove', function (e) {
+        try {
+          if (!dragging) return;
+          var dx = e.clientX - startX;
+          var dy = e.clientY - startY;
+          if (!moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+            moved = true;
+            try { document.body.style.userSelect = 'none'; } catch (err) {}
+          }
+          if (!moved) return;
+
+          var maxX = window.innerWidth - el.offsetWidth;
+          var maxY = window.innerHeight - el.offsetHeight;
+          var nx = Math.min(Math.max(0, originX + dx), Math.max(0, maxX));
+          var ny = Math.min(Math.max(0, originY + dy), Math.max(0, maxY));
+
+          el.style.left = nx + 'px';
+          el.style.top = ny + 'px';
+          el.style.right = 'auto';
+          el.style.bottom = 'auto';
+        } catch (err) {}
+      }, true);
+
+      document.addEventListener('mouseup', function () {
+        try {
+          if (!dragging) return;
+          dragging = false;
+          try { document.body.style.userSelect = ''; } catch (err) {}
+          if (moved) {
+            var r = el.getBoundingClientRect();
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                left: Math.round(r.left),
+                top: Math.round(r.top)
+              }));
+            } catch (err) {}
+          }
+        } catch (err) {}
+      }, true);
+    }
+
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      var el = document.getElementById('CTZ_OPEN_CLOSE');
+      if (el) {
+        clearInterval(timer);
+        bind(el);
+      } else if (tries > 100) {
+        clearInterval(timer);
+      }
+    }, 200);
+  } catch (e) {}
+  return true;
+})();`;
 
 /**
  * 规则入口。
@@ -251,7 +367,7 @@ export default function main(helper) {
             'window.__zhihuGlassInjected = true;' +
             'if (typeof window.GM === "undefined") { window.GM = { setValue:function(k,v){ try{localStorage.setItem(k,typeof v==="string"?v:JSON.stringify(v));}catch(e){} return Promise.resolve(); }, getValue:function(k){ try{return Promise.resolve(localStorage.getItem(k)||undefined);}catch(e){return Promise.resolve();} }, deleteValue:function(k){ try{localStorage.removeItem(k);}catch(e){} return Promise.resolve(); } }; }' +
             'if (typeof window.unsafeWindow==="undefined") window.unsafeWindow = window;' +
-            'if (typeof window.GM_info==="undefined") window.GM_info = { script:{ version:"5.17.1" } };' +
+            'if (typeof window.GM_info==="undefined") window.GM_info = { script:{ version:"5.21.4" } };' +
             'if (typeof window.GM_registerMenuCommand==="undefined") window.GM_registerMenuCommand = function(){};' +
             'console.log("[zhihu.rule] GM shim ready");' +
             'return true;' +
@@ -277,6 +393,13 @@ export default function main(helper) {
         const popupFixStr = fnToStr(installPopupVisibilityFix);
         const popupScript = '(function(){ try{ window.__zhihuPopupFix = window.__zhihuPopupFix || ' + popupFixStr + '; setTimeout(function(){ try{(window.__zhihuPopupFix||function(){})(); }catch(e){} }, 500); }catch(e){} return true; })();';
         runJs && runJs(popupScript);
+
+        // Step 4: 让设置齿轮（#CTZ_OPEN_CLOSE）可以自由拖动
+        //
+        // 插件把它写死在 position:fixed; bottom:0; right:0（右下角），
+        // 小窗口下经常压住正文或和自己应用的底栏重叠。
+        // 这里接管定位：拖到哪里就存到哪里，刷新后保持。
+        runJs && runJs(GEAR_DRAG_SCRIPT);
     } catch (err) {
         try { console.error('[zhihu.rule] unexpected error', err); } catch (e) { }
     }

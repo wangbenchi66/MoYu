@@ -12,6 +12,7 @@ const DEFAULT_RECOMMENDED_SITES = [
     { name: '抖音', url: 'https://www.douyin.com', system: true },
     { name: '小红书', url: 'https://www.xiaohongshu.com', system: true },
     { name: '知乎', url: 'https://www.zhihu.com', system: true },
+    { name: '今日热榜', url: 'https://tophub.today/', system: true },
 ]
 
 function buildDefaultRecommendedSites() {

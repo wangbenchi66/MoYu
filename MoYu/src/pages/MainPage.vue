@@ -21,6 +21,7 @@ import {
 } from '../composables/mainpage/useWebviewSync.js'
 import { attachPauseListeners, detachPauseListeners, reevaluatePauseState } from '../composables/mainpage/usePauseOnBlur.js'
 import { isDark } from '../composables/useTheme.js'
+import { GM_SHIM_SOURCE } from '../rules/index.js'
 import ContextMenu from '../components/ContextMenu.vue'
 
 const { settings, activeTab, activeTabId, tabs, addNewTab, selectTab, closeTab, patchSetting, updateTabMetadata, siteRules, ruleProviders, pushRecentVisit, addRecommendedSite, toggleSetting, recommendedSites, statusMessage } = useDesktopApp()
@@ -234,7 +235,18 @@ function handleWebviewDomReady(e) {
             }
             if (jsText) {
               try {
-                runWebviewJS(r.customJs, tabId)
+                // 把「GM 垫片 + 脚本正文」拼成一段再注入。
+                //
+                // ⚠️ 不能分成两次 runWebviewJS 调用：它内部是
+                // `webview.executeJavaScript(...)`，返回 Promise 且彼此独立，
+                // 两次调用会并行排队，执行先后不确定 —— 实测脚本会抢在垫片之前跑，
+                // 仍然因为 GM_getValue 未定义而中断。
+                //
+                // 开头拼一行唯一注释，是为了让 runWebviewJS 的 1200ms 去重签名
+                // （取前 512 字符）区分不同规则；否则所有脚本都因共享同一段垫片
+                // 前缀而被判成"重复脚本"，只注入第一条。
+                const payload = `/* moyu-rule:${r.id != null ? r.id : ruleKey} */\n${GM_SHIM_SOURCE}\n;\n${r.customJs}`
+                runWebviewJS(payload, tabId)
               } catch (e) {}
             }
             if (cssText || jsText) {

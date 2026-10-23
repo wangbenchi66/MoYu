@@ -50,11 +50,6 @@ function onMenuClick(item) {
 
 <template>
   <div class="profile-page" :class="{ 'transparent-page': isTransparent }">
-    <section class="user-card">
-      <el-avatar :size="56" style="background: var(--primary); font-size: 24px">摸</el-avatar>
-      <span class="nickname">摸鱼达人</span>
-    </section>
-
     <section class="menu-section">
       <div
         v-for="item in menuItems"
@@ -83,28 +78,11 @@ function onMenuClick(item) {
   box-sizing: border-box;
 }
 
-.profile-page.transparent-page .user-card,
 .profile-page.transparent-page .menu-section,
 .profile-page.transparent-page .menu-item {
   background: transparent !important;
   box-shadow: none !important;
   border-color: transparent !important;
-}
-
-.user-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 20px 0 12px;
-  background: var(--surface);
-  border-radius: 8px;
-}
-
-.nickname {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text, var(--text));
 }
 
 .menu-section {

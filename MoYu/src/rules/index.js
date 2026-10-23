@@ -9,6 +9,19 @@ let _loaded = false
 // 每个模块应导出默认对象：{ pattern, matchType, enabled, preventBlankTargets, removeImages, customCss, customJs }
 // 也支持导出默认函数（返回规则对象）或直接导出对象。
 // 静态规则分为两类：默认全局规则（来自 rule/default.js）与站点规则（其它文件）
+// 内置油猴脚本：把 .user.js（或 .js）放进 src/rules/userscripts/ 即可自动注册。
+// 构建时由 Vite 静态收集（?raw 读原始文本），运行时不需要为每个脚本写 wrapper，
+// 统一交给 convertUserscriptToRule 去解析 @name / @description / @match / 正文。
+//
+// 用 *.js 而不是 *.user.js：有些脚本下载下来就叫 xxx.js，
+// 是否真的是油猴脚本由 isUserscript 判断（必须有 ==UserScript== 元数据块），
+// 普通 .js 会被 convertUserscriptToRule 拒绝并跳过，不会误加载。
+const builtinUserScriptModules = import.meta.glob('./userscripts/*.js', {
+    eager: true,
+    query: '?raw',
+    import: 'default',
+});
+
 let staticDefaults = []
 let staticSiteRules = []
 try {
@@ -83,6 +96,34 @@ try {
     staticSiteRules = [];
 }
 
+// ─── 自动注册「内置油猴脚本」───
+//
+// 约定：src/rules/userscripts/*.user.js 里的脚本无需任何 wrapper，
+// 构建后自动变成一条内置规则（默认启用，可在规则页停用）。
+//
+// 单个脚本解析失败（缺 @match、正文为空等）只跳过它自己，不影响其它脚本，
+// 也不影响 scripts/*.js 里手写的规则。
+try {
+    for (const [path, raw] of Object.entries(builtinUserScriptModules || {})) {
+        try {
+            const fileName = String(path).split('/').pop().replace(/\.user\.js$/i, '')
+            const res = convertUserscriptToRule(String(raw || ''))
+            if (!res || !res.ok || !res.rule) continue
+
+            const rule = res.rule
+            // id 用文件名推导，跨版本稳定（禁用列表按 id 记录）
+            rule.id = `builtin-userscript:${fileName}`
+            rule.builtin = true
+            rule.enabled = true
+            staticSiteRules.push(rule)
+        } catch (e) {
+            // 单个脚本出错不影响其它
+        }
+    }
+} catch (e) {
+    // ignore
+}
+
 /**
  * 从 localStorage 加载用户持久化的站点规则
  */
@@ -111,13 +152,79 @@ function persistRules() {
     }
 }
 
+// ─── 内置规则的启用状态 ───
+//
+// 内置规则（scripts/*.js 和 userscripts/*.user.js）是代码的一部分，模块里的
+// `enabled` 只是默认值 —— 每次构建都会重新生成，直接改它不会持久化。
+//
+// 所以另存一份「被用户关闭的内置规则 id」列表。id 形如：
+//   static:weread.qq.com                 ← scripts/weread.qq.com.js
+//   builtin-userscript:某站点净化         ← userscripts/某站点净化.user.js
+//
+// 存「禁用列表」而不是存全部状态：将来新增内置规则时默认就是启用，不用迁移。
+const DISABLED_BUILTIN_KEY = 'glass_reader_disabled_builtin_rules'
+
+let _disabledBuiltin = null
+
+function loadDisabledBuiltin() {
+    if (_disabledBuiltin) return _disabledBuiltin
+    try {
+        const raw = localStorage.getItem(DISABLED_BUILTIN_KEY)
+        const parsed = raw ? JSON.parse(raw) : []
+        _disabledBuiltin = new Set(Array.isArray(parsed) ? parsed : [])
+    } catch (e) {
+        _disabledBuiltin = new Set()
+    }
+    return _disabledBuiltin
+}
+
+function persistDisabledBuiltin() {
+    try {
+        localStorage.setItem(
+            DISABLED_BUILTIN_KEY,
+            JSON.stringify(Array.from(loadDisabledBuiltin())),
+        )
+    } catch (e) {
+        // ignore
+    }
+}
+
+/**
+ * 设置某条内置规则的启用状态
+ * 参数: id - 内置规则 id（static:xxx 或 builtin-userscript:xxx）
+ *       enabled - true 启用 / false 停用
+ */
+function setBuiltinRuleEnabled(id, enabled) {
+    if (!id) return
+    const set = loadDisabledBuiltin()
+    if (enabled) set.delete(id)
+    else set.add(id)
+    persistDisabledBuiltin()
+}
+
+/** 判断某条内置规则当前是否启用 */
+function isBuiltinRuleEnabled(id) {
+    if (!id) return true
+    return !loadDisabledBuiltin().has(id)
+}
+
+/** 给内置规则套上当前的启用状态，并标记 builtin 供 UI 区分 */
+function withBuiltinState(rule) {
+    return Object.assign({}, rule, {
+        enabled: isBuiltinRuleEnabled(rule.id),
+        builtin: true,
+    })
+}
+
 /**
  * 返回合并后的规则列表（静态默认 -> 静态站点 -> 用户规则）
+ * 内置规则会带上当前的启用状态（来自禁用列表），用户规则原样返回。
  */
 function getRules() {
     loadRules()
     // 合并静态默认规则 -> 静态站点规则 -> 用户持久化规则（用户规则优先级最高）
-    return staticDefaults.concat(staticSiteRules).concat(rules).slice()
+    const builtin = staticDefaults.concat(staticSiteRules).map(withBuiltinState)
+    return builtin.concat(rules).slice()
 }
 
 /**
@@ -128,7 +235,10 @@ function getRulesForUrl(rawUrl) {
     loadRules()
     try {
         // 优先返回：静态默认规则（对所有 URL 生效） -> 静态站点规则（按 pattern 匹配） -> 用户持久化规则（按 pattern 匹配）
-        const combined = staticDefaults.concat(staticSiteRules).concat(rules)
+        const combined = staticDefaults
+            .concat(staticSiteRules)
+            .map(withBuiltinState)
+            .concat(rules)
         return combined.filter(r => {
             if (!(r.enabled ?? true)) return false
             if (r.isDefault) return true
@@ -409,8 +519,14 @@ function convertUserscriptPatterns(patterns) {
         if (m) {
             let host = m[2]
             if (!host || host === '*') {
-                // 全局匹配，本应用无对应语义（会命中所有站点），跳过以免误伤
-                skipped.push(p)
+                // 全站匹配（*://*/*）：映射成 '*'。
+                // matchRule 的通配符分支会把 '*' 编译成 ^.*$，命中所有 hostname。
+                //
+                // 早先这里直接跳过，理由是"会命中所有站点，以免误伤"——
+                // 但像「屏蔽广告」「自动无缝翻页」这类脚本本来就该全站生效，
+                // 跳过等于让它永远不生效。
+                if (host === '*') out.push('*')
+                else skipped.push(p)
                 continue
             }
             // 去掉端口
@@ -510,10 +626,141 @@ function convertUserscriptsToRules(texts) {
 // 自动在模块加载时读取一次
 loadRules()
 
+/**
+ * GM API 垫片（注入到 webview 页面上下文）。
+ *
+ * 为什么需要：油猴脚本里大量调用 GM_getValue / GM_setValue / GM_addStyle 等
+ * Tampermonkey 专有接口。本应用没有这些运行时，脚本执行到第一个 GM_ 调用就会
+ * 抛 ReferenceError，整个 IIFE 中断 —— 更糟的是，在抛错**之前**已经改过的 DOM
+ * 和 CSS 会留在页面上，页面直接崩掉（实测「今日热榜界面简化」会把内容全隐掉）。
+ *
+ * 所以注入脚本正文前先注入这份垫片，把常用的 GM 接口补齐：
+ *   - 存储类：用 localStorage 模拟，加 __moyu_gm__ 前缀避免和站点数据冲突
+ *   - 样式类：GM_addStyle 直接插 <style>
+ *   - 菜单/通知/新标签：给空实现，保证不会因为缺函数而中断
+ *   - GM_xmlhttpRequest：降级为 fetch（同源可用；跨域会被 CORS 拦下并走 onerror，
+ *     至少不会中断脚本。真正的跨域代理需要主进程参与，后续再补）
+ *
+ * 用 window.__moyuGmShim 做幂等守卫，重复注入直接返回。
+ */
+const GM_SHIM_SOURCE = `(() => {
+  try {
+    if (window.__moyuGmShim) return true;
+    window.__moyuGmShim = true;
+
+    var PREFIX = '__moyu_gm__';
+
+    if (typeof window.GM_getValue !== 'function') {
+      window.GM_getValue = function (key, def) {
+        try {
+          var raw = localStorage.getItem(PREFIX + key);
+          return raw === null ? def : JSON.parse(raw);
+        } catch (e) { return def; }
+      };
+    }
+
+    if (typeof window.GM_setValue !== 'function') {
+      window.GM_setValue = function (key, val) {
+        try { localStorage.setItem(PREFIX + key, JSON.stringify(val)); } catch (e) {}
+      };
+    }
+
+    if (typeof window.GM_deleteValue !== 'function') {
+      window.GM_deleteValue = function (key) {
+        try { localStorage.removeItem(PREFIX + key); } catch (e) {}
+      };
+    }
+
+    if (typeof window.GM_listValues !== 'function') {
+      window.GM_listValues = function () {
+        var out = [];
+        try {
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf(PREFIX) === 0) out.push(k.slice(PREFIX.length));
+          }
+        } catch (e) {}
+        return out;
+      };
+    }
+
+    if (typeof window.GM_addStyle !== 'function') {
+      window.GM_addStyle = function (css) {
+        try {
+          var s = document.createElement('style');
+          s.textContent = String(css || '');
+          (document.head || document.documentElement).appendChild(s);
+          return s;
+        } catch (e) { return null; }
+      };
+    }
+
+    // 本应用没有 Tampermonkey 的菜单栏：注册/注销给空实现，
+    // 让脚本能继续执行（很多脚本开头就用返回值做后续判断）。
+    if (typeof window.GM_registerMenuCommand !== 'function') {
+      window.GM_registerMenuCommand = function () { return 0; };
+    }
+    if (typeof window.GM_unregisterMenuCommand !== 'function') {
+      window.GM_unregisterMenuCommand = function () {};
+    }
+
+    if (typeof window.GM_openInTab !== 'function') {
+      window.GM_openInTab = function (url) {
+        try { window.open(url, '_blank'); } catch (e) {}
+        return null;
+      };
+    }
+
+    if (typeof window.GM_notification !== 'function') {
+      window.GM_notification = function () {};
+    }
+
+    if (typeof window.GM_log !== 'function') {
+      window.GM_log = function () {
+        try { console.log.apply(console, arguments); } catch (e) {}
+      };
+    }
+
+    // 跨域请求：降级为 fetch。
+    // 同源请求正常；跨域会被浏览器的 CORS 拦下，回调 onerror，
+    // 脚本要么降级处理、要么静默失败，至少不会卡死。
+    if (typeof window.GM_xmlhttpRequest !== 'function') {
+      window.GM_xmlhttpRequest = function (opts) {
+        opts = opts || {};
+        var aborted = false;
+        try {
+          var init = { method: opts.method || 'GET', headers: opts.headers || {} };
+          if (opts.data) init.body = opts.data;
+          fetch(opts.url, init)
+            .then(function (r) {
+              return r.text().then(function (t) {
+                return { status: r.status, responseText: t, finalUrl: r.url, readyState: 4 };
+              });
+            })
+            .then(function (res) {
+              if (!aborted && typeof opts.onload === 'function') opts.onload(res);
+            })
+            .catch(function (e) {
+              if (!aborted && typeof opts.onerror === 'function') opts.onerror(e);
+            });
+        } catch (e) {
+          if (typeof opts.onerror === 'function') opts.onerror(e);
+        }
+        return { abort: function () { aborted = true; } };
+      };
+    }
+
+    if (typeof window.unsafeWindow === 'undefined') window.unsafeWindow = window;
+  } catch (e) {}
+  return true;
+})();`
+
 export {
     addRule, editRule, getRules, getRulesForUrl, loadRules, persistRules, removeRule,
+    setBuiltinRuleEnabled, isBuiltinRuleEnabled,
     exportRules, importRules, validateImportedRule, buildExportFileName,
     isUserscript, parseUserscript, convertUserscriptPatterns,
     convertUserscriptToRule, convertUserscriptsToRules,
+    GM_SHIM_SOURCE,
 }
 
