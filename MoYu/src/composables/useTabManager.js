@@ -21,6 +21,31 @@ function openTab(tab) {
     persistSession()
 }
 
+/**
+ * 计算「同页判定」用的 key。
+ *
+ * 目的：同一个地址不要重复开标签 —— 每个网页标签都是一个独立的 webview
+ * 进程，重复打开纯属白吃内存。
+ *
+ * 判定规则（刻意选择）：
+ *   - 末尾斜杠   忽略  → https://a.com 与 https://a.com/ 视为同一页
+ *   - #hash 锚点 忽略  → 同一页不同锚点不会重新加载，属于同一页
+ *   - ?query 参数 保留  → 不同参数可能是不同内容（如 ?chapter=1 / ?chapter=2）
+ *   - 协议/域名   区分  → http 与 https、不同域名各自独立
+ *
+ * 解析失败时退回原始字符串比较，避免抛错影响开标签流程。
+ */
+function pageKey(rawUrl) {
+    if (!rawUrl || rawUrl === 'about:blank') return 'about:blank'
+    try {
+        const u = new URL(rawUrl)
+        const path = u.pathname.replace(/\/+$/, '') || '/'
+        return `${u.origin}${path}${u.search}`
+    } catch (e) {
+        return String(rawUrl)
+    }
+}
+
 function createPageTab(url, options = {}) {
     const normalizedUrl = normalizeUrl(url)
     const nextId = generateUniqueTabId()
@@ -33,6 +58,20 @@ function createPageTab(url, options = {}) {
             activeTabId.value = existing.id
             urlInput.value = ''
             statusMessage.value = '已切换到工作台'
+            return
+        }
+    }
+
+    // 普通网页同样去重：已存在同页标签就切过去，不再新建 webview。
+    // 放在 dashboard 分支之后：工作台有自己的复用逻辑，且 kind 不同。
+    if (!isDashboard) {
+        const existingPage = tabs.value.find(
+            (t) => t && t.kind !== 'dashboard' && pageKey(t.url) === pageKey(normalizedUrl),
+        )
+        if (existingPage) {
+            // selectTab 会同步 activeTabId、更新地址栏、持久化会话
+            selectTab(existingPage.id)
+            statusMessage.value = `已切换到 ${existingPage.title || title}`
             return
         }
     }

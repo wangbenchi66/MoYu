@@ -384,7 +384,13 @@ const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== 
           </span>
         </div>
         <div class="rule-pattern">{{ patternText(rule) }} · {{ rule.matchType || 'hostname' }}</div>
-        <div v-if="rule.description" class="rule-desc">{{ rule.description }}</div>
+        <!-- 描述默认只占一行（列表紧凑），完整内容通过悬停查看。
+             title 属性用原生 tooltip：不需要额外组件，长文本也能看全。 -->
+        <div
+          v-if="rule.description"
+          class="rule-desc"
+          :title="rule.description"
+        >{{ rule.description }}</div>
       </div>
       <div class="rule-ops">
         <button class="op-btn" @click="toggleRule(rule)">{{ rule.enabled === false ? '启用' : '停用' }}</button>
@@ -516,7 +522,9 @@ const enabledCount = computed(() => userRules.value.filter((r) => r.enabled !== 
 }
 .rule-desc {
   font-size: 11px; color: var(--muted); margin-top: 2px;
+  /* 列表里默认只占一行，保持紧凑；完整描述由模板上的 title 提供（悬停可见）。 */
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: help;
 }
 
 .rule-ops { display: flex; gap: 4px; flex-shrink: 0; }
