@@ -91,7 +91,13 @@ function patchSetting(key, value) {
             return
         }
     } else if (key === 'autoScrollSpeed') {
-        settings[key] = Math.max(5, Math.min(80, Number(value) || 5))
+        const next = Math.max(0, Math.min(100, Number(value) || 0))
+        settings[key] = next
+        // 速度归零等同于「停止滚动」：顺手关掉开关，
+        // 避免停在一个「开着但完全不滚」的迷惑状态。
+        if (next === 0 && settings.autoScrollEnabled) {
+            settings.autoScrollEnabled = false
+        }
     } else if (key === 'readerFontScale') {
         settings[key] = Math.max(80, Math.min(160, Number(value) || 100))
     } else {

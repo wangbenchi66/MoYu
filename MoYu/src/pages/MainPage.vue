@@ -48,9 +48,9 @@ function handleShortcutMessage(msg) {
       case 'autoToggleShortcut':
         patchSetting('autoScrollEnabled', !settings.autoScrollEnabled); syncWebviewAutoScroll(); break
       case 'autoSpeedDownShortcut':
-        patchSetting('autoScrollSpeed', Math.max(5, (settings.autoScrollSpeed || 22) - 1)); syncWebviewAutoScroll(activeTabId.value); break
+        patchSetting('autoScrollSpeed', Math.max(0, Number(settings.autoScrollSpeed ?? 5) - 1)); syncWebviewAutoScroll(activeTabId.value); break
       case 'autoSpeedUpShortcut':
-        patchSetting('autoScrollSpeed', Math.min(80, (settings.autoScrollSpeed || 22) + 1)); syncWebviewAutoScroll(activeTabId.value); break
+        patchSetting('autoScrollSpeed', Math.min(100, Number(settings.autoScrollSpeed ?? 5) + 1)); syncWebviewAutoScroll(activeTabId.value); break
       case 'decreaseTransparencyShortcut':
         try { patchSetting('transparency', Math.max(0, (Number(settings.transparency) || 0) - 5)) } catch (e) {} break
       case 'increaseTransparencyShortcut':
@@ -126,8 +126,10 @@ function onFontScaleInput(e) {
   syncWebviewFontSize()
 }
 function onAutoScrollSpeedInput(e) {
-  const v = Number(e.target.value || 22); patchSetting('autoScrollSpeed', v)
-  if (!settings.autoScrollEnabled) patchSetting('autoScrollEnabled', true)
+  // 用 ?? 而不是 || ：速度 0 是合法值（表示不滚动），不能被当成"空"回落成默认
+  const v = Number(e.target.value ?? 5); patchSetting('autoScrollSpeed', v)
+  // 只有速度 > 0 才自动开启，否则拖到 0 会被立刻弹回一个可用速度
+  if (v > 0 && !settings.autoScrollEnabled) patchSetting('autoScrollEnabled', true)
   syncWebviewAutoScroll()
 }
 

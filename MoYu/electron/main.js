@@ -262,7 +262,8 @@ function normalizeSettings(partial = {}) {
         disableWindowShadow: Boolean(partial.disableWindowShadow ?? defaultSettings.disableWindowShadow),
         alwaysOnTop: Boolean(partial.alwaysOnTop ?? defaultSettings.alwaysOnTop),
         autoScrollEnabled: Boolean(partial.autoScrollEnabled ?? defaultSettings.autoScrollEnabled),
-        autoScrollSpeed: clamp(Number(partial.autoScrollSpeed ?? defaultSettings.autoScrollSpeed), 5, 80),
+        // 速度范围 0-100：0 表示「不滚动」，渲染进程会在归零时自动关闭开关
+        autoScrollSpeed: clamp(Number(partial.autoScrollSpeed ?? defaultSettings.autoScrollSpeed), 0, 100),
         // 隐私相关：保留天数只接受白名单值，其它输入一律回落到默认（0 = 永久）
         historyRetentionDays: [0, 1, 3, 7, 30].includes(Number(partial.historyRetentionDays))
             ? Number(partial.historyRetentionDays)
@@ -897,7 +898,9 @@ function buildTrayMenuTemplate() {
         click: () => updateTransparency(v),
     }))
 
-    const autoScrollSpeeds = [5, 10, 20, 30, 40, 60, 80]
+    // 托盘里的快捷档位（0 不放进来：选 0 应该等于「停止滚动」，
+    // 而托盘这边没有联动关闭 autoScrollEnabled 的逻辑，容易造成「开着但不滚」）
+    const autoScrollSpeeds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
     const autoScrollSubmenu = autoScrollSpeeds.map((v) => ({
         label: `${v}`,
         type: 'radio',

@@ -33,7 +33,11 @@ function buildStyleScript(styleId, enabled, cssText) {
 }
 
 function buildAutoScrollScript(enabled, speed) {
-  const pxPerSecond = Math.max(12, Math.round((speed || 22) * 3))
+  // 速度 0-100 映射到 px/s：×3 与旧版保持同一手感（22 ≈ 66px/s）。
+  // 0 表示不滚动 —— 这里不能再像以前那样强制最小值 12，
+  // 否则用户把速度调到 0 之后页面仍会以 12px/s 缓慢爬动。
+  const spd = Number(speed)
+  const pxPerSecond = Math.max(0, Math.round((isFinite(spd) ? spd : 22) * 3))
   const uid = Date.now()
   return `(() => {
     const __glassReaderAutoScrollUID = ${uid};

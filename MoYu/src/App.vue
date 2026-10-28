@@ -1140,7 +1140,9 @@ function localShortcutHandler(e) {
       if (!settings.autoScrollEnabled) return;
       e.preventDefault();
       // 每次只降 1：速度值实际换算成 px/s 时是 ×3，1 档已经足够细腻
-      const next = Math.max(5, Number(settings.autoScrollSpeed || 22) - 1);
+      // 降到 0 时 patchSetting 内部会顺手关闭自动滚动
+      // 用 ?? 而不是 || ：速度 0 是合法值，不能被当成"没设置"而回落到默认
+      const next = Math.max(0, Number(settings.autoScrollSpeed ?? 5) - 1);
       patchSetting('autoScrollSpeed', next);
       return;
     }
@@ -1148,7 +1150,7 @@ function localShortcutHandler(e) {
       // 仅当自动滚动已开启时允许调整速度
       if (!settings.autoScrollEnabled) return;
       e.preventDefault();
-      const next = Math.min(80, Number(settings.autoScrollSpeed || 22) + 1);
+      const next = Math.min(100, Number(settings.autoScrollSpeed ?? 5) + 1);
       patchSetting('autoScrollSpeed', next);
       return;
     }

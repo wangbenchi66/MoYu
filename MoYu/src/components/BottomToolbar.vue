@@ -138,16 +138,28 @@ function onFontScaleInput(e) {
 
 function onAutoScrollSpeedInput(e) {
   let v;
-  if (e === undefined || e === null) v = 22;
+  if (e === undefined || e === null) v = 5;
   else if (typeof e === 'number' || !e.target) v = Number(e);
-  else v = Number(e.target.value || 22);
+  else v = Number(e.target.value ?? 5);
   props.patchSetting('autoScrollSpeed', v);
-  if (!props.settings.autoScrollEnabled) props.patchSetting('autoScrollEnabled', true);
-  updatePopPosition(v, 5, 80);
+  // 只有速度 > 0 才自动开启。速度为 0 本身就会关闭开关，
+  // 这里若再无脑开启，拖到 0 会被立刻弹回一个可用速度，等于关不掉。
+  if (v > 0 && !props.settings.autoScrollEnabled) props.patchSetting('autoScrollEnabled', true);
+  updatePopPosition(v, 0, 100);
 }
 
 function toggleAutoScroll() {
-  try { props.patchSetting('autoScrollEnabled', !props.settings.autoScrollEnabled); } catch (e) {}
+  try {
+    const next = !props.settings.autoScrollEnabled;
+    // 从关闭切到开启时，如果速度是 0，给一个可用的起步值，
+    // 否则会出现「开关亮了但页面一动不动」。
+    // 注意：只在这条「点开关」的路径上补速度 —— 滚轮调节那条路径不能补，
+    // 否则从 0 往上滚会直接跳到默认值，而不是按 1 递增。
+    if (next && Number(props.settings.autoScrollSpeed ?? 0) === 0) {
+      props.patchSetting('autoScrollSpeed', 5);
+    }
+    props.patchSetting('autoScrollEnabled', next);
+  } catch (e) {}
 }
 
 function onZoomWheel(e) {
@@ -170,21 +182,26 @@ function onFontWheel(e) {
 function onAutoScrollWheel(e) {
   try {
     e.preventDefault();
-    if (!props.settings.autoScrollEnabled) props.patchSetting('autoScrollEnabled', true);
-    // 每次只调 1 档（速度值换算成 px/s 时是 ×3，1 档已经够细腻）
+    // 不在外面预开启：adjustAutoSpeed 内部会处理「速度为 0 时往上滚要先开启」，
+    // 否则这里先开启、再加减，会绕过 0→1 的递增路径。
     adjustAutoSpeed(e.deltaY < 0 ? 1 : -1);
   } catch (e) {}
 }
 
 function adjustAutoSpeed(delta) {
   try {
-    if (!props.settings.autoScrollEnabled) return;
-    const cur = Number(props.settings.autoScrollSpeed || 22);
+    const cur = Number(props.settings.autoScrollSpeed ?? 5);
     let next = Math.round(cur + delta);
-    if (next < 5) next = 5;
-    if (next > 80) next = 80;
+    if (next < 0) next = 0;
+    if (next > 100) next = 100;
+
+    // 往大调且当前是关闭状态时，先把开关打开（从 0 起步，不跳默认值）。
+    // 往小调则不用管开关：next 归零时 patchSetting 会自动关闭。
+    if (next > 0 && !props.settings.autoScrollEnabled) {
+      props.patchSetting('autoScrollEnabled', true);
+    }
     props.patchSetting('autoScrollSpeed', next);
-    updatePopPosition(next, 5, 80);
+    updatePopPosition(next, 0, 100);
   } catch (e) {}
 }
 
