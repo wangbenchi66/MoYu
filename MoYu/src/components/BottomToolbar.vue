@@ -171,7 +171,8 @@ function onAutoScrollWheel(e) {
   try {
     e.preventDefault();
     if (!props.settings.autoScrollEnabled) props.patchSetting('autoScrollEnabled', true);
-    adjustAutoSpeed(e.deltaY < 0 ? 3 : -3);
+    // 每次只调 1 档（速度值换算成 px/s 时是 ×3，1 档已经够细腻）
+    adjustAutoSpeed(e.deltaY < 0 ? 1 : -1);
   } catch (e) {}
 }
 

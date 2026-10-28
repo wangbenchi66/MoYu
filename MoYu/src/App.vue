@@ -1139,7 +1139,8 @@ function localShortcutHandler(e) {
       // 仅当自动滚动已开启时允许调整速度
       if (!settings.autoScrollEnabled) return;
       e.preventDefault();
-      const next = Math.max(5, Number(settings.autoScrollSpeed || 22) - 5);
+      // 每次只降 1：速度值实际换算成 px/s 时是 ×3，1 档已经足够细腻
+      const next = Math.max(5, Number(settings.autoScrollSpeed || 22) - 1);
       patchSetting('autoScrollSpeed', next);
       return;
     }
@@ -1147,7 +1148,7 @@ function localShortcutHandler(e) {
       // 仅当自动滚动已开启时允许调整速度
       if (!settings.autoScrollEnabled) return;
       e.preventDefault();
-      const next = Math.min(80, Number(settings.autoScrollSpeed || 22) + 5);
+      const next = Math.min(80, Number(settings.autoScrollSpeed || 22) + 1);
       patchSetting('autoScrollSpeed', next);
       return;
     }

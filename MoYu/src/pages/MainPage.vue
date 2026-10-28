@@ -48,9 +48,9 @@ function handleShortcutMessage(msg) {
       case 'autoToggleShortcut':
         patchSetting('autoScrollEnabled', !settings.autoScrollEnabled); syncWebviewAutoScroll(); break
       case 'autoSpeedDownShortcut':
-        patchSetting('autoScrollSpeed', Math.max(5, (settings.autoScrollSpeed || 22) - 5)); syncWebviewAutoScroll(activeTabId.value); break
+        patchSetting('autoScrollSpeed', Math.max(5, (settings.autoScrollSpeed || 22) - 1)); syncWebviewAutoScroll(activeTabId.value); break
       case 'autoSpeedUpShortcut':
-        patchSetting('autoScrollSpeed', Math.min(80, (settings.autoScrollSpeed || 22) + 5)); syncWebviewAutoScroll(activeTabId.value); break
+        patchSetting('autoScrollSpeed', Math.min(80, (settings.autoScrollSpeed || 22) + 1)); syncWebviewAutoScroll(activeTabId.value); break
       case 'decreaseTransparencyShortcut':
         try { patchSetting('transparency', Math.max(0, (Number(settings.transparency) || 0) - 5)) } catch (e) {} break
       case 'increaseTransparencyShortcut':
