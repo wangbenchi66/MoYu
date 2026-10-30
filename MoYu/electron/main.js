@@ -10,6 +10,29 @@ import defaultSettings from '../src/shared/defaultSettings.js'
 // 本文件是 ESM，而 electron-updater 是 CJS，需借助 createRequire 加载
 const require = createRequire(import.meta.url)
 
+// ─── 主进程异常兜底 ───
+//
+// 默认行为是弹一个系统错误框（A JavaScript error occurred in the main process），
+// 对「写配置偶发失败」这种可恢复问题来说太重了 —— 用户被弹窗打断、还以为是崩溃。
+// 这里改成只写日志；真正的致命错误在开发时看控制台即可。
+//
+// ⚠️ 不要在这里加 app.requestSingleInstanceLock()。当前环境下它需要创建符号链接
+// （chromium 的 process_singleton_win.cc），会报
+// "Lock file can not be created: 拒绝访问 (0x5)"，结果连唯一实例都被判成
+// 「已有实例在跑」而立刻退出 —— 比不加更糟。
+process.on('uncaughtException', (err) => {
+    try {
+        console.error('[main] uncaughtException:', err && (err.stack || err.message) || err)
+        writeLog('ERROR', 'uncaughtException: ' + (err && (err.stack || err.message) || err))
+    } catch (e) { }
+})
+process.on('unhandledRejection', (reason) => {
+    try {
+        console.error('[main] unhandledRejection:', reason)
+        writeLog('ERROR', 'unhandledRejection: ' + String(reason))
+    } catch (e) { }
+})
+
 // 多 webview tab 时 Electron 内部 guest WebContents 会超出默认 10 个监听器上限
 // 仅在需要时按实例设置，而非全局覆盖
 function safeSetMaxListeners(emitter, count) {
@@ -68,6 +91,21 @@ const nonPersistentKeys = new Set([
 
 // 窗口尺寸持久化（使用 electron-store）
 const store = new Store()
+
+/**
+ * 安全的 store 写入。
+ *
+ * electron-store 的 set 是「写临时文件 → rename」的原子写，并发写同一个
+ * config.json 时会抛 EPERM（尤其是两个实例同时在跑、或者杀毒软件临时锁文件）。
+ * 这类失败是可恢复的（下一次写成功即可），不该把整个主进程拖进未捕获异常。
+ */
+function safeStoreSet(key, value) {
+    try {
+        store.set(key, value)
+    } catch (e) {
+        try { console.warn('[store] set failed:', key, e && e.message) } catch (_) { }
+    }
+}
 const DEFAULT_WIDTH = 820
 const DEFAULT_HEIGHT = 860
 const MIN_SAFE_WIDTH = 360
@@ -150,7 +188,7 @@ function endMoyuNow() {
     const key = getTodayKey()
     if (!sessions[key]) sessions[key] = []
     sessions[key].push({ start: moyuStart, end: now })
-    store.set('moyuSessions', sessions)
+    safeStoreSet('moyuSessions', sessions)
     moyuStart = null
 }
 
@@ -1182,8 +1220,8 @@ function createWindow() {
         rememberWindowBounds()
         try {
             const [w, h] = win.getSize()
-            store.set('width', w)
-            store.set('height', h)
+            safeStoreSet('width', w)
+            safeStoreSet('height', h)
         } catch (e) {
             // ignore
         }
@@ -1222,8 +1260,8 @@ function createWindow() {
                     if (win.isDestroyed() || win.isMaximized()) return
                     rememberWindowBounds()
                     const [w, h] = win.getSize()
-                    store.set('width', w)
-                    store.set('height', h)
+                    safeStoreSet('width', w)
+                    safeStoreSet('height', h)
                 } catch (e) {
                     // ignore
                 }
@@ -1622,7 +1660,7 @@ ipcMain.handle('moyu:get-stats', () => getMoyuStats())
 
 ipcMain.handle('moyu:clear-stats', () => {
     if (moyuEndTimer) { clearTimeout(moyuEndTimer); moyuEndTimer = null }
-    store.set('moyuSessions', {})
+    safeStoreSet('moyuSessions', {})
     moyuStart = null
     return true
 })
