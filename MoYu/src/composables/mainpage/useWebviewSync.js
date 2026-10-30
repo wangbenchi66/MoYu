@@ -71,10 +71,37 @@ function syncWebviewNoImage(tabId) {
  * 亮度取反、色相再转 180° 以保住原本的色彩倾向。
  * 对已经自适应深色的站点会显得过深，因此默认只在深色模式生效，且可由设置关闭。
  *
- * 关键点：图片/视频/Canvas/SVG 等媒体元素要**再反色一次**还原，
- * 否则会出现"照片变负片"的问题。
+ * 关键点：
+ *   1. 图片/视频/Canvas/SVG 等媒体元素要**再反色一次**还原，
+ *      否则会出现"照片变负片"的问题。
+ *   2. 页面**本身已经是深色**时不能再反色 —— 微信读书、GitHub 深色主题这类
+ *      站点本来是黑底白字，再 invert 一次就变成白底黑字（实测如此）。
+ *      所以注入前先问页面一句「你背景深不深」，深就跳过。
  */
-function syncWebviewDarken(tabId) {
+const DETECT_DARK_PAGE_SCRIPT = `(() => {
+  try {
+    function lum(el) {
+      try {
+        var c = getComputedStyle(el).backgroundColor || '';
+        var m = c.match(/rgba?\\(([^)]+)\\)/);
+        if (!m) return null;
+        var p = m[1].split(',').map(function (x) { return parseFloat(x) });
+        if (p.length < 3) return null;
+        if (p.length >= 4 && p[3] === 0) return null;   // 完全透明，判断不了
+        return (p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114) / 255;
+      } catch (e) { return null }
+    }
+    var bodyLum = document.body ? lum(document.body) : null;
+    var htmlLum = document.documentElement ? lum(document.documentElement) : null;
+    var v = bodyLum !== null ? bodyLum : htmlLum;
+    if (v === null) return false;   // 判断不了就保持原行为（注入）
+    return v < 0.35;
+  } catch (e) {
+    return false;
+  }
+})();`
+
+async function syncWebviewDarken(tabId) {
   const enabled = !!settings.darkenWebPages && isDark.value
   const css = `
     html { filter: invert(1) hue-rotate(180deg) !important; background: #101318 !important; }
@@ -86,26 +113,43 @@ function syncWebviewDarken(tabId) {
     /* 滚动条与表单跟随 */
     ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2) !important; }
   `
-  const script = `(() => {
-    try {
-      const id = 'glass-darken-style';
-      const existing = document.getElementById(id);
-      if (${enabled}) {
-        if (existing) {
-          if (existing.textContent !== ${JSON.stringify(css)}) existing.textContent = ${JSON.stringify(css)};
-          return true;
+  const apply = (inject) => {
+    const script = `(() => {
+      try {
+        const id = 'glass-darken-style';
+        const existing = document.getElementById(id);
+        if (${inject}) {
+          if (existing) {
+            if (existing.textContent !== ${JSON.stringify(css)}) existing.textContent = ${JSON.stringify(css)};
+            return true;
+          }
+          const st = document.createElement('style');
+          st.id = id;
+          st.textContent = ${JSON.stringify(css)};
+          (document.head || document.documentElement).appendChild(st);
+        } else if (existing) {
+          existing.remove();
         }
-        const st = document.createElement('style');
-        st.id = id;
-        st.textContent = ${JSON.stringify(css)};
-        (document.head || document.documentElement).appendChild(st);
-      } else if (existing) {
-        existing.remove();
-      }
-    } catch (e) {}
-    return true;
-  })();`
-  runWebviewJS(script, tabId)
+      } catch (e) {}
+      return true;
+    })();`
+    runWebviewJS(script, tabId)
+  }
+
+  if (!enabled) {
+    apply(false)
+    return
+  }
+
+  // 页面本身已经是深色 → 不注入反色（并清掉可能残留的旧样式）
+  let pageIsDark = false
+  try {
+    const r = await runWebviewJS(DETECT_DARK_PAGE_SCRIPT, tabId)
+    pageIsDark = r === true
+  } catch (e) {
+    pageIsDark = false
+  }
+  apply(!pageIsDark)
 }
 
 function syncWebviewScrollbars(tabId) {

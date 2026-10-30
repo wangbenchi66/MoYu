@@ -274,8 +274,11 @@ function handleWebviewDomReady(e) {
 watch(() => settings.pageTransparentMode, () => scheduleSyncReaderEffects())
 watch(() => settings.fullWindowTransparent, () => scheduleSyncReaderEffects())
 watch(() => settings.noImageMode, () => scheduleSyncReaderEffects())
-watch(() => settings.autoScrollEnabled, () => scheduleSyncReaderEffects())
-watch(() => settings.autoScrollSpeed, () => scheduleSyncReaderEffects())
+// 自动滚动只影响滚动本身：这里必须只调 syncWebviewAutoScroll。
+// 之前调的是 scheduleSyncReaderEffects（会连带重新注入深色反色 CSS），
+// 结果在微信读书这种自带深色主题的页面上，一开自动滚动黑底就变成白底。
+watch(() => settings.autoScrollEnabled, () => { try { syncWebviewAutoScroll() } catch (e) {} })
+watch(() => settings.autoScrollSpeed, () => { try { syncWebviewAutoScroll() } catch (e) {} })
 watch(() => settings.readerTextColor, () => { syncWebviewTextColor() })
 watch(() => settings.forceReaderTextColor, () => { syncWebviewTextColor() })
 watch(() => settings.showScrollbars, () => syncWebviewScrollbars())
