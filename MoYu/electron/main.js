@@ -2,6 +2,7 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, screen, session, shell, Tray, webContents } from 'electron'
 import Store from 'electron-store'
 import fs from 'node:fs'
+import net from 'node:net'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +10,90 @@ import defaultSettings from '../src/shared/defaultSettings.js'
 
 // 本文件是 ESM，而 electron-updater 是 CJS，需借助 createRequire 加载
 const require = createRequire(import.meta.url)
+
+// ─── 单实例锁 ───
+//
+// 为什么不用 app.requestSingleInstanceLock()：
+//   Windows 上它需要创建一个符号链接（chromium 的 process_singleton_win.cc），
+//   在没有相应权限的环境里会报 "Lock file can not be created: 拒绝访问 (0x5)"，
+//   返回 false —— 结果连**唯一**实例都被判成「已有一个在跑」然后退出。
+//
+// 这里改用「绑定一个固定的本地端口」作为锁：
+//   - bind 成功 → 当前是唯一实例，继续初始化
+//   - bind 失败（EADDRINUSE）→ 已经有一个实例，向它发一条 show 指令后退出
+//   - 监听端收到 show → 把主窗口唤到前台
+//
+// 选 127.0.0.1 + 冷门端口，不对外开放、也不会触发防火墙提示。
+// 端口冲突（被其它程序占用）的概率极低，真遇到时表现为「启动后立刻退出」。
+const SINGLE_INSTANCE_PORT = 47321
+
+const instanceServer = net.createServer((socket) => {
+    try {
+        socket.on('data', (buf) => {
+            try {
+                const msg = String(buf || '')
+                if (msg.includes('show') && mainWindow && !mainWindow.isDestroyed()) {
+                    if (mainWindow.isMinimized()) mainWindow.restore()
+                    if (!mainWindow.isVisible()) mainWindow.show()
+                    mainWindow.focus()
+                }
+            } catch (e) { }
+            try { socket.destroy() } catch (e) { }
+        })
+    } catch (e) { }
+})
+
+const gotInstanceLock = await new Promise((resolve) => {
+    const onError = () => { try { instanceServer.close() } catch (e) { } ; resolve(false) }
+    instanceServer.once('error', onError)
+    instanceServer.once('listening', () => resolve(true))
+    try {
+        instanceServer.listen(SINGLE_INSTANCE_PORT, '127.0.0.1')
+    } catch (e) {
+        onError()
+    }
+})
+
+if (!gotInstanceLock) {
+    // 已有实例在运行：请求它显示窗口，然后退出当前进程
+    try {
+        console.log('[main] another instance is running, requesting it to show')
+        const s = net.connect(SINGLE_INSTANCE_PORT, '127.0.0.1', () => {
+            try { s.write('show') } catch (e) { }
+            try { s.end() } catch (e) { }
+        })
+        s.on('error', () => { })
+        // 给握手留一点时间，再退出
+        setTimeout(() => process.exit(0), 250)
+    } catch (e) {
+        process.exit(0)
+    }
+    // 用一根永不 resolve 的 await 把后续初始化冻住：
+    // 否则第二个实例在等待退出的这 250ms 里还会继续往下跑，
+    // 创建出第二个主窗口（用户会看到窗口闪一下）。
+    // 上面的 setTimeout 仍会正常触发并退出进程。
+    await new Promise(() => { })
+}
+
+// ─── 关于启动时刷屏的缓存错误 ───
+//
+// 日志里那一串
+//   Failed to create cache directory: ...\GPUPersistentCache: 拒绝访问 (0x5)
+//   Failed to create directory: ...\Code Cache\js / wasm
+// 是 Chromium 子进程写不进 %APPDATA%\moyu 的缓存目录导致的。
+//
+// 已排查过、确认无效的手段：
+//   - 手动创建目录并 icacls 给 Users / Everyone 完全控制 → 仍失败
+//     （说明不是普通 ACL，而是进程令牌层面的限制）
+//   - Windows Defender 受控文件夹访问 → 本来就是关闭的
+//   - --disable-http-cache / --disable-gpu-shader-disk-cache /
+//     --js-flags=--no-compilation-cache → 错误从 27 条降到 12 条，没有根治，
+//     而且副作用是所有网页每次都要重新加载，不值得
+//
+// 这些缓存只影响二次启动时编译/着色器的加载速度，**不影响任何功能**
+// （窗口、页面、脚本注入都正常）。开发时看日志会有点吵，打包后用户看不到。
+// 唯一彻底的办法是把 userData 整体挪到别的目录，但那会丢掉所有站点的登录态，
+// 代价远大于收益，所以保持现状。
 
 // ─── 主进程异常兜底 ───
 //
