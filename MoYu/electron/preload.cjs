@@ -20,11 +20,10 @@
 //   - 是否触发取决于竞态，属于「有时好有时坏」的隐蔽 bug
 //
 // 正确做法：**在 preload 顶层同步调用 exposeInMainWorld**，让 API 在
-// DOMContentLoaded 之前就位。下面直接内联实现，与 preload.js 保持同步。
+// DOMContentLoaded 之前就位。下面直接内联实现。
 //
-// 维护提示：改这里的 API 列表时，**必须同时改 preload.js**（两者内容要一致）。
-// preload.js 保留是为了在支持 ESM preload 的场景下也能用，但**不要**在
-// 这个 .cjs 里再走 import 路径。
+// 维护提示：这里是唯一的 preload 实现（原先还有一份 ESM 版 preload.js，
+// 从未被引用、却要人工保持同步，已删除）。新增/修改 API 只改这个文件。
 
 const { contextBridge, ipcRenderer } = require('electron')
 

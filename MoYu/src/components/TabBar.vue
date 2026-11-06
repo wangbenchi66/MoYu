@@ -16,7 +16,8 @@ const props = defineProps({
   createPageTab: Function,
   closeTabsToLeft: Function,
   closeTabsToRight: Function,
-  closeAllTabs: Function
+  closeAllTabs: Function,
+  moveTab: Function
 });
 
 // context menu (right-click) for individual tabs
@@ -70,6 +71,44 @@ function showMenu(e, tab) {
   menuY.value = e.clientY || 0;
   menuVisible.value = true;
 }
+
+// ─── 标签栏交互：中键关闭、拖拽排序 ───
+let _dragTabId = null;
+
+function onTabAuxClick(tab, e) {
+  try {
+    if (e.button === 1) { e.preventDefault(); props.closeTab(tab.id); }
+  } catch (e) {}
+}
+
+function onTabDragStart(tab, e) {
+  try {
+    _dragTabId = tab.id;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', String(tab.id)); } catch (e) {}
+    }
+  } catch (e) {}
+}
+
+function onTabDragOver(e) {
+  try {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  } catch (e) {}
+}
+
+function onTabDrop(tab, e) {
+  try {
+    e.preventDefault();
+  } catch (e) {}
+  const from = _dragTabId;
+  _dragTabId = null;
+  if (from === null || String(from) === String(tab.id)) return;
+  try { props.moveTab && props.moveTab(from, tab.id); } catch (e) {}
+}
+
+function onTabDragEnd() { _dragTabId = null; }
 
 function onMenuSelect(item) {
   const tab = menuTarget.value;
@@ -290,7 +329,13 @@ onBeforeUnmount(() => {
         class="tab-chip"
         :class="{ active: String(tab.id) === String(props.activeTabId) }"
         :title="tab.title || tab.url"
+        draggable="true"
         @click="props.selectTab(tab.id)"
+        @auxclick="onTabAuxClick(tab, $event)"
+        @dragstart="onTabDragStart(tab, $event)"
+        @dragover="onTabDragOver"
+        @drop="onTabDrop(tab, $event)"
+        @dragend="onTabDragEnd"
         @contextmenu.prevent.stop="showMenu($event, tab)"
         :ref="(el) => setTabRef(el, tab.id)">
         <span class="tab-title">{{ props.formatTabTitle(tab.title) }}</span>

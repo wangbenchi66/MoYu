@@ -4,6 +4,7 @@
  */
 import { computed, reactive, ref } from 'vue'
 import defaultSettings from '../shared/defaultSettings.js'
+import { normalizeUrl } from '../shared/normalize-url.js'
 
 const desktopApi = typeof window !== 'undefined' ? window.desktop : null
 
@@ -50,15 +51,7 @@ const rightToggleKeys = [
 ]
 
 // ─── 工具函数 ───
-function normalizeUrl(rawUrl) {
-    const trimmed = rawUrl.trim()
-    if (!trimmed) return 'about:blank'
-    if (trimmed === 'about:blank') return trimmed
-    if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)) return trimmed
-    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(trimmed)) return `http://${trimmed}`
-    if (/^[\w-]+(\.[\w-]+)+/.test(trimmed)) return `https://${trimmed}`
-    return `https://www.bing.com/search?q=${encodeURIComponent(trimmed)}`
-}
+// normalizeUrl 抽到 shared 模块，方便单元测试直接 import（这里只做再导出）
 
 function getTitleFromUrl(url) {
     if (url === 'about:blank') return '工作台'

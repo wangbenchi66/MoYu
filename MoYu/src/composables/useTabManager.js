@@ -258,12 +258,17 @@ function restoreSession() {
         let restored = 0
         for (const item of list) {
             try {
-                const url = String(item?.url || '')
-                if (!url || url === 'about:blank') continue
+                const rawUrl = String(item?.url || '').trim()
+                // 恢复的地址必须重新校验：旧版本可能存过 file: / javascript: 之类，
+                // 直接塞回 webview 会被主进程拦截成空白标签。
+                if (!rawUrl || rawUrl === 'about:blank') continue
+                if (!/^https?:\/\//i.test(rawUrl)) continue
+                try { new URL(rawUrl) } catch (e) { continue }
+                const url = rawUrl
                 const id = generateUniqueTabId()
                 tabs.value.push({
                     id,
-                    title: item.title || getTitleFromUrl(url),
+                    title: typeof item?.title === 'string' && item.title ? item.title : getTitleFromUrl(url),
                     url,
                     subtitle: url,
                     kind: 'page',
@@ -290,10 +295,27 @@ function restoreSession() {
     }
 }
 
+/**
+ * 把标签从 fromId 拖到 toId 的位置（标签栏拖拽排序）。
+ */
+function moveTab(fromId, toId) {
+    try {
+        if (!Array.isArray(tabs.value)) return
+        const from = tabs.value.findIndex((t) => String(t.id) === String(fromId))
+        const to = tabs.value.findIndex((t) => String(t.id) === String(toId))
+        if (from === -1 || to === -1 || from === to) return
+        const list = tabs.value.slice()
+        const [moved] = list.splice(from, 1)
+        list.splice(to, 0, moved)
+        tabs.value = list
+        persistSession()
+    } catch (e) { }
+}
+
 export {
     openTab, createPageTab,
     handleOpenUrl, addNewTab, selectTab, updateTabMetadata,
-    closeTab, closeTabsToLeft, closeTabsToRight, closeAllTabs,
+    closeTab, closeTabsToLeft, closeTabsToRight, closeAllTabs, moveTab,
     persistSession, flushSession, restoreSession, clearSavedSession,
     SESSION_KEY,
 }

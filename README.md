@@ -62,7 +62,7 @@ TransBrowser/
     ├── docs/                      设计文档（优化建议 + 两份已决定不做的存档）
     ├── electron/                  主进程 + 预加载
     │   ├── main.js                1165 行：窗口/托盘/快捷键/设置/统计/导航拦截
-    │   ├── preload.js             ESM preload，contextBridge 暴露 window.desktop
+    │   ├── preload.cjs             同步 preload，contextBridge 暴露 window.desktop
     │   └── preload.cjs            CJS 包装器，动态 import ESM，失败时降级
     ├── public/                    图标资源（icon.png / icon.ico / tray.png / favicon.svg）
     └── src/                       渲染进程
@@ -93,7 +93,7 @@ TransBrowser/
 └───────────────────────────┬───────────────────────────────────────────┘
                             │ IPC（ipcMain.handle / ipcMain.on）
 ┌───────────────────────────┴───────────────────────────────────────────┐
-│ preload.js  contextBridge → window.desktop（唯一受控通道）             │
+│ preload.cjs   contextBridge → window.desktop（唯一受控通道）             │
 │  preload.cjs  CJS 包装：动态 import ESM preload，失败则降级最小实现      │
 └───────────────────────────┬───────────────────────────────────────────┘
                             │ window.desktop.*
@@ -232,7 +232,7 @@ session.defaultSession.clearCache()
 **时序注意**：`will-quit` 是同步事件，而清理是异步的。实现上先 `event.preventDefault()` 拦住退出，
 清理完成后在 `.finally()` 里再 `app.quit()`，并用 `_privacyCleanupDone` 标志防止二次进入造成死循环。
 
-项目未给 webview 配置 `partition`，所有标签共用 `defaultSession`，因此清理一次即可覆盖全部。
+所有标签使用命名持久化分区 `persist:moyu-web`（不再是 `defaultSession`）：清理只作用于这个分区，不会碰主窗口自身的会话数据。
 
 ### 4.5 顶栏透明度交互
 
@@ -713,7 +713,7 @@ npm run dist:win
 
 **调试 webview 内的页面**：`webview` 标签的 DevTools 可用；页面 `console.log` 会以 `[webview.console]` 前缀转发到渲染进程控制台。
 
-**没有测试框架**（`package.json` 中无 test 脚本，仓库内无测试文件）。
+**单元测试**：`npm test` 用 Node 内置的 `node:test`，覆盖 `normalizeUrl`、规则匹配（含 ReDoS 拒绝）与版本比较；`npm run check` 额外做 `electron/main.js` / `preload.cjs` 的语法检查。
 
 ### 换行符约定
 
@@ -833,26 +833,31 @@ build（矩阵并行）
 > 覆写只发生在 CI 工作区，不会提交回仓库；打包后还有一道校验兜底，
 > 万一覆写没生效会直接让流水线失败，而不是把坏产物发出去。
 
----
+**更新包的签名状态（重要）**
 
-## 7. 已知问题与待办
+- 发布的 Windows / macOS 产物**没有代码签名证书**（CI 中没有 `CSC_*` secret），安装包与 `latest.yml` 都不带签名。
+- electron-updater 因此**不做发布者校验**：它只依赖 GitHub HTTPS 与 `latest.yml` 里的 sha512 做完整性校验，无法证明产物出自谁手。
+- 主进程只接受**严格高于**当前版本的更新（内部 `compareVersions` 比较）：同版本重装与降级包都不会提示，避免被回滚到存在已知问题的旧版本。
+- 需要真正防篡改时，应配置代码签名（`CSC_LINK` / `CSC_KEY_PASSWORD`），并让 electron-builder 把 `publisherName` 写进更新配置；在那之前，请只从本仓库的 Releases 页面下载。
+- 启动 5 秒后会做一次**静默**更新检查（失败不提示、不弹系统框），这与旧版"强制跳转更新页"的自建后端方案不是一回事。
+
+---
 
 [`MoYu/docs/优化与功能建议.md`](MoYu/docs/优化与功能建议.md) 是作者自己的代码审查清单。**注意其中引用的行号是重构前的旧版本，已不对应现状**。经本轮阅读代码确认的现存问题：
 
 **真实缺陷**
-- `MainPage.vue` 中 `onWebviewNewWindow` 已定义但**模板里未绑定**到 webview（死代码）。
-- `App.vue` 中 `autoRangeRef` 定义后未被模板使用（死代码）；`openDefaultUrl()` 同样未被引用。
-- `App.vue` 模板使用了 `BaseButton` 但**未 import**，依赖 `src/main.js` 的全局注册；若拆分组件会立刻报错。
-- `fullWindowTransparent` 变化**不会**触发 `syncWebviewTransparency` 的 watcher（`MainPage.vue` 只监听了 `pageTransparentMode`），需靠其他路径间接触发。
-- `useAppState.js` 中 `activeTabId` 初值为 `1`，而 `tabs` 初值只有 id `0`，初始状态不匹配（靠 `activeTab` 的 `?? tabs.value[0]` 兜底）。
+- `App.vue` 的 `autoRangeRef` 定义后未被模板使用（死代码）。
+- `App.vue` 模板使用 `BaseButton` 但未 import，依赖 `src/main.js` 的全局注册；拆组件时会立刻报错。
+- `useAppState.js` 的 `activeTabId` 初值为 `1`，而 `tabs` 初值只有 id `0`，初始状态不匹配（靠 `activeTab` 的 `?? tabs.value[0]` 兜底）。
 
-> 已修复（原列于此）：~~更新检查失败时强制跳转 `/update`~~ → 启动时的自动版本检测已整段移除；
+> 已修复（原列于此）：`onWebviewNewWindow` / `openDefaultUrl()` 死代码已删除；`fullWindowTransparent` 已加入 watcher；`settingsRules` 死路径已移除；webview 已改用命名分区并带一次性迁移。
+
+> 已修复（原列于此）：~~更新检查失败时强制跳转 `/update`~~ → 自建后端的强制更新已移除；现在是启动 5 秒后的静默 GitHub Releases 检查（失败不提示）；
 > ~~遥测文案与实现不符~~ → 匿名上报与隐私同意弹窗已整体删除。
 
 **架构注意点**
-- `settingsRules` provider（localStorage `glass_reader_settings_rules`）已实现但**在 MainPage 中未被消费**，`customSettings` 目前是死路径。
-- `toolbarRules` 只取匹配结果的第一条（`toolbar[0]`）作为覆盖。
-- webview 未使用 `partition`，**所有标签共享默认 session**（cookie/localStorage 互通）。
+- `toolbarRules` 只取匹配结果的第一条（`toolbar[0]`）作为覆盖（暂无编辑 UI）。
+- webview 使用 `partition="persist:moyu-web"`，与主窗口的 `defaultSession` 隔离；所有标签仍共享这一个分区（cookie/localStorage 互通），没有按站点拆分——那会切断 OAuth/SSO 的跨站跳转。
 - 规则注入是"时间窗去重 + 脚本内 guard"，不是框架级永久去重；`dom-ready` 重复触发时可能重复执行。
 - `USAGE.md` 描述的路径（`src/rule/`、`src/lib/siteRules.js`）是**旧结构**，现为 `src/rules/`。
 

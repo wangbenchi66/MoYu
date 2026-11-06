@@ -27,10 +27,17 @@ const attrs = useAttrs();
 
 const mergedAttrs = computed(() => {
   const base = { ...attrs };
+  // 可访问名称：没有显式 aria-label 时用 title 兜底。
+  // 这个应用里大量图标按钮只写了 title，读屏软件读不到名字。
+  if (!base['aria-label'] && typeof base.title === 'string' && base.title.trim()) {
+    base['aria-label'] = base.title;
+  }
   if (props.useEl) {
     // element-plus 接受 type/size/plain/circle
     return { ...base, type: props.type, size: props.size, plain: props.plain, circle: props.circle };
   }
+  // 原生 button 默认 type=button：避免以后被放进 form 时意外提交
+  if (!base.type) base.type = 'button';
   return base;
 });
 </script>

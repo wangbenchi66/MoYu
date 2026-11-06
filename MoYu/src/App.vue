@@ -1,7 +1,7 @@
 <!-- App.vue — 根组件：快捷键处理、设置面板、热区悬停、窗口级 UI 布局 -->
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import ShortcutRow from './components/ShortcutRow.vue';
 import { useDesktopApp } from './composables/useDesktopApp';
@@ -36,6 +36,7 @@ const {
   closeTabsToLeft,
   closeTabsToRight,
   closeAllTabs,
+  moveTab,
   toggleSetting,
   urlInput,
   handleOpenUrl,
@@ -51,6 +52,9 @@ const desktopApi = typeof window !== 'undefined' ? window.desktop : null;
 // 3. 关键事件：window 的 keydown（快捷键捕获）、pointermove（热区检测）、mouseout/blur（失焦/移出回退处理）。
 
 const isSettingsOpen = ref(false);
+// 设置弹窗的根节点（用于焦点陷阱）与打开前的焦点位置
+const settingsModalRef = ref(null);
+let _lastFocusedBeforeSettings = null;
 // 匿名上报功能已移除（连同首次启动的隐私同意弹窗）。
 // 这里清理历史版本遗留的同意标记，避免 localStorage 里留无用数据。
 try { localStorage.removeItem('moyu-privacy-consent'); } catch (e) { }
@@ -478,6 +482,7 @@ function clearCaptured(key) {
  */
 function openSettingsModal() {
   // 当打开设置时，临时确保窗口可接收鼠标事件，避免被鼠标穿透挡住设置交互
+  try { _lastFocusedBeforeSettings = document.activeElement; } catch (e) {}
   isSettingsOpen.value = true;
   // 恢复上次的分区展开状态
   restoreSectionState();
@@ -486,6 +491,14 @@ function openSettingsModal() {
       desktopApi.setIgnoreMouseEvents(false);
     } catch (e) {}
   }
+  // 把焦点移进弹窗，键盘用户不会还停在背后的页面上
+  try {
+    nextTick(() => {
+      const el = settingsModalRef.value;
+      const root = el && (el.$el || el);
+      if (root && typeof root.focus === 'function') root.focus();
+    });
+  } catch (e) {}
 }
 
 /**
@@ -701,6 +714,12 @@ const showVisibilityWarning = computed(() => {
  */
 function closeSettingsModal() {
   isSettingsOpen.value = false;
+  // 关闭后把焦点还给打开前的元素
+  try {
+    const prev = _lastFocusedBeforeSettings;
+    _lastFocusedBeforeSettings = null;
+    if (prev && typeof prev.focus === 'function' && document.contains(prev)) prev.focus();
+  } catch (e) {}
   // 关闭设置后，恢复当前持久设置中的 clickThroughMode 状态
   if (desktopApi?.getSettings && desktopApi?.setIgnoreMouseEvents) {
     try {
@@ -727,6 +746,29 @@ function handleKeydown(event) {
       return;
     }
     closeSettingsModal();
+    return;
+  }
+  // 设置弹窗是模态的：把 Tab 焦点限制在弹窗内部
+  if (event.key === 'Tab' && isSettingsOpen.value && settingsModalRef.value) {
+    try {
+      const root = settingsModalRef.value.$el || settingsModalRef.value;
+      const focusables = Array.from(root.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )).filter((el) => !el.disabled && el.offsetParent !== null);
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !root.contains(active)) {
+        event.preventDefault();
+        first.focus();
+      }
+    } catch (e) {}
   }
 }
 
@@ -1208,7 +1250,8 @@ function localShortcutHandler(e) {
       :createPageTab="createPageTab"
       :closeTabsToLeft="closeTabsToLeft"
       :closeTabsToRight="closeTabsToRight"
-      :closeAllTabs="closeAllTabs" />
+      :closeAllTabs="closeAllTabs"
+      :moveTab="moveTab" />
 
     <main class="page-host">
       <MainPage ref="mainPageRef" />
@@ -1223,7 +1266,13 @@ function localShortcutHandler(e) {
       v-if="isSettingsOpen"
       class="settings-modal-layer settings-floating no-drag"
       @click.self="closeSettingsModal">
-      <section class="settings-modal panel">
+      <section
+        ref="settingsModalRef"
+        class="settings-modal panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="设置中心"
+        tabindex="-1">
         <!-- modal header removed to simplify layout -->
 
         <section class="settings-page panel no-drag">

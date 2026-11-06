@@ -1,7 +1,7 @@
 /**
  * useWebviewExec.js — webview 脚本/CSS 注入工具
  */
-import { activeTabId, tabs } from '../useAppState.js'
+import { activeTabId, tabs, statusMessage } from '../useAppState.js'
 import {
   webviewRefs, webviewReadyMap, insertedCssKeysByTab, lastExecutedScripts,
   getWebview,
@@ -97,11 +97,9 @@ function buildAutoScrollScript(enabled, speed) {
 
 const BLANK_TARGET_SCRIPT = `(() => {
   try {
-    window.open = function(url) {
-      if (!url) return null;
-      try { location.assign(url); } catch(e) {}
-      return null;
-    };
+    // 不重写 window.open：OAuth / 支付等流程依赖真实的弹窗，重写会导致这些流程
+    // 卡死（弹不出窗口、拿不到回调）。这里只处理「用户点击 _blank 链接」这一种
+    // 情况：把跳转留在当前标签，避免为每个链接开一个没有工具栏的新窗口。
     document.addEventListener('click', function(evt) {
       try {
         const el = evt.target && evt.target.closest && evt.target.closest('a');
@@ -116,35 +114,42 @@ const BLANK_TARGET_SCRIPT = `(() => {
         }
       } catch(e) {}
     }, true);
+    // 中键点击同样留在当前标签（中键不会触发 click）
+    document.addEventListener('auxclick', function(evt) {
+      try {
+        if (evt.button !== 1) return;
+        const el = evt.target && evt.target.closest && evt.target.closest('a');
+        if (!el) return;
+        const href = el.getAttribute && (el.getAttribute('href') || el.href);
+        if (!href) return;
+        evt.preventDefault();
+        try { location.assign(href); } catch(e) {}
+      } catch(e) {}
+    }, true);
     try {
       document.querySelectorAll && document.querySelectorAll('a[target="_blank"]').forEach(a => { try { a.removeAttribute('target'); } catch(e) {} });
     } catch(e) {}
-    try {
-      const mo = new MutationObserver(function(muts) {
-        try {
-          muts.forEach(m => {
-            if (m.addedNodes && m.addedNodes.length) {
-              m.addedNodes.forEach(n => {
-                if (n && n.nodeType === 1) {
-                  try {
-                    if (n.tagName === 'A' && (n.target || '').toLowerCase() === '_blank') n.removeAttribute('target');
-                    const inner = n.querySelectorAll && n.querySelectorAll('a[target="_blank"]');
-                    inner && inner.forEach(a => { try { a.removeAttribute('target'); } catch(e) {} });
-                  } catch(e) {}
-                }
-              });
-            }
-            if (m.type === 'attributes' && m.target && m.target.tagName === 'A' && m.attributeName === 'target') {
-              try { if ((m.target.getAttribute('target') || '').toLowerCase() === '_blank') m.target.removeAttribute('target'); } catch(e) {}
-            }
-          });
-        } catch(e) {}
-      });
-      mo.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true, attributeFilter: ['target'] });
-    } catch(e) {}
+    // 这里刻意不用 MutationObserver：它会持续监听整棵 DOM，在无限滚动/高频更新的
+    // 站点上是可观的开销。click 监听器在点击时按需读取 target，已经覆盖动态节点。
   } catch(e) {}
   return true;
 })();`
+
+let _lastInjectErrorAt = 0
+
+/**
+ * 注入失败不能只躺在控制台：用户看到「规则已启用」但页面没变化时会以为功能坏了。
+ * 限流到 5 秒一条，避免连续失败刷屏。
+ */
+function reportInjectionError(err) {
+  try {
+    const now = Date.now()
+    if (now - _lastInjectErrorAt < 5000) return
+    _lastInjectErrorAt = now
+    const msg = String((err && (err.message || err)) || 'unknown').slice(0, 120)
+    statusMessage.value = `网页脚本执行失败：${msg}`
+  } catch (e) { }
+}
 
 function runWebviewJS(script, tabId) {
   const execOn = async (w, tid) => {
@@ -171,11 +176,13 @@ function runWebviewJS(script, tabId) {
           .then((r) => r)
           .catch((err) => {
             try { console.error('[runWebviewJS] executeJavaScript error', err) } catch (e) {}
+            reportInjectionError(err)
           })
       }
       return Promise.resolve()
     } catch (err) {
       try { console.error('[runWebviewJS] executeJavaScript sync error', err) } catch (e) {}
+      reportInjectionError(err)
       return Promise.resolve()
     }
   }

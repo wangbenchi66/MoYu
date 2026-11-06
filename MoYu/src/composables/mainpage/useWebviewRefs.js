@@ -47,6 +47,7 @@ function setWebviewRef(el, id) {
       delete webviewRefs[tid]
       delete webviewReadyMap[tid]
       delete webviewDomReadyTs[tid]
+      delete webviewMountCount[tid]
       delete insertedCssKeysByTab[tid]
       delete webviewEventListeners[tid]
       delete webviewLastRecordedUrl[tid]

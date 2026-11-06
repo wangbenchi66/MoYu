@@ -26,9 +26,17 @@ import ContextMenu from '../components/ContextMenu.vue'
 
 const { settings, activeTab, activeTabId, tabs, addNewTab, selectTab, closeTab, patchSetting, updateTabMetadata, siteRules, ruleProviders, pushRecentVisit, addRecommendedSite, toggleSetting, recommendedSites, statusMessage } = useDesktopApp()
 
-const userAgent = ref('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36')
+// 不覆盖桌面 UA：Electron 内置 Chromium 的版本才是真实版本，写死一个旧 UA 会被
+// 站点判定为过时浏览器（降级页面、弹「不支持」、甚至拒绝加载）。手机模式只换
+// Android Chrome 的 UA，内核仍是同一个 Chromium。
+const chromiumMajor = (() => {
+  try { return (navigator.userAgent.match(/Chrome\/(\d+)/) || [])[1] || '' } catch (e) { return '' }
+})()
+const mobileUserAgent = chromiumMajor
+  ? `Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromiumMajor}.0.0.0 Mobile Safari/537.36`
+  : 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Mobile Safari/537.36'
+const userAgent = computed(() => (settings.mobileMode ? mobileUserAgent : ''))
 const siteZoom = ref(1)
-let _forwardKeyHandler = null
 
 const currentHost = computed(() => {
   try { const u = new URL(activeTab?.url || ''); return (u.hostname || '').replace(/^www\./i, '') } catch (e) { return '' }
@@ -102,12 +110,53 @@ function webviewBack() { const w = getActiveWebview(); try { if (w && typeof w.g
 function webviewForward() { const w = getActiveWebview(); try { if (w && typeof w.goForward === 'function') w.goForward() } catch (e) {} }
 function webviewReload() { const w = getActiveWebview(); try { if (w && typeof w.reload === 'function') w.reload() } catch (e) {} }
 
+// ─── 站点缩放（按 hostname 记忆）───
+const ZOOM_STORE_KEY = 'glass_reader_site_zoom'
+
+function loadZoomStore() {
+  try {
+    const raw = localStorage.getItem(ZOOM_STORE_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return (parsed && typeof parsed === 'object') ? parsed : {}
+  } catch (e) { return {} }
+}
+
+function saveZoomStore(map) {
+  try { localStorage.setItem(ZOOM_STORE_KEY, JSON.stringify(map)) } catch (e) {}
+}
+
+function zoomKeyFor(url) {
+  try { return new URL(String(url || '')).hostname.toLowerCase() } catch (e) { return '' }
+}
+
+/** 新文档加载完后套用该站点记住的缩放比例 */
+function applySiteZoom(w, tabId, url) {
+  try {
+    const key = zoomKeyFor(url)
+    if (!key) return
+    const saved = Number(loadZoomStore()[key])
+    if (!saved || !isFinite(saved)) return
+    const factor = Math.max(0.3, Math.min(3, saved))
+    if (w && typeof w.setZoomFactor === 'function') { w.setZoomFactor(factor).catch(() => {}) }
+    if (String(tabId) === String(activeTabId.value)) siteZoom.value = factor
+  } catch (e) {}
+}
+
 async function setSiteZoom(factor) {
   siteZoom.value = Math.max(0.3, Math.min(3, Number(factor) || 1))
   const w = getActiveWebview()
   try {
     if (w && typeof w.setZoomFactor === 'function') await w.setZoomFactor(siteZoom.value)
     else { const script = `window.__glass_reader_zoom = ${siteZoom.value}; document.body.style.zoom = ${siteZoom.value};`; runWebviewJS(script) }
+  } catch (e) {}
+  // 按站点记住缩放比例（同一 hostname 下次打开自动恢复）
+  try {
+    const key = zoomKeyFor(activeTab.value?.url || (w && typeof w.getURL === 'function' ? w.getURL() : '') || '')
+    if (key) {
+      const map = loadZoomStore()
+      map[key] = siteZoom.value
+      saveZoomStore(map)
+    }
   } catch (e) {}
 }
 function zoomIn() { setSiteZoom(siteZoom.value + 0.1) }
@@ -193,8 +242,9 @@ function handleWebviewDomReady(e) {
     }
   } catch (e) {}
 
-  // 同步页面缩放比例
+  // 同步页面缩放比例：先套用站点记住的比例，再读当前值回填工具栏
   try {
+    applySiteZoom(w, tabId, pageUrl)
     if (w && typeof w.getZoomFactor === 'function') {
       w.getZoomFactor().then((f) => { try { if (String(tabId) === String(activeTabId.value)) siteZoom.value = f || 1 } catch (e) {} }).catch(() => {})
     } else {
@@ -207,8 +257,9 @@ function handleWebviewDomReady(e) {
     let combined = null
     try { combined = ruleProviders && typeof ruleProviders.getCombinedRulesForUrl === 'function' ? ruleProviders.getCombinedRulesForUrl(pageUrl || '') : null } catch (e) { combined = null }
     const siteRulesList = combined?.site || []
-    const toolbarRulesList = combined?.toolbar || []
-    const allowNewWindow = toolbarRulesList.some((r) => r.toolbarDisabled === false) || siteRulesList.some((r) => r.preventBlankTargets === false)
+    // 新窗口策略只看 preventBlankTargets。toolbarDisabled 是工具栏显隐，和这里无关
+    // （历史上误把两者混在一起，会静默放行 _blank）。
+    const allowNewWindow = siteRulesList.some((r) => r.preventBlankTargets === false)
     if (!allowNewWindow) { try { forceDisableBlankTargetsFor(tabId) } catch (e) {} }
     try {
       for (const r of siteRulesList) {
@@ -296,22 +347,28 @@ watch(() => activeTabId.value, async (newId) => {
     runWebviewJS(clearPaused, newId)
   } catch (e) {}
   webviewReady.value = !!webviewReadyMap[String(newId)]
+  // 切标签后刷新缩放显示（siteZoom 是单值，否则会沿用上一个标签的比例）
+  try {
+    const w = getWebview(newId)
+    if (w && typeof w.getZoomFactor === 'function') {
+      w.getZoomFactor().then((f) => { try { if (String(newId) === String(activeTabId.value)) siteZoom.value = f || 1 } catch (e) {} }).catch(() => {})
+    }
+  } catch (e) {}
   await nextTick()
   syncReaderEffects(newId)
   try { updateEffectiveToolbar() } catch (e) {}
 })
 
-watch(() => settings.mobileMode, (v) => {
-  try {
-    userAgent.value = v ? 'Mozilla/5.0 (Linux; Android 10; Mobile; rv:109.0) Gecko/109.0 Firefox/109.0' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
-    for (const tid in webviewRefs) {
-      try {
-        const w = webviewRefs[tid]; if (!w) continue
-        try { if (typeof w.setAttribute === 'function') w.setAttribute('useragent', userAgent.value) } catch (e) {}
-        try { if (typeof w.reload === 'function') w.reload(); else if (typeof w.loadURL === 'function') w.loadURL(w.getURL ? w.getURL() : w.src) } catch (e) {}
-      } catch (e) {}
-    }
-  } catch (e) {}
+watch(() => settings.mobileMode, () => {
+  // UA 由 computed 推导（桌面为空 = 用 Electron 默认值，手机模式为 Android Chrome）。
+  // 属性变化不会影响已加载的文档，这里统一重载所有标签让新 UA 生效。
+  for (const tid in webviewRefs) {
+    try {
+      const w = webviewRefs[tid]; if (!w) continue
+      try { w.removeAttribute && w.removeAttribute('useragent') } catch (e) {}
+      try { if (typeof w.reload === 'function') w.reload(); else if (typeof w.loadURL === 'function') w.loadURL(w.getURL ? w.getURL() : w.src) } catch (e) {}
+    } catch (e) {}
+  }
 })
 
 watch(() => [settings.toolbarVisible, settings.toolbarPinned, settings.toolbarDisabled, settings.toolbarDocked], () => { try { updateEffectiveToolbar() } catch (e) {} })
@@ -329,7 +386,6 @@ defineExpose({ settings, siteZoom, patchSetting, webviewBack, webviewForward, we
 onBeforeUnmount(() => {
   try { detachPauseListeners() } catch (e) {}
   try { if (_removeContextMenuListener) { _removeContextMenuListener(); _removeContextMenuListener = null } } catch (e) {}
-  try { if (_forwardKeyHandler) { window.removeEventListener('keydown', _forwardKeyHandler, true); window.removeEventListener('keyup', _forwardKeyHandler, true); _forwardKeyHandler = null } } catch (e) {}
 })
 
 // ─── webview 内右键菜单 ───
@@ -347,7 +403,9 @@ function toWindowCoords(tabId, gx, gy) {
     const w = getWebview(tabId)
     if (!w || typeof w.getBoundingClientRect !== 'function') return { x: gx, y: gy }
     const r = w.getBoundingClientRect()
-    return { x: Math.round(r.left + gx), y: Math.round(r.top + gy) }
+    // guest 传来的坐标是页面内 CSS 像素；页面缩放后需要乘 zoomFactor 才是实际像素。
+    const z = Number(siteZoom.value) || 1
+    return { x: Math.round(r.left + gx * z), y: Math.round(r.top + gy * z) }
   } catch (e) {
     return { x: gx, y: gy }
   }
@@ -515,20 +573,6 @@ onMounted(() => {
     }
   } catch (e) {}
   try { if (settings.pauseOnBlurHide) attachPauseListeners() } catch (e) {}
-  try {
-    _forwardKeyHandler = (ev) => {
-      try {
-        const w = getActiveWebview()
-        if (!w || typeof w.sendInputEvent !== 'function') return
-        const buildModifiers = []
-        if (ev.shiftKey) buildModifiers.push('shift'); if (ev.ctrlKey) buildModifiers.push('control')
-        if (ev.altKey) buildModifiers.push('alt'); if (ev.metaKey) buildModifiers.push('meta')
-        try { w.sendInputEvent({ type: ev.type === 'keydown' ? 'keyDown' : 'keyUp', keyCode: ev.key, modifiers: buildModifiers }) } catch (e) {}
-      } catch (e) {}
-    }
-    window.addEventListener('keydown', _forwardKeyHandler, true)
-    window.addEventListener('keyup', _forwardKeyHandler, true)
-  } catch (e) {}
 })
 </script>
 
@@ -560,7 +604,8 @@ onMounted(() => {
               :ref="getWebviewRefSetter(tab.id)"
               :class="['webview-frame', { 'webview-active': String(tab.id) === String(activeTabId) }]"
               :src="tab.url"
-              :useragent="userAgent"
+              :useragent="userAgent || null"
+              partition="persist:moyu-web"
               nodeintegration="false"
               enableblinkfeatures="ResizeObserver"
               @dom-ready="handleWebviewDomReady"

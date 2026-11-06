@@ -28,7 +28,7 @@ echo ================================================================
 echo   MoYu - Windows installer build
 echo ================================================================
 echo.
-echo [1/2] Checking for processes locking the build folder...
+echo [1/3] Checking for processes locking the build folder...
 
 REM electron-builder wipes and recreates MoYu\release\win-unpacked.
 REM If a MoYu.exe launched earlier from there is still alive, or a
@@ -44,6 +44,17 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo.
+echo [2/3] Normalizing file integrity labels...
+REM Sandbox-written files may carry Low/Medium integrity labels. Built
+REM executables inherit them, which breaks NSIS uninstaller generation and
+REM makes the installer run non-elevated (the "Run as" credential dialog).
+REM Strip the labels (remove them, do NOT set them to Medium) before building.
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\clear-integrity-labels.ps1"
+if errorlevel 1 (
+  echo       WARNING: integrity label cleanup failed; build may fail later.
+)
+
 REM Drop leftover archive from an interrupted build
 if exist "MoYu\release\moyu-*-x64.nsis.7z" (
   echo       Removing leftover archive from an interrupted build...
@@ -51,7 +62,7 @@ if exist "MoYu\release\moyu-*-x64.nsis.7z" (
 )
 
 echo.
-echo [2/2] Building, this takes 1-2 minutes...
+echo [3/3] Building, this takes 1-2 minutes...
 echo.
 
 pushd MoYu

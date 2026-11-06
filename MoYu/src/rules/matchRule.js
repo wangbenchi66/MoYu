@@ -8,6 +8,38 @@ function escapeForRegex(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+// ─── 用户正则的安全编译 ───
+//
+// 用户规则可以写 matchType: 'regex'，pattern 来自导入的脚本/规则。直接
+// `new RegExp(用户输入)` 有两个风险：
+//   1) 灾难性回溯（ReDoS）：`(a+)+$` 这类写法对长 URL 会把渲染主线程卡死；
+//   2) 每次导航都重新编译，规则一多就有明显 GC 抖动。
+// 这里做三件事：缓存编译结果、限制长度、拒绝嵌套量词这类典型写法。
+const REGEX_CACHE = new Map()
+const MAX_PATTERN_LENGTH = 300
+const MAX_SUBJECT_LENGTH = 4096
+const NESTED_QUANTIFIER = /\([^)]*[*+][^)]*\)\s*[*+{]/
+
+function compileUserRegex(pattern) {
+    const key = String(pattern || '')
+    if (!key || key.length > MAX_PATTERN_LENGTH) return null
+    if (REGEX_CACHE.has(key)) return REGEX_CACHE.get(key)
+    let compiled = null
+    try {
+        if (!NESTED_QUANTIFIER.test(key)) compiled = new RegExp(key)
+    } catch (e) {
+        compiled = null
+    }
+    if (REGEX_CACHE.size > 200) REGEX_CACHE.clear()
+    REGEX_CACHE.set(key, compiled)
+    return compiled
+}
+
+function clampSubject(raw) {
+    const s = String(raw || '')
+    return s.length > MAX_SUBJECT_LENGTH ? s.slice(0, MAX_SUBJECT_LENGTH) : s
+}
+
 function matchesRule(rule, rawUrl) {
     if (!rule) return false
     if (!rawUrl) return false
@@ -53,7 +85,10 @@ function matchesRule(rule, rawUrl) {
         const raw = rawUrl || ''
 
         if (matchType === 'regex') {
-            try { return new RegExp(pattern).test(raw) || new RegExp(pattern).test(hostname) } catch (e) { return false }
+            const re = compileUserRegex(pattern)
+            if (!re) return false
+            const subject = clampSubject(raw)
+            try { return re.test(subject) || re.test(hostname) } catch (e) { return false }
         }
 
         if (matchType === 'url') {

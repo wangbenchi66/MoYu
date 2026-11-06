@@ -35,8 +35,18 @@ function readAll() {
   } catch (e) { return []; }
 }
 
+/**
+ * 写入用户规则。返回 false 表示本地存储写入失败（配额不足等），调用方必须提示用户，
+ * 不能像以前那样把异常抛进事件处理里（表现为"点了没反应"）。
+ */
 function writeAll(list) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    return true;
+  } catch (e) {
+    ElMessage({ message: '保存失败：本地存储空间不足，请先删除不用的规则', type: 'error' });
+    return false;
+  }
 }
 
 function refresh() {
@@ -269,7 +279,7 @@ function toggleRule(rule) {
     const i = all.findIndex((r) => r.id === rule.id);
     if (i === -1) return;
     all[i].enabled = !(all[i].enabled !== false);
-    writeAll(all);
+    if (!writeAll(all)) return;
     refresh();
     statusMessage.value = '规则已更新，刷新网页后生效';
   } catch (e) {
@@ -281,7 +291,7 @@ function deleteRule(rule) {
   ElMessageBox.confirm(`确定删除规则「${rule.name || patternText(rule)}」吗？`, '删除确认', { type: 'warning' })
     .then(() => {
       const all = readAll().filter((r) => r.id !== rule.id);
-      writeAll(all);
+      if (!writeAll(all)) return;
       refresh();
       ElMessage({ message: '已删除', type: 'success' });
     })
@@ -293,7 +303,7 @@ function deleteSelected() {
   ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 条规则吗？`, '删除确认', { type: 'warning' })
     .then(() => {
       const ids = new Set(selectedIds.value);
-      writeAll(readAll().filter((r) => !ids.has(r.id)));
+      if (!writeAll(readAll().filter((r) => !ids.has(r.id)))) return;
       selectedIds.value = [];
       refresh();
       ElMessage({ message: '已删除选中规则', type: 'success' });

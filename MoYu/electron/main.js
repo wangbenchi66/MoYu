@@ -7,6 +7,8 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import defaultSettings from '../src/shared/defaultSettings.js'
+import { migrateLegacySessionToPartition } from './legacy-session-migration.js'
+import { compareVersions } from './version-compare.js'
 
 // 本文件是 ESM，而 electron-updater 是 CJS，需借助 createRequire 加载
 const require = createRequire(import.meta.url)
@@ -118,10 +120,48 @@ process.on('unhandledRejection', (reason) => {
     } catch (e) { }
 })
 
-// 多 webview tab 时 Electron 内部 guest WebContents 会超出默认 10 个监听器上限
-// 仅在需要时按实例设置，而非全局覆盖
-function safeSetMaxListeners(emitter, count) {
-    try { emitter.setMaxListeners(count) } catch (e) { }
+// ─── webview 会话隔离与权限策略 ───
+//
+// 所有标签使用一个命名持久化分区，而不是 defaultSession：
+//   - 退出清理只影响网页数据，不会误伤应用自身的会话与缓存
+//   - 主窗口（file:// 渲染层）与网页内容彻底分开
+// 没有按站点（eTLD+1）拆分区：那会切断 OAuth/SSO 的跨站跳转
+// （例如在 accounts.google.com 登录后回不到 youtube.com）。
+// 若确实需要站点级隔离，可把 partition 改成按 hostname 计算的值，
+// 代价是登录态会随站点分裂。
+const WEB_PARTITION = 'persist:moyu-web'
+
+// Electron 在没有 handler 时默认「批准」所有权限请求（摄像头、麦克风、
+// 定位、通知、剪贴板读取等）。这里改成白名单，只放行下面几类：
+//   fullscreen                 视频/演示页面进入全屏
+//   clipboard-sanitized-write  页面「复制」按钮（只允许写，不允许读）
+//   pointerLock                画布/游戏类页面的鼠标锁定
+const ALLOWED_PERMISSIONS = new Set(['fullscreen', 'clipboard-sanitized-write', 'pointerLock'])
+
+/**
+ * 给一个 session 装上权限白名单。
+ * 参数: ses - Electron Session；label - 日志里区分 defaultSession / webview 分区
+ */
+function configureSessionSecurity(ses, label) {
+    if (!ses) return
+    try {
+        ses.setPermissionRequestHandler((_wc, permission, callback, details) => {
+            const allowed = ALLOWED_PERMISSIONS.has(permission)
+            if (!allowed) {
+                try {
+                    console.log(`[permission] denied "${permission}" from ${details?.requestingUrl || 'unknown'} (${label})`)
+                } catch (e) { }
+            }
+            callback(allowed)
+        })
+    } catch (e) {
+        console.warn(`[permission] request handler failed (${label}):`, e)
+    }
+    try {
+        ses.setPermissionCheckHandler((_wc, permission) => ALLOWED_PERMISSIONS.has(permission))
+    } catch (e) {
+        console.warn(`[permission] check handler failed (${label}):`, e)
+    }
 }
 
 const __filename = fileURLToPath(import.meta.url)
@@ -1246,8 +1286,9 @@ function createWindow() {
             contextIsolation: true,
             nodeIntegration: false,
             webviewTag: true,
-            // 临时禁用 sandbox 以确保 preload 的 contextBridge 能正常注入（用于调试）
-            sandbox: false,
+            // 主窗口只加载本地构建产物，渲染进程不需要 Node 能力；
+            // 开启 Chromium 沙箱作为纵深防御（preload 只用 contextBridge/ipcRenderer）。
+            sandbox: true,
             enableRemoteModule: false,
             devTools: true,
         },
@@ -1265,6 +1306,31 @@ function createWindow() {
     // 因此设成 'dark' 时，webview 里的网站也会收到深色偏好（配合 shouldUseDarkColors 生效）。
     applyThemeSource()
     applyWindowSettings(win)
+
+    // 主窗口只允许加载应用自身的页面。主窗口的 preload 暴露了
+    // quit / openExternal / update / settings 等高权 API，一旦被导航到远程页面，
+    // 这些 API 就直接落到网页手里。外链统一交给系统浏览器。
+    const appUrlPrefix = getWindowUrl('/').split('#')[0]
+    win.webContents.on('will-navigate', (event, url) => {
+        try {
+            const target = String(url || '').split('#')[0]
+            if (target === appUrlPrefix) return
+            event.preventDefault()
+            console.log('[nav] blocked main-window navigation:', url)
+        } catch (e) { }
+    })
+
+    // window.open / target=_blank 一律不在应用内开新窗口，http(s) 交给系统浏览器。
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        try {
+            if (/^https?:\/\//i.test(String(url || ''))) {
+                shell.openExternal(url).catch(() => { })
+            } else {
+                console.log('[nav] blocked main-window popup:', url)
+            }
+        } catch (e) { }
+        return { action: 'deny' }
+    })
 
     win.loadURL(getWindowUrl('/'))
 
@@ -1424,6 +1490,33 @@ function createWindow() {
         } catch (e) { return false }
     }
 
+    // 加固每个 <webview> guest：即使渲染层被注入，也不能通过属性把 guest
+    // 变成带 Node 或任意 preload 的特权页面（Electron 官方建议在此清洗）。
+    win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+        try {
+            delete webPreferences.preload
+            webPreferences.nodeIntegration = false
+            webPreferences.nodeIntegrationInSubFrames = false
+            webPreferences.contextIsolation = true
+            webPreferences.sandbox = true
+            webPreferences.webSecurity = true
+            webPreferences.allowRunningInsecureContent = false
+            webPreferences.partition = WEB_PARTITION
+
+            params.partition = WEB_PARTITION
+
+            const src = String(params.src || '')
+            const srcOk = src === '' || src === 'about:blank' || /^https?:\/\//i.test(src)
+            if (!srcOk) {
+                event.preventDefault()
+                console.log('[nav] blocked webview attach for src:', src)
+            }
+        } catch (e) {
+            try { event.preventDefault() } catch (err) { }
+            console.warn('[nav] will-attach-webview handler failed:', e)
+        }
+    })
+
     win.webContents.on('did-attach-webview', (_event, wc) => {
         try {
             if (_handledWvc.has(wc)) return
@@ -1573,6 +1666,8 @@ ipcMain.handle('window:open-settings', () => {
 let autoUpdater = null
 let updaterInitError = null
 
+
+
 function getAutoUpdater() {
     if (autoUpdater || updaterInitError) return autoUpdater
     try {
@@ -1616,7 +1711,11 @@ async function checkForUpdates() {
     try {
         const r = await u.checkForUpdates()
         const info = r?.updateInfo || {}
-        const hasUpdate = !!info.version && info.version !== base.currentVersion
+        const latest = String(info.version || '')
+        // 只认「远端版本严格高于本地版本」。版本号相同（重复发版）或更低
+        // （降级包）都不提示：产物没有代码签名，发布者校验也关着，
+        // 至少不能让它把用户回滚到旧版本。
+        const hasUpdate = !!latest && compareVersions(latest, base.currentVersion) > 0
         return {
             ok: true,
             hasUpdate,
@@ -1783,6 +1882,26 @@ ipcMain.handle('settings:update', (_, partial) => {    //输出设置变更日�
 app.whenReady().then(() => {
     loadSettings()
 
+    // 一次性把旧 defaultSession 里的登录态复制进命名分区。
+    // 必须在 session.fromPartition() 之前执行，否则分区目录会被先创建成“已有数据”状态。
+    const migration = migrateLegacySessionToPartition({
+        userData: app.getPath('userData'),
+        partition: WEB_PARTITION.replace(/^persist:/, ''),
+    })
+    if (migration.migrated) {
+        console.log('[migrate] legacy session copied into', WEB_PARTITION, {
+            items: migration.items,
+            copied: migration.copied,
+        })
+    } else if (migration.reason && migration.reason !== 'already migrated' && migration.reason !== 'no legacy session data') {
+        console.log('[migrate] legacy session migration skipped:', migration.reason)
+    }
+
+    // 权限白名单：defaultSession（主窗口）和 webview 分区都必须装，
+    // 否则远程页面会落到 Electron「默认全部批准」的行为上。
+    configureSessionSecurity(session.defaultSession, 'default')
+    configureSessionSecurity(session.fromPartition(WEB_PARTITION), 'webview')
+
     // 系统深浅色变化时通知渲染进程（仅在 themeMode = 'system' 时视觉上会变，
     // 但effective 值始终广播，便于渲染进程保持状态一致）
     try {
@@ -1831,9 +1950,11 @@ async function clearAllWebviewData() {
         'cachestorage',
     ]
     try {
-        // webview 默认使用 default session（项目未配置 partition）
-        await session.defaultSession.clearStorageData({ storages })
-        await session.defaultSession.clearCache()
+        // webview 使用命名持久化分区（见 WEB_PARTITION），清理它即可，
+        // 不会碰到主窗口自身的会话数据。
+        const webSession = session.fromPartition(WEB_PARTITION)
+        await webSession.clearStorageData({ storages })
+        await webSession.clearCache()
         console.log('[privacy] webview 浏览数据已清理')
         return true
     } catch (e) {

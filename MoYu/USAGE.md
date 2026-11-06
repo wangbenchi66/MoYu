@@ -78,6 +78,6 @@ openssl s_client -connect weread.qq.com:443 -servername weread.qq.com
 ```
 
 **文件与入口**
-- 渲染器主文件：`src/main.js`，Electron 入口：`electron/main.js`，预加载脚本：`electron/preload.js`（或 `preload.cjs`）。
+- 渲染器主文件：`src/main.js`，Electron 入口：`electron/main.js`，预加载脚本：`electron/preload.cjs`。
 
 如果你希望我把这份文档放到其它路径、补充更多示例（例如：如何编写站点规则模板、如何在 `preload` 暴露 API），告诉我即可。

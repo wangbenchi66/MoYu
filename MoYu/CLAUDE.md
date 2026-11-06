@@ -62,7 +62,7 @@ npm run dist:mac     # macOS DMG
 > 且 `echo ... "引号"` 会提前闭合块，报 `: was unexpected at this time`。
 > 需要管道时改用 `powershell -File` 调外部脚本。
 
-没有测试框架。
+有单元测试：`npm test`（Node 内置 node:test，覆盖 normalizeUrl / 规则匹配 / 版本比较）；`npm run check` 额外做 main/preload 语法检查。
 
 **换行符约定：默认 LF。**
 
@@ -103,9 +103,8 @@ npm run dist:mac     # macOS DMG
 electron/
   main.js               主进程：窗口管理、设置持久化、Tray、全局快捷键、IPC、
                         音频静音、退出清理 webview 数据、webview 导航拦截
-  preload.js            预加载脚本（ESM）：通过 contextBridge 暴露 desktop API
-  preload.cjs           预加载 CJS 包装器（实际的 webPreferences.preload 目标）：
-                        动态 import ESM 版，失败时回退到内联最小实现
+  preload.cjs           预加载脚本（唯一入口，同步注入）：
+                        通过 contextBridge 暴露 desktop API
 
 src/
   main.js               渲染进程入口：创建 Vue 应用、注册 Element Plus 和路由
@@ -170,8 +169,8 @@ src/
 ```
 electron/main.js        主进程：窗口管理、设置持久化、Tray、全局快捷键（仅老板键）、
                         音频静音、退出清理、webview 导航协议拦截
-electron/preload.js     预加载脚本：通过 contextBridge 向渲染进程暴露 window.desktop
-electron/preload.cjs    实际被 webPreferences.preload 引用的入口（包装 ESM 版）
+electron/preload.cjs    预加载脚本：通过 contextBridge 向渲染进程暴露 window.desktop
+                        （webPreferences.preload 的唯一入口）
 src/main.js             渲染进程入口：挂载 Vue 应用
 ```
 
@@ -751,7 +750,7 @@ win.webContents.on('before-input-event', (event, input) => {
 >
 > **`update:get-version` 是本地 IPC**（只返回版本号/平台/Releases 地址，**不联网**），
 > 「关于」页显示版本号用它。真正联网的是 `update:check`（读 GitHub Releases），
-> **仅在用户点击「检查更新」时触发**。启动时不做任何自动版本检测。
+> **用户点击「检查更新」时触发**；此外启动 5 秒后会做一次**静默**检查（失败不提示、不弹系统框，只认严格更高的版本）。
 
 > `restoreSession()` 必须在 `settings` 加载**之后**调用，否则读到的开关还是默认值。
 
@@ -780,7 +779,7 @@ win.webContents.on('before-input-event', (event, input) => {
 - `webview` 标签被声明为自定义元素（`isCustomElement`），Vue 不会将其作为组件处理
 - 开发模式下 Vite dev server 固定监听 `127.0.0.1:5173`（`strictPort: true`，端口占用会直接报错而非换端口）
 - 构建时 `base: './'` 确保 Electron 以文件协议加载 `dist/` 时路径正确
-- `webview` 未使用 `partition`，**所有标签共享默认 session**
+- `webview` 使用 `partition="persist:moyu-web"`（与主窗口 `defaultSession` 隔离）；所有标签共享这一个分区，未按站点拆分（会切断 OAuth/SSO）
 - `webview` 未使用 `preload`，页面内没有特权 API，只能靠 `executeJavaScript` + `console-message` 通信
 
 ## 相关文档

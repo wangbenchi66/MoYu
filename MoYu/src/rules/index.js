@@ -142,13 +142,16 @@ function loadRules() {
 }
 
 /**
- * 将当前规则写入 localStorage 持久化
+ * 将当前规则写入 localStorage 持久化。
+ * 返回是否成功 —— 调用方（导入/删除）需要知道配额是否撑爆，不能静默丢数据。
  */
 function persistRules() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(rules))
+        return true
     } catch (e) {
-        // ignore
+        console.warn('[rules] persist failed (storage quota?):', e?.message || e)
+        return false
     }
 }
 
@@ -184,8 +187,10 @@ function persistDisabledBuiltin() {
             DISABLED_BUILTIN_KEY,
             JSON.stringify(Array.from(loadDisabledBuiltin())),
         )
+        return true
     } catch (e) {
-        // ignore
+        console.warn('[rules] persist builtin toggles failed:', e?.message || e)
+        return false
     }
 }
 
@@ -344,16 +349,32 @@ function validateImportedRule(raw) {
         return { ok: false, reason: '缺少有效的 pattern（需为非空字符串或数组）' }
     }
     // 只保留已知字段，避免把任意字段写进 localStorage
+    const customJs = typeof raw.customJs === 'string' ? raw.customJs : ''
+    const customCss = typeof raw.customCss === 'string' ? raw.customCss : ''
+    const matchType = typeof raw.matchType === 'string' ? raw.matchType : 'hostname'
+    const patternText = Array.isArray(pattern) ? pattern.join(',') : String(pattern)
+
+    // 大小上限：单条规则就能撑爆 5MB 配额，而且超大脚本在页面上执行也会明显卡顿
+    if (customJs.length > 2 * 1024 * 1024) {
+        return { ok: false, reason: '脚本正文超过 2MB，已拒绝导入' }
+    }
+    if (customCss.length > 512 * 1024) {
+        return { ok: false, reason: 'CSS 超过 512KB，已拒绝导入' }
+    }
+    if (matchType === 'regex' && patternText.length > 300) {
+        return { ok: false, reason: '正则模式超过 300 字符，已拒绝导入' }
+    }
+
     return {
         ok: true,
         rule: {
             pattern,
-            matchType: typeof raw.matchType === 'string' ? raw.matchType : 'hostname',
+            matchType,
             enabled: raw.enabled !== false,
             preventBlankTargets: raw.preventBlankTargets !== false,
             removeImages: !!raw.removeImages,
-            customCss: typeof raw.customCss === 'string' ? raw.customCss : '',
-            customJs: typeof raw.customJs === 'string' ? raw.customJs : '',
+            customCss,
+            customJs,
             name: typeof raw.name === 'string' ? raw.name : '',
             description: typeof raw.description === 'string' ? raw.description : '',
             // 来自油猴脚本的规则：记录来源信息，便于界面区分与展示
@@ -392,6 +413,7 @@ function importRules(payload, options = {}) {
 
     let imported = 0
     let skipped = 0
+    const snapshot = rules.slice()
 
     for (let i = 0; i < list.length; i++) {
         const res = validateImportedRule(list[i])
@@ -421,7 +443,12 @@ function importRules(payload, options = {}) {
         imported++
     }
 
-    if (imported > 0) persistRules()
+    if (imported > 0 && !persistRules()) {
+        // 写不进去就回滚内存，避免"界面显示已导入、重启后消失"
+        rules = snapshot
+        errors.push('写入本地存储失败（空间不足），本次导入已回滚')
+        return { imported: 0, skipped, errors }
+    }
     return { imported, skipped, errors }
 }
 

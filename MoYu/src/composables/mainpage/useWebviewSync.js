@@ -123,6 +123,13 @@ async function syncWebviewDarken(tabId) {
             if (existing.textContent !== ${JSON.stringify(css)}) existing.textContent = ${JSON.stringify(css)};
             return true;
           }
+          // 整页 filter 是合成层操作，超大 DOM 上滚动会明显掉帧。
+          // 超过阈值就跳过反色，宁可不改配色也不要卡住页面。
+          const elementCount = document.getElementsByTagName('*').length;
+          if (elementCount > 12000) {
+            try { console.warn('[darken] skipped: page has ' + elementCount + ' elements'); } catch (e) {}
+            return true;
+          }
           const st = document.createElement('style');
           st.id = id;
           st.textContent = ${JSON.stringify(css)};

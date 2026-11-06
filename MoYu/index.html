@@ -2,6 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      渲染层 CSP：宿主页面只加载本地构建产物。
+      - script-src 不放 'unsafe-inline'：构建产物是外部模块脚本
+      - style-src 保留 'unsafe-inline'：Vue / Element Plus 运行时会插入 <style>
+      - connect-src 只放行 dev server 的 HMR
+      - webview 里的网页是独立文档，不受这条策略影响
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' file:; style-src 'self' 'unsafe-inline' file:; img-src 'self' data: blob: file:; font-src 'self' data: file:; media-src 'self' blob: file:; connect-src 'self' file: ws://127.0.0.1:5173 http://127.0.0.1:5173; object-src 'none'; base-uri 'self'; form-action 'none';"
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MoYu</title>

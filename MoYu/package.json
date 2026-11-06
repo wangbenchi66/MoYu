@@ -12,6 +12,8 @@
     "dev:electron": "chcp 65001 >nul && wait-on tcp:5173 && electron --no-sandbox .",
     "start": "electron .",
     "build": "vite build --base=./",
+    "test": "node --test \"test/*.test.js\"",
+    "check": "node --check electron/main.js && node --check electron/preload.cjs && node --test \"test/*.test.js\"",
     "pack": "npm run build && electron-builder --dir",
     "dist:win": "npm run build && electron-builder --win nsis",
     "dist:mac": "npm run build && electron-builder --mac dmg"
@@ -45,7 +47,18 @@
       "electron/**/*",
       "public/**/*",
       "package.json",
-      "src/shared/defaultSettings.js"
+      "src/shared/defaultSettings.js",
+      "!node_modules/vue{,/**}",
+      "!node_modules/vue-router{,/**}",
+      "!node_modules/element-plus{,/**}",
+      "!node_modules/@vue{,/**}",
+      "!node_modules/@element-plus{,/**}",
+      "!node_modules/@ctrl{,/**}",
+      "!node_modules/@floating-ui{,/**}",
+      "!node_modules/@popperjs{,/**}",
+      "!node_modules/lodash-es{,/**}",
+      "!node_modules/dayjs{,/**}",
+      "!node_modules/async-validator{,/**}"
     ],
     "win": {
       "icon": "public/icon.png",

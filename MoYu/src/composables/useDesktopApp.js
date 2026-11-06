@@ -25,7 +25,7 @@ import {
 
 import {
     createPageTab, handleOpenUrl, addNewTab, selectTab, updateTabMetadata,
-    closeTab, closeTabsToLeft, closeTabsToRight, closeAllTabs,
+    closeTab, closeTabsToLeft, closeTabsToRight, closeAllTabs, moveTab,
     flushSession, restoreSession, clearSavedSession,
 } from './useTabManager.js'
 
@@ -190,7 +190,15 @@ function initializeDesktopApp() {
             // 恢复上次标签会话。必须放在 settings 加载之后 ——
             // restoreTabsOnStartup 在拿到主进程设置前仍是默认值，提前恢复会判断错误。
             try { restoreSession() } catch (e) { }
+        }).catch((err) => {
+            // 主进程没返回设置（IPC 失败 / 早期崩溃）时不能把启动流程卡死：
+            // 至少用默认设置恢复一次标签，并留下日志。
+            try { console.warn('[app] getSettings failed, falling back to defaults:', err) } catch (e) { }
+            try { restoreSession() } catch (e) { }
         })
+    } else {
+        // 纯浏览器环境（dev:web）：没有 IPC，用默认设置恢复会话
+        try { restoreSession() } catch (e) { }
     }
     try { siteRules.loadRules() } catch (e) { }
     try { ruleProviders.toolbar.loadRules() } catch (e) { }
@@ -227,7 +235,7 @@ export function useDesktopApp() {
         patchSetting, toggleSetting,
         // 标签
         handleOpenUrl, addNewTab, selectTab, closeTab, updateTabMetadata,
-        createPageTab, closeTabsToLeft, closeTabsToRight, closeAllTabs,
+        createPageTab, closeTabsToLeft, closeTabsToRight, closeAllTabs, moveTab,
         flushSession,
         // 最近访问
         pushRecentVisit, loadMoreRecentVisits, resetRecentVisible, openRecentVisit,
